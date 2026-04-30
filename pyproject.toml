@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gtm"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "attio>=0.21.2",
+  "boto3>=1.42.95",
+  "dlt[deltalake,motherduck]>=1.0",
+  "gtm-apollo>=0.0.2",
+  "ibis-framework[duckdb]",
+  "modal",
+  "parallel-web",
+  "pydantic>=2.0",
+  "requests>=2.33.1",
+  "typer>=0.15",
+  "opentelemetry-api",
+  "opentelemetry-sdk",
+  "opentelemetry-exporter-otlp-proto-http",
+  "opentelemetry-semantic-conventions",
+  "dlthub>=0.22.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["cli*", "libs*", "src*"]
+exclude = ["tests*"]
+
+[project.scripts]
+gtm = "cli.main:run"
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[dependency-groups]
+dev = ["bandit>=1.8.6", "pytest>=9.0.2"]
