@@ -201,6 +201,9 @@ def search(
     company: str | None = typer.Option(
         None, "--company", help="Search by company name or domain"
     ),
+    sample: bool = typer.Option(
+        False, "--sample", help="Fetch recent records without filtering (overrides all search criteria)"
+    ),
     limit: int = typer.Option(25, "--limit", help="Max results to return"),
     no_connectivity_probe: bool = typer.Option(
         False, "--no-connectivity-probe", help="Skip Modal connectivity preflight"
@@ -228,9 +231,14 @@ def search(
             _print_envelope_and_exit(error_envelope(exc))
             return
     else:
-        if not any([name, email, email_domain, phone, company]):
+        if not sample and not any([name, email, email_domain, phone, company]):
             _print_envelope_and_exit(
-                error_envelope(ValueError("provide at least one search option."))
+                error_envelope(
+                    ValueError(
+                        "Provide at least one search criterion: --name, --email, --email-domain, --phone, --company. "
+                        "Or use --sample to browse recent records without filtering."
+                    )
+                )
             )
             return
         payload = {
@@ -239,6 +247,7 @@ def search(
             "email_domain": email_domain,
             "phone": phone,
             "company": company,
+            "sample": sample,
             "limit": limit,
         }
 
