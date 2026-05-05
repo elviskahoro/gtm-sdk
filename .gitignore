@@ -6,5 +6,6 @@ tmp/
 .DS_Store
 *.pyc
 worktrees/
+.agents
 .agents/
 .claude/
