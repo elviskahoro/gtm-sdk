@@ -172,6 +172,7 @@ def _search_people_raw(
     email_domain: str | None = None,
     phone: str | None = None,
     company: str | None = None,
+    sample: bool = False,
     limit: int = 25,
 ) -> list[PersonSearchResult]:
     conditions: list[dict[str, Any]] = []
@@ -187,8 +188,8 @@ def _search_people_raw(
     if phone:
         conditions.append({"phone_numbers": {"$contains": phone}})
 
-    if not conditions and not company:
-        raise AttioValidationError("Provide at least one search criterion.")
+    if not sample and not conditions and not company:
+        raise AttioValidationError("Provide at least one search criterion or use --sample to browse recent records.")
 
     with get_client() as client:
         if company:

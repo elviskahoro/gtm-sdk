@@ -177,6 +177,7 @@ class PersonSearchQuery(BaseModel):
     email_domain: str | None = None
     phone: str | None = None
     company: str | None = None
+    sample: bool = False
     limit: int = 25
 
 

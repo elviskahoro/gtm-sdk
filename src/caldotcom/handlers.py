@@ -2,30 +2,19 @@
 
 import json
 import logging
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 
 from src.app import app, image
 from src.caldotcom.webhook import Webhook
-from src.caldotcom.utils import write_to_gcs
+from src.caldotcom.utils import write_to_gcs, clean_timestamp, clean_string
 
 logger = logging.getLogger(__name__)
 
 
-@app.function(image=image)
-async def export_to_gcp_etl(payload: dict) -> dict:
-    """
-    Validate, flatten, and archive Cal.com booking webhook to GCS ETL bucket.
-
-    Args:
-        payload: BookingOutput_2024_08_13 JSON payload
-
-    Returns:
-        Status dict with file location
-
-    Raises:
-        HTTPException: 422 for validation/contract errors, 500 for GCS failures
-    """
+def _handle_etl_request(payload: dict) -> dict:
+    """Handle ETL request logic (testable without Modal decorator)."""
     try:
         # Validate and instantiate Webhook
         webhook = Webhook(**payload)
@@ -60,33 +49,20 @@ async def export_to_gcp_etl(payload: dict) -> dict:
             "file": filename,
             "booking_uid": webhook.uid,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"GCS write error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to write to GCS: {str(e)}")
 
 
-@app.function(image=image)
-async def export_to_gcp_raw(payload: dict) -> dict:
-    """
-    Archive raw, unmodified Cal.com booking webhook payload to GCS raw bucket.
-
-    Args:
-        payload: Raw booking payload as dict
-
-    Returns:
-        Status dict with file location
-
-    Raises:
-        HTTPException: 500 for GCS failures
-    """
+def _handle_raw_request(payload: dict) -> dict:
+    """Handle raw request logic (testable without Modal decorator)."""
     try:
         # Generate filename from payload if possible
         uid = payload.get("uid", "unknown")
-        import uuid
-        from datetime import datetime
-        from src.caldotcom.utils import clean_timestamp, clean_string
 
-        start_str = payload.get("start", datetime.utcnow().isoformat())
+        start_str = payload.get("start", datetime.now(UTC).isoformat())
         if isinstance(start_str, str):
             start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
         else:
@@ -112,3 +88,37 @@ async def export_to_gcp_raw(payload: dict) -> dict:
     except Exception as e:
         logger.error(f"GCS write error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to write to GCS: {str(e)}")
+
+
+@app.function(image=image)
+async def export_to_gcp_etl(payload: dict) -> dict:
+    """
+    Validate, flatten, and archive Cal.com booking webhook to GCS ETL bucket.
+
+    Args:
+        payload: BookingOutput_2024_08_13 JSON payload
+
+    Returns:
+        Status dict with file location
+
+    Raises:
+        HTTPException: 422 for validation/contract errors, 500 for GCS failures
+    """
+    return _handle_etl_request(payload)
+
+
+@app.function(image=image)
+async def export_to_gcp_raw(payload: dict) -> dict:
+    """
+    Archive raw, unmodified Cal.com booking webhook payload to GCS raw bucket.
+
+    Args:
+        payload: Raw booking payload as dict
+
+    Returns:
+        Status dict with file location
+
+    Raises:
+        HTTPException: 500 for GCS failures
+    """
+    return _handle_raw_request(payload)
