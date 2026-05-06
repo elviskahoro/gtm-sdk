@@ -48,8 +48,14 @@ def enrich(
         {"apollo_api_key": apollo_api_key_override} if apollo_api_key_override else {}
     )
     try:
-        fn = modal.Function.from_name(MODAL_APP, "apollo_enrich_organization")  # pyrefly: ignore[invalid-param-spec]
-        response = fn.remote(payload=payload, api_keys=api_keys or None)  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
+        fn = modal.Function.from_name(
+            MODAL_APP,
+            "apollo_enrich_organization",
+        )  # pyrefly: ignore[invalid-param-spec]
+        response = fn.remote(
+            payload=payload,
+            api_keys=api_keys or None,
+        )  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
         out = response.model_dump() if hasattr(response, "model_dump") else response
         print(dumps_with_datetime(out, indent=2))
     except Exception as e:
@@ -106,8 +112,14 @@ def search(
         {"apollo_api_key": apollo_api_key_override} if apollo_api_key_override else {}
     )
     try:
-        fn = modal.Function.from_name(MODAL_APP, "apollo_search_organizations")  # pyrefly: ignore[invalid-param-spec]
-        response = fn.remote(payload=payload, api_keys=api_keys or None)  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
+        fn = modal.Function.from_name(
+            MODAL_APP,
+            "apollo_search_organizations",
+        )  # pyrefly: ignore[invalid-param-spec]
+        response = fn.remote(
+            payload=payload,
+            api_keys=api_keys or None,
+        )  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
         out = response.model_dump() if hasattr(response, "model_dump") else response
         print(dumps_with_datetime(out, indent=2))
     except Exception as e:

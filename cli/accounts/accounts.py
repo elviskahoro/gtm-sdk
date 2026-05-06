@@ -47,8 +47,14 @@ def map_account_hierarchy_command(
         else {}
     )
     try:
-        fn = modal.Function.from_name(MODAL_APP, "gtm_map_account_hierarchy")  # pyrefly: ignore[invalid-param-spec]
-        response = fn.remote(payload=payload, api_keys=api_keys or None)  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
+        fn = modal.Function.from_name(
+            MODAL_APP,
+            "gtm_map_account_hierarchy",
+        )  # pyrefly: ignore[invalid-param-spec]
+        response = fn.remote(
+            payload=payload,
+            api_keys=api_keys or None,
+        )  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
         out = response.model_dump() if hasattr(response, "model_dump") else response
         print(json.dumps(out))
     except Exception as exc:
