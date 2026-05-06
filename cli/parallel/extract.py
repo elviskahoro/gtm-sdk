@@ -53,8 +53,14 @@ def excerpts(
         else {}
     )
     try:
-        fn = modal.Function.from_name(MODAL_APP, "parallel_extract_excerpts")  # pyrefly: ignore[invalid-param-spec]
-        response = fn.remote(payload=payload, api_keys=api_keys or None)  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
+        fn = modal.Function.from_name(
+            MODAL_APP,
+            "parallel_extract_excerpts",
+        )  # pyrefly: ignore[invalid-param-spec]
+        response = fn.remote(
+            payload=payload,
+            api_keys=api_keys or None,
+        )  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
         out = response.model_dump() if hasattr(response, "model_dump") else response
         print(json.dumps(out, indent=2))
     except Exception as e:
@@ -98,8 +104,14 @@ def full(
         else {}
     )
     try:
-        fn = modal.Function.from_name(MODAL_APP, "parallel_extract_full_content")  # pyrefly: ignore[invalid-param-spec]
-        response = fn.remote(payload=payload, api_keys=api_keys or None)  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
+        fn = modal.Function.from_name(
+            MODAL_APP,
+            "parallel_extract_full_content",
+        )  # pyrefly: ignore[invalid-param-spec]
+        response = fn.remote(
+            payload=payload,
+            api_keys=api_keys or None,
+        )  # pyrefly: ignore[invalid-param-spec]  # pyright: ignore[reportFunctionMemberAccess,reportUnknownMemberType]
         out = response.model_dump() if hasattr(response, "model_dump") else response
         print(json.dumps(out, indent=2))
     except Exception as e:

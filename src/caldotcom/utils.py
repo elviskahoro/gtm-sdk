@@ -67,7 +67,9 @@ def write_to_gcs(bucket: str, key: str, data: str | bytes) -> None:
     else:
         binary_data = data
     with fs.open(gcs_path, "wb") as f:
-        f.write(binary_data)  # pyrefly: ignore[bad-argument-type]  # binary_data is bytes after narrowing
+        f.write(
+            binary_data,
+        )  # pyrefly: ignore[bad-argument-type]  # binary_data is bytes after narrowing
 
 
 def read_from_gcs(bucket: str, key: str) -> str:
