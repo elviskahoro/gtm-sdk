@@ -53,7 +53,7 @@ class SourceFileRaw(NamedTuple):
             mode="r",
             encoding="utf-8",
         ) as f_in:
-            return "".join(line.strip() for line in f_in)
+            return "\n".join(stripped for line in f_in if (stripped := line.strip()))
 
     @staticmethod
     def get_data_from_input_folder(

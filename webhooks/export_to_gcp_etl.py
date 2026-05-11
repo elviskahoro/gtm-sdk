@@ -162,7 +162,6 @@ def local(
         base_model_type=WebhookModel,
         extension=[
             ".json",
-            ".jsonl",
         ],
     )
     storage_file_data: SourceFileData | None = _get_storage_source_file_data(

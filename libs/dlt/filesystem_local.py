@@ -13,6 +13,7 @@ def to_filesystem_local(
 ) -> None:
     for file_data in destination_file_data:
         file_path: Path = Path(file_data.path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         with file_path.open(
             mode="w+",
         ) as f:
@@ -377,7 +378,7 @@ def test_to_filesystem_local_single_file() -> None:
 
     # Mock Path.open() using mock_open()
     m: unittest.mock.MagicMock = mock_open()
-    with patch("pathlib.Path.open", m):
+    with patch("pathlib.Path.open", m), patch("pathlib.Path.mkdir"):
         # Call to_filesystem_local() with the data
         to_filesystem_local(iter([file_data]))
 
@@ -414,7 +415,7 @@ def test_to_filesystem_local_multiple_files() -> None:
 
     # Mock Path.open() for multiple file operations
     m: unittest.mock.MagicMock = mock_open()
-    with patch("pathlib.Path.open", m):
+    with patch("pathlib.Path.open", m), patch("pathlib.Path.mkdir"):
         # Call to_filesystem_local() with the iterator
         to_filesystem_local(iter(file_data_list))
 
@@ -567,7 +568,10 @@ def test_to_filesystem_local_file_operations() -> None:
     mock_file_handle: unittest.mock.MagicMock = mock_open()
     mock_file_handle.return_value.closed = False
 
-    with patch("pathlib.Path.open", mock_file_handle) as mock_path_open:
+    with (
+        patch("pathlib.Path.open", mock_file_handle) as mock_path_open,
+        patch("pathlib.Path.mkdir"),
+    ):
         # Call the function
         to_filesystem_local(iter([file_data]))
 
@@ -639,6 +643,7 @@ def test_to_filesystem_local_exception_handling() -> None:
                 "pathlib.Path.open",
                 side_effect=exception_instance,
             ),
+            patch("pathlib.Path.mkdir"),
             pytest.raises(
                 exception_type,
             ),
@@ -666,7 +671,7 @@ def test_to_filesystem_local_file_handle_cleanup() -> None:
         "Write failed",
     )
 
-    with patch("pathlib.Path.open", mock_file):
+    with patch("pathlib.Path.open", mock_file), patch("pathlib.Path.mkdir"):
         # Should raise OSError
         with pytest.raises(OSError, match="Write failed"):
             to_filesystem_local(iter([file_data]))
@@ -716,7 +721,10 @@ def test_to_filesystem_local_partial_write_failure() -> None:
         # Return normal mock for other files
         return mock_open()(*args, **kwargs)
 
-    with patch("pathlib.Path.open", side_effect=mock_open_side_effect):
+    with (
+        patch("pathlib.Path.open", side_effect=mock_open_side_effect),
+        patch("pathlib.Path.mkdir"),
+    ):
         # Should raise PermissionError when it hits file3.txt
         with pytest.raises(PermissionError):
             to_filesystem_local(iter(file_data_list))
