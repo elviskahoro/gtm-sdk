@@ -1,11 +1,13 @@
 """Webhook ETL contract for Cal.com booking ingestion."""
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
 from uuid_extensions import uuid7
 
 from libs.caldotcom import Webhook as CalcomWebhook
+from libs.meetings import canonical_meeting_uid
 from src.caldotcom.utils import (
     generate_gcs_filename,
     webhook_to_jsonl,
@@ -35,6 +37,22 @@ def _caldotcom_status_to_attio(
     if booking_status is None:
         return "accepted"
     return _CALCOM_BOOKING_STATUS_TO_ATTIO.get(booking_status, "accepted")
+
+
+def _first_host_email(payload: dict[str, Any]) -> str | None:
+    for h in payload.get("hosts") or []:
+        email = h.get("email")
+        if email:
+            return str(email)
+    return None
+
+
+def _parse_start(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return None
 
 
 class Webhook(CalcomWebhook):
@@ -115,10 +133,12 @@ class Webhook(CalcomWebhook):
         payload = self.payload or {}
         uid = payload.get("uid") or payload.get("bookingUid")
         attendees = payload.get("attendees") or []
-        return bool(uid) and bool(attendees)
+        host_email = _first_host_email(payload)
+        start = payload.get("start")
+        return bool(uid) and bool(attendees) and bool(host_email) and bool(start)
 
     def attio_get_invalid_webhook_error_msg(self) -> str:
-        return "Cal.com booking has no uid or attendees"
+        return "Cal.com booking missing uid, attendees, host email, or start"
 
     def attio_get_operations(self) -> list[Any]:
         from src.attio.ops import (
@@ -129,9 +149,15 @@ class Webhook(CalcomWebhook):
 
         payload = self.payload or {}
         uid = str(payload.get("uid") or payload.get("bookingUid") or "")
-        # Prefer the real iCal UID emitted by Cal.com; otherwise synthesize one
-        # so the dispatcher's LookupTable still has a stable meeting key.
-        ical_uid = payload.get("icsUid") or f"caldotcom-booking-{uid}"
+        host_email = _first_host_email(payload)
+        start_dt = _parse_start(payload.get("start"))
+        # Shared synthetic ical_uid lets Fathom's webhook write to the same Attio
+        # record for the same meeting. Cal.com's icsUid is ignored on purpose:
+        # Fathom does not see it, so using it would re-introduce duplicates.
+        if host_email and start_dt is not None:
+            ical_uid = canonical_meeting_uid(host_email=host_email, start=start_dt)
+        else:
+            ical_uid = f"caldotcom-booking-{uid}"
 
         title = payload.get("title") or "Cal.com booking"
         description = (

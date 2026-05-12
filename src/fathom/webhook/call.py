@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from libs.fathom import Webhook as FathomWebhook
+from libs.meetings import canonical_meeting_uid
 from src.fathom.utils import (
     generate_gcs_filename,
     recording_to_jsonl,
@@ -87,7 +88,10 @@ class Webhook(FathomWebhook):
         return [
             UpsertMeeting(
                 external_ref=MeetingExternalRef(
-                    ical_uid=f"fathom-call-{self.recording_id}",
+                    ical_uid=canonical_meeting_uid(
+                        host_email=self.recorded_by.email,
+                        start=self.scheduled_start_time,
+                    ),
                     provider="google",
                     is_recurring=False,
                 ),

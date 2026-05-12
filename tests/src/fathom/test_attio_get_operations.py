@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import orjson
 
+from libs.meetings import canonical_meeting_uid
 from src.attio.ops import MeetingExternalRef, UpsertMeeting
 from src.fathom.webhook.call import Webhook
 
@@ -44,7 +46,11 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
     assert isinstance(op, UpsertMeeting)
 
     assert isinstance(op.external_ref, MeetingExternalRef)
-    assert op.external_ref.ical_uid == "fathom-call-999999"
+    expected = canonical_meeting_uid(
+        host_email="host@dlthub.com",
+        start=datetime.fromisoformat("2026-05-12T14:00:00+00:00"),
+    )
+    assert op.external_ref.ical_uid == expected
     assert op.external_ref.provider == "google"
     assert op.external_ref.is_recurring is False
 

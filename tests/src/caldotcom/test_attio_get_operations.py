@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import orjson
 
+from libs.meetings import canonical_meeting_uid
 from src.attio.ops import MeetingExternalRef, UpsertMeeting
 from src.caldotcom.webhook.booking import Webhook
 
@@ -38,8 +40,11 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
     assert isinstance(op, UpsertMeeting)
 
     assert isinstance(op.external_ref, MeetingExternalRef)
-    # Cal.com booking has a real icsUid — prefer it over the synthetic fallback.
-    assert op.external_ref.ical_uid == "ical-evt-abc123@cal.com"
+    expected = canonical_meeting_uid(
+        host_email="host@dlthub.com",
+        start=datetime.fromisoformat("2026-05-20T15:00:00+00:00"),
+    )
+    assert op.external_ref.ical_uid == expected
 
     assert op.title == "Discovery call"
     assert op.description == "Customer would like to discuss pricing."
@@ -60,12 +65,34 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
     assert external.status == "accepted"
 
 
-def test_attio_get_operations_falls_back_to_synthetic_ical_uid() -> None:
+def test_attio_get_operations_ignores_icsUid_in_favor_of_canonical_uid() -> None:
+    with_ics = _load()
+    without_ics = _load()
+    without_ics.payload.pop("icsUid", None)
+    assert (
+        with_ics.attio_get_operations()[0].external_ref.ical_uid
+        == without_ics.attio_get_operations()[0].external_ref.ical_uid
+    )
+
+
+def test_attio_get_operations_falls_back_when_host_email_missing() -> None:
     w = _load()
-    w.payload.pop("icsUid", None)
+    w.payload["hosts"] = []
     op = w.attio_get_operations()[0]
     assert isinstance(op, UpsertMeeting)
     assert op.external_ref.ical_uid == "caldotcom-booking-calcom-booking-abc123"
+
+
+def test_attio_is_valid_webhook_false_when_host_email_missing() -> None:
+    w = _load()
+    w.payload["hosts"] = []
+    assert w.attio_is_valid_webhook() is False
+
+
+def test_attio_is_valid_webhook_false_when_start_missing() -> None:
+    w = _load()
+    w.payload.pop("start", None)
+    assert w.attio_is_valid_webhook() is False
 
 
 def test_attio_get_operations_marks_absent_attendee_declined() -> None:
