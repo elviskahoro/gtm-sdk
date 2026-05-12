@@ -16,3 +16,7 @@ __pycache__/
 tmp/
 data/
 worktrees/
+
+# Real webhook payloads — keep raw evt_*.json samples out of version control.
+# Use redacted/synthetic fixtures (sample-*.json) for documentation instead.
+api/samples/**/evt_*.json
