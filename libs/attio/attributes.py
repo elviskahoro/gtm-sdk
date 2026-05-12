@@ -4,8 +4,9 @@ from libs.attio.client import get_client
 from libs.attio.models import AttributeCreateResult
 
 
-def create_companies_attribute(
+def create_attribute(
     *,
+    target_object: str,
     title: str,
     api_slug: str,
     attribute_type: str = "select",
@@ -18,9 +19,8 @@ def create_companies_attribute(
     with get_client() as client:
         attributes_response = client.attributes.get_v2_target_identifier_attributes(
             target="objects",
-            identifier="companies",
+            identifier=target_object,
         )
-
         existing_attribute_slugs = {
             getattr(attr, "api_slug", "") for attr in attributes_response.data
         }
@@ -38,10 +38,9 @@ def create_companies_attribute(
                 "is_multiselect": is_multiselect,
                 "config": {},
             }
-
             client.attributes.post_v2_target_identifier_attributes(
                 target="objects",
-                identifier="companies",
+                identifier=target_object,
                 data=payload,
             )
             attribute_created = True
@@ -53,4 +52,29 @@ def create_companies_attribute(
         attribute_type=attribute_type,
         attribute_exists=attribute_exists,
         attribute_created=attribute_created,
+    )
+
+
+def create_companies_attribute(
+    *,
+    title: str,
+    api_slug: str,
+    attribute_type: str = "select",
+    description: str | None = None,
+    is_multiselect: bool = True,
+    is_required: bool = False,
+    is_unique: bool = False,
+    apply: bool,
+) -> AttributeCreateResult:
+    """Backward-compatible wrapper. Prefer ``create_attribute(target_object=...)`` for new code."""
+    return create_attribute(
+        target_object="companies",
+        title=title,
+        api_slug=api_slug,
+        attribute_type=attribute_type,
+        description=description,
+        is_multiselect=is_multiselect,
+        is_required=is_required,
+        is_unique=is_unique,
+        apply=apply,
     )
