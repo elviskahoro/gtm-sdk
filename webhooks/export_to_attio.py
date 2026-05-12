@@ -25,11 +25,10 @@ from src.caldotcom.webhook.booking import (
 )
 # fmt: on
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
-
 from src.attio.export import execute
 
 
-class WebhookModel(OctolensWebhook):  # type: ignore # trunk-ignore(ruff/F821)
+class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F821)
     pass
 
 
