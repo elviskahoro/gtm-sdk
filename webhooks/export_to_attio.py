@@ -29,7 +29,7 @@ from src.caldotcom.webhook.booking import (
 from src.attio.export import execute
 
 
-class WebhookModel(OctolensWebhook):  # type: ignore # trunk-ignore(ruff/F821)
+class WebhookModel(Rb2bVisitWebhook):  # type: ignore # trunk-ignore(ruff/F821)
     pass
 
 

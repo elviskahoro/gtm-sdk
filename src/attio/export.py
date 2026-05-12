@@ -13,8 +13,12 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from libs.attio.companies import upsert_company as libs_upsert_company
 from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
 from libs.attio.meetings import find_or_create_meeting
+from libs.attio.models import (
+    CompanyInput,
+)
 from libs.attio.models import (
     MeetingExternalRef as LibMeetingExternalRef,
 )
@@ -146,13 +150,13 @@ def _handle_upsert_person(
 
 def _handle_upsert_company(
     op: UpsertCompany,
-    table: LookupTable,
+    table: LookupTable,  # noqa: ARG001 — kept for handler signature parity
 ) -> ReliabilityEnvelope:
-    # Pass 3 will either extend libs/attio/companies with upsert_company or
-    # compose search+add inside this handler. The Fathom-call path never hits
-    # this branch.
-    raise NotImplementedError(
-        "Pass 3 task: wire libs/attio/companies upsert path.",
+    return libs_upsert_company(
+        CompanyInput(
+            name=op.name or op.domain,
+            domain=op.domain,
+        ),
     )
 
 
