@@ -1,6 +1,6 @@
 """Webhook ETL contract for Cal.com booking ingestion."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from uuid_extensions import uuid7
@@ -10,6 +10,31 @@ from src.caldotcom.utils import (
     generate_gcs_filename,
     webhook_to_jsonl,
 )
+
+# Cal.com Booking has a single top-level RSVP status that applies to the
+# booking as a whole, plus a per-attendee `absent` boolean. Map to Attio's
+# four-value enum: accepted | tentative | declined | pending.
+_CALCOM_BOOKING_STATUS_TO_ATTIO: dict[
+    str,
+    Literal["accepted", "tentative", "declined", "pending"],
+] = {
+    "accepted": "accepted",
+    "pending": "pending",
+    "cancelled": "declined",
+    "rejected": "declined",
+}
+
+
+def _caldotcom_status_to_attio(
+    booking_status: str | None,
+    *,
+    absent: bool = False,
+) -> Literal["accepted", "tentative", "declined", "pending"]:
+    if absent:
+        return "declined"
+    if booking_status is None:
+        return "accepted"
+    return _CALCOM_BOOKING_STATUS_TO_ATTIO.get(booking_status, "accepted")
 
 
 class Webhook(CalcomWebhook):
@@ -79,3 +104,81 @@ class Webhook(CalcomWebhook):
 
     def etl_get_base_models(self, storage: Any) -> list[Any]:
         raise NotImplementedError("LanceDB integration is Phase 2+")
+
+    # --- Attio export contract ---
+
+    @staticmethod
+    def attio_get_secret_collection_names() -> list[str]:
+        return ["attio"]
+
+    def attio_is_valid_webhook(self) -> bool:
+        payload = self.payload or {}
+        uid = payload.get("uid") or payload.get("bookingUid")
+        attendees = payload.get("attendees") or []
+        return bool(uid) and bool(attendees)
+
+    def attio_get_invalid_webhook_error_msg(self) -> str:
+        return "Cal.com booking has no uid or attendees"
+
+    def attio_get_operations(self) -> list[Any]:
+        from src.attio.ops import (
+            MeetingExternalRef,
+            MeetingParticipant,
+            UpsertMeeting,
+        )
+
+        payload = self.payload or {}
+        uid = str(payload.get("uid") or payload.get("bookingUid") or "")
+        # Prefer the real iCal UID emitted by Cal.com; otherwise synthesize one
+        # so the dispatcher's LookupTable still has a stable meeting key.
+        ical_uid = payload.get("icsUid") or f"caldotcom-booking-{uid}"
+
+        title = payload.get("title") or "Cal.com booking"
+        description = (
+            payload.get("additionalNotes") or payload.get("description") or title
+        )
+        booking_status = payload.get("status")
+
+        attendees: list[MeetingParticipant] = []
+        for a in payload.get("attendees") or []:
+            email = a.get("email")
+            if not email:
+                continue
+            attendees.append(
+                MeetingParticipant(
+                    email_address=email,
+                    is_organizer=False,
+                    status=_caldotcom_status_to_attio(
+                        booking_status,
+                        absent=bool(a.get("absent")),
+                    ),
+                ),
+            )
+
+        for h in payload.get("hosts") or []:
+            email = h.get("email")
+            if not email:
+                continue
+            attendees.append(
+                MeetingParticipant(
+                    email_address=email,
+                    is_organizer=True,
+                    status="accepted",
+                ),
+            )
+
+        return [
+            UpsertMeeting(
+                external_ref=MeetingExternalRef(
+                    ical_uid=ical_uid,
+                    provider="google",
+                    is_recurring=False,
+                ),
+                title=title,
+                description=description,
+                start=payload["start"],
+                end=payload["end"],
+                is_all_day=False,
+                participants=attendees,
+            ),
+        ]
