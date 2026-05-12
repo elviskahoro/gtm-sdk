@@ -7,7 +7,7 @@ name = "gtm"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "attio>=0.22.0",
+  "attio>=0.22.8",
   "boto3>=1.42.95",
   "dlt[deltalake,motherduck]>=1.0",
   "fastapi[standard]",
