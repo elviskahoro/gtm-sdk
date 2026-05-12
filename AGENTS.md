@@ -1,78 +1,69 @@
 # AGENTS.md
 
-This file provides guidance to AI agents when working with code in this repository.
+Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo layout, CLI surface, and adapter list are discoverable — don't expect this file to mirror them.
 
-## Code Placement Rules
+## Code placement
 
-Use these boundaries when adding or refactoring code:
+- `libs/<service>/` — wrap **one** external SDK/API. Idiomatic Python types/functions only.
+- `src/` — orchestration. Multi-step flows, side effects, Modal `@app.function` / `@modal.fastapi_endpoint` decorators.
+- `cli/` — Typer subapps. Parse → preflight → call `src/` → render. **No business logic.**
+- `data_gen/` — independent, composable data products.
+- `webhooks/` — standalone Modal apps. Deploy individually with `modal deploy webhooks/<file>.py`. Do **not** register them in `src/app.py`.
+- `api/specs/`, `api/samples/` — external API specs and fixture payloads. Read-only reference.
+- `tmp/` — scratch only. Gitignored. Never write temp files anywhere else.
 
-- `data_gen/` = data generation and enrichment pipelines. Reusable data products (marketplace products, enrichment workflows, ETL scripts) belong here. Keep products independent and composable.
-- `libs/` = reusable domain logic and adapters. Single-SDK adapters for external services (Attio, Apollo, Gmail) belong here. Keep modules composable and callable from multiple contexts.
-- `src/` = workflow orchestration. Any multi-step flow that chains operations, coordinates side effects, or runs pipeline logic belongs here.
-- `cli/` = thin command surface only. Parse flags, perform preflight, call `src/` workflows, and render output/errors.
+### Hard rules
 
-Anti-patterns:
+- **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`.
+- **No orchestration in `libs/`.** Adapter modules must be callable in isolation.
+- **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `data_gen*`, `libs*`, `src*`).
 
-- Do not add workflow orchestration directly in `libs/`.
-- Do not make `cli/` command files own business logic.
+## Modal gotchas
 
-Migration note:
+- `deploy.py` stays at the repo root. Moving it under `src/` causes `src/attio/` to shadow the `attio` pip package.
+- New endpoint = add the module import to `_ENDPOINT_MODULES` in `src/app.py`, otherwise its decorators don't register.
+- New secret = add a `modal.Secret.from_name("<name>")` binding in `src/app.py`.
+- Free tier caps the app at **8 web endpoints**. Don't silently exceed it.
+- App name resolves from the `MODAL_APP` env var (`src/modal_app.py`).
 
-- For all new work, follow this boundary. When touching legacy paths, prefer moving orchestration into `src/` incrementally.
+## Telemetry
 
-## Package Management (uv)
+OTEL via `libs/telemetry.py`. Activated only when one of these is set: `HYPERDX_API_KEY`, `HYPERDX_OTLP_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`. Otherwise the tracer is a no-op — don't add fallback logging "just in case."
 
-**Always use `uv` as the package manager. Never use bare `pip`, `pip3`, or `python3 -m pip`.**
+## Package management
 
-Common commands:
+**Use `uv`. Never `pip`, `pip3`, or `python3 -m pip`.** Bare pip bypasses `uv.lock` and causes environment drift.
 
-- `uv sync` — install dependencies from `pyproject.toml` and `uv.lock`
-- `uv pip install <package>` — add a dependency (updates lock file)
-- `uv run <command>` — run a command within the uv environment
-- `uv python pin 3.x` — manage Python version for the project
+- `uv sync` — install from lock.
+- `uv pip install <pkg>` — add a dep (updates lock).
+- `uv run <cmd>` — run inside the env.
 
-Why: `uv` maintains a lock file (`uv.lock`) that ensures deterministic, reproducible environments across machines and CI. Bare `pip` bypasses this guarantee and can lead to environment drift.
+## Path anchoring
+
+When a script reads/writes files that live beside it, anchor on `Path(__file__).resolve().parent`, not the CWD. `uv run path/to/script.py` does **not** chdir — relative paths resolve from wherever the user invoked the command, not the script's folder. This silently writes files to the wrong place.
+
+```python
+SCRIPT_DIR = Path(__file__).resolve().parent
+(SCRIPT_DIR / "output.txt").write_text(...)
+```
+
+## Documentation
+
+**Do not create summary, investigation, or "what I did" `.md` files.** Live documentation goes in code:
+
+- Docstrings explain *why*, not *what*.
+- Comments document decisions and gotchas inline.
+- Significant changes → `CHANGELOG.md`.
+- Architectural decisions → design artifacts in the parent `ai/` repo's `design/`, not loose `.md` here.
+
+If you finish a task and want to summarize, output it as your final response. Don't write a file.
+
+## Git
+
+- **Branches**: `agent/<slug>`. Never `claude/*` or other provider-specific prefixes.
+- **Worktrees**: `worktrees/<branch-name>` at the repo root. Ensure `worktrees/` exists and is gitignored. Never use `.git/modules/*` paths as user-facing worktree locations.
+- **Commits/PRs**: never add AI co-author trailers (`Co-Authored-By: Claude/Oz/...`). Human authors only.
 
 ## Testing
 
-Run tests with pytest:
-
-```bash
-uv run pytest
-```
-
-pytest is configured to use importlib mode. Tests live in the `tests/` directory and follow the same module structure as `src/` and `libs/`.
-
-## Temporary Files
-
-All temporary files created during tool runs (intermediate outputs, scratch data, cached results, etc.) **must** be written to the `tmp/` directory at the project root. This directory is gitignored and cleaned up between runs. Never write temporary files to the project root or alongside source code.
-
-## Documentation Placement
-
-**Do NOT create summary or investigation documents.** Documentation should be live in the code itself.
-
-Instead of creating summary `.md` files:
-
-- **Add docstrings** to functions, classes, and modules that explain the "why" (not just the "what")
-- **Add comments** in complex sections to document decisions and gotchas
-- **Update module-level documentation** (docstrings at the top of files) when adding features
-- **Keep README.md** files for each major module with setup/usage instructions
-- **Use CHANGELOG.md** entries when making significant changes
-- **Store architectural decisions** in design artifacts, not as loose summary documents
-
-If you finish a task and need to communicate what was done, output the summary as text in your response—don't create `.md` files for it.
-
-## Git Branch Naming
-
-Always use the `agent/` prefix for branches created by AI agents (e.g., `agent/add-email-validation`). Never use `claude/` or other provider-specific prefixes.
-## Git Worktrees
-
-When creating git worktrees for this repository, always create them under `worktrees/` at the repository root unless the user explicitly requests a different location.
-
-Before creating a worktree:
-
-- Ensure `worktrees/` exists or create it
-- Ensure `worktrees/` is ignored by git
-- Use paths like `worktrees/<branch-name>`
-
-Do not rely on git internal module paths such as `.git/modules/...` as user-facing worktree locations.
+`uv run pytest`. Importlib mode is already configured. Mirror the source layout when adding tests.
