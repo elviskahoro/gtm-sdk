@@ -52,7 +52,7 @@ class CrmContact(BaseModel):
 class CrmMatches(BaseModel):
     companies: list[CrmCompany] = []
     contacts: list[CrmContact] = []
-    deals: list[dict] = []
+    deals: list[dict[str, Any]] = []
     error: str | None = None
 
 
