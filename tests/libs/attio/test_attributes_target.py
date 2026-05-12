@@ -19,7 +19,7 @@ def test_create_attribute_routes_to_arbitrary_target() -> None:
     client = _mock_client_with_existing([])
     with patch("libs.attio.attributes.get_client", return_value=client):
         result = create_attribute(
-            target_object="octolens_mentions",
+            target_object="social_mention",
             title="Mention URL",
             api_slug="mention_url",
             attribute_type="text",
@@ -29,11 +29,11 @@ def test_create_attribute_routes_to_arbitrary_target() -> None:
         )
     client.attributes.get_v2_target_identifier_attributes.assert_called_once_with(
         target="objects",
-        identifier="octolens_mentions",
+        identifier="social_mention",
     )
     client.attributes.post_v2_target_identifier_attributes.assert_called_once()
     _, kwargs = client.attributes.post_v2_target_identifier_attributes.call_args
-    assert kwargs["identifier"] == "octolens_mentions"
+    assert kwargs["identifier"] == "social_mention"
     assert isinstance(result, AttributeCreateResult)
     assert result.attribute_created is True
 
@@ -42,7 +42,7 @@ def test_create_attribute_skips_when_exists() -> None:
     client = _mock_client_with_existing(["mention_url"])
     with patch("libs.attio.attributes.get_client", return_value=client):
         result = create_attribute(
-            target_object="octolens_mentions",
+            target_object="social_mention",
             title="Mention URL",
             api_slug="mention_url",
             attribute_type="text",

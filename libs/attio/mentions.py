@@ -20,7 +20,7 @@ def _build_values(input: MentionInput) -> dict[str, Any]:
 
 
 def upsert_mention(input: MentionInput) -> ReliabilityEnvelope:
-    """Idempotent upsert against the ``octolens_mentions`` custom object.
+    """Idempotent upsert against the ``social_mention`` custom object.
 
     Uses Attio's assert endpoint with ``matching_attribute=mention_url``.
     The endpoint creates the record if no match exists, or updates the
@@ -31,7 +31,7 @@ def upsert_mention(input: MentionInput) -> ReliabilityEnvelope:
     try:
         with get_client() as client:
             response = client.records.put_v2_objects_object_records(
-                object="octolens_mentions",
+                object="social_mention",
                 matching_attribute="mention_url",
                 data=build_assert_record_request(values),
             )

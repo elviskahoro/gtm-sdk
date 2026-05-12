@@ -18,9 +18,9 @@ def test_create_object_creates_when_missing() -> None:
     client = _mock_client([])
     with patch("libs.attio.objects.get_client", return_value=client):
         result = create_object(
-            api_slug="octolens_mentions",
-            singular_noun="Octolens mention",
-            plural_noun="Octolens mentions",
+            api_slug="social_mention",
+            singular_noun="Social mention",
+            plural_noun="Social mentions",
             apply=True,
         )
     client.objects.post_v2_objects.assert_called_once()
@@ -29,12 +29,12 @@ def test_create_object_creates_when_missing() -> None:
 
 
 def test_create_object_skips_when_present() -> None:
-    client = _mock_client(["octolens_mentions"])
+    client = _mock_client(["social_mention"])
     with patch("libs.attio.objects.get_client", return_value=client):
         result = create_object(
-            api_slug="octolens_mentions",
-            singular_noun="Octolens mention",
-            plural_noun="Octolens mentions",
+            api_slug="social_mention",
+            singular_noun="Social mention",
+            plural_noun="Social mentions",
             apply=True,
         )
     client.objects.post_v2_objects.assert_not_called()

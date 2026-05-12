@@ -36,7 +36,7 @@ def test_upsert_mention_calls_assert_endpoint() -> None:
         envelope = upsert_mention(_sample())
     client.records.put_v2_objects_object_records.assert_called_once()
     _, kwargs = client.records.put_v2_objects_object_records.call_args
-    assert kwargs["object"] == "octolens_mentions"
+    assert kwargs["object"] == "social_mention"
     assert kwargs["matching_attribute"] == "mention_url"
     assert envelope.success is True
     assert envelope.record_id == "rec-1"

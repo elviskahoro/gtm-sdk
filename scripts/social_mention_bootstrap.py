@@ -1,8 +1,8 @@
-"""One-off bootstrap for the octolens_mentions custom object.
+"""One-off bootstrap for the social_mention custom object.
 
 Usage:
-    infisical run -- uv run python scripts/octolens_mentions_bootstrap.py --preview
-    infisical run -- uv run python scripts/octolens_mentions_bootstrap.py --apply
+    infisical run -- uv run python scripts/social_mention_bootstrap.py --preview
+    infisical run -- uv run python scripts/social_mention_bootstrap.py --apply
 
 Idempotent. Safe to re-run. Adding a new attribute = edit ATTRIBUTES below
 and re-run.
@@ -27,9 +27,9 @@ if str(REPO_ROOT) not in sys.path:
 from libs.attio.attributes import create_attribute  # noqa: E402
 from libs.attio.objects import create_object  # noqa: E402
 
-OBJECT_API_SLUG = "octolens_mentions"
-OBJECT_SINGULAR = "Octolens mention"
-OBJECT_PLURAL = "Octolens mentions"
+OBJECT_API_SLUG = "social_mention"
+OBJECT_SINGULAR = "Social mention"
+OBJECT_PLURAL = "Social mentions"
 
 
 AttrType = Literal[

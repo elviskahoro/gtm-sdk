@@ -144,12 +144,12 @@ class ObjectCreateResult(BaseModel):
 
 
 class MentionInput(BaseModel):
-    """Input payload for the ``octolens_mentions`` custom object.
+    """Input payload for the ``social_mention`` custom object.
 
     Unlike CompanyInput / PersonInput / MeetingInput which target Attio's
     built-in standard objects, this model targets a **custom** object that
     must be bootstrapped into the workspace via
-    ``scripts/octolens_mentions_bootstrap.py`` before any upsert succeeds.
+    ``scripts/social_mention_bootstrap.py`` before any upsert succeeds.
 
     Fields here mirror the webhook-writable attributes only. The CRM-owned
     fields (triage_status, related_person, related_company) are intentionally
