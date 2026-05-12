@@ -49,7 +49,7 @@ class Webhook(FathomWebhook):
         return generate_gcs_filename(
             self.recording_start_time,
             self.recording_id,
-            self.meeting_title,
+            self.meeting_title or self.title,
         )
 
     def etl_get_base_models(self, storage: Any) -> list[Any]:

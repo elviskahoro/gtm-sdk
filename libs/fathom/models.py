@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 import orjson
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class Assignee(BaseModel):
@@ -80,11 +80,13 @@ class TranscriptMessage(BaseModel):
 
 
 class Webhook(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     recording_id: int
     url: str
     share_url: str
     title: str
-    meeting_title: str
+    meeting_title: str | None = None
     transcript_language: str
     created_at: datetime
     scheduled_start_time: datetime
@@ -94,12 +96,12 @@ class Webhook(BaseModel):
     calendar_invitees_domains_type: str
 
     recorded_by: RecordedBy
-    default_summary: DefaultSummary
-    crm_matches: CrmMatches
+    default_summary: DefaultSummary | None = None
+    crm_matches: CrmMatches | None = None
 
-    calendar_invitees: list[CalendarInvitee]
-    action_items: list[ActionItem]
-    transcript: list[TranscriptMessage]
+    calendar_invitees: list[CalendarInvitee] = []
+    action_items: list[ActionItem] | None = None
+    transcript: list[TranscriptMessage] | None = None
 
     @model_validator(mode="before")
     @classmethod
