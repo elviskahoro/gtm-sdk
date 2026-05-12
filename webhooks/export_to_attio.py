@@ -26,12 +26,7 @@ from src.caldotcom.webhook.booking import (
 # fmt: on
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 
-from libs.attio.meetings import find_or_create_meeting
-from libs.attio.models import (
-    MeetingExternalRef,
-    MeetingInput,
-    MeetingParticipantInput,
-)
+from src.attio.export import execute
 
 
 class WebhookModel(FathomCallWebhook):  # type: ignore # trunk-ignore(ruff/F821)
@@ -57,44 +52,17 @@ app = modal.App(name="export-to-attio", image=image)
 
 
 def _export(webhook: WebhookModel) -> str:
-    # Pass 1: inline Fathom-call → Attio Meeting. Pass 2 extracts via dispatcher.
-    if not webhook.calendar_invitees or not webhook.recording_id:
-        return (
-            "Fathom call payload is not exportable to Attio "
-            "(no attendees or recording_id)"
-        )
-
-    description: str = (
-        webhook.default_summary.markdown_formatted
-        if webhook.default_summary
-        else (webhook.meeting_title or webhook.title)
-    )
-
-    meeting = MeetingInput(
-        external_ref=MeetingExternalRef(
-            ical_uid=f"fathom-call-{webhook.recording_id}",
-            provider="google",
-            is_recurring=False,
-        ),
-        title=webhook.meeting_title or webhook.title,
-        description=description,
-        start=webhook.scheduled_start_time,
-        end=webhook.scheduled_end_time,
-        is_all_day=False,
-        participants=[
-            MeetingParticipantInput(
-                email_address=inv.email,
-                is_organizer=(inv.email == webhook.recorded_by.email),
-            )
-            for inv in webhook.calendar_invitees
-        ],
-    )
-    envelope = find_or_create_meeting(meeting)
-    return envelope.model_dump_json()
+    if not webhook.attio_is_valid_webhook():
+        return webhook.attio_get_invalid_webhook_error_msg()
+    plan = webhook.attio_get_operations()
+    return execute(plan).body()
 
 
 @app.function(
-    secrets=[modal.Secret.from_name("attio")],
+    secrets=[
+        modal.Secret.from_name(n)
+        for n in WebhookModel.attio_get_secret_collection_names()
+    ],
     region="us-east-1",
     enable_memory_snapshot=False,
 )
