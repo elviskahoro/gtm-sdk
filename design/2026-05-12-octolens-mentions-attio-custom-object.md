@@ -3,7 +3,6 @@
 **Status:** proposed
 **Date:** 2026-05-12
 **Owner:** elvis
-**Branch:** `claude/attio-mentions-research-EgbO4`
 
 ---
 
@@ -70,7 +69,9 @@ Sample payloads in `api/samples/octolens.mention.created.{twitter,reddit,bluesky
 | `sentiment` | select (Positive, Neutral, Negative) | | `sentiment_label` |
 | `language` | text | | `language` |
 | `subreddit` | text | | `subreddit` |
+| `view_id` | number | | `view_id` (nullable) |
 | `view_name` | text | | `view_name` |
+| `view_keywords` | text (comma-joined) | | `view_keywords[]` — open-ended cardinality, same rationale as `keywords` |
 | `bookmarked` | checkbox | | `bookmarked` |
 | `image_url` | text | | `image_url` |
 | `triage_status` | status (New → Reviewing → Responded → Ignored) | | **Attio-owned, never overwritten by webhook** |
@@ -119,7 +120,7 @@ Sample payloads in `api/samples/octolens.mention.created.{twitter,reddit,bluesky
 - New top-level package? Not needed here — everything lands under existing `libs/`, `src/`, `cli/`, `tests/`.
 - Package manager: `uv`. Never `pip`.
 - Path anchoring: any new bootstrap script that reads/writes files must anchor on `Path(__file__).resolve().parent`.
-- Branch: stay on `claude/attio-mentions-research-EgbO4` per the runtime task; do not rename despite the `agent/<slug>` rule in `AGENTS.md` (the runtime instruction takes precedence).
+- Branch: create a fresh `agent/<slug>` branch off `main` per `AGENTS.md` before starting implementation (e.g. `agent/octolens-mentions-attio-custom-object`). Do not reuse the research branch this design doc was authored on.
 
 ### Edge cases to handle
 
