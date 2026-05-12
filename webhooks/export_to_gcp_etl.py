@@ -19,19 +19,19 @@ if TYPE_CHECKING:
 
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
-from src.fathom.etl.message import (
+from src.fathom.webhook.message import (
     Webhook as FathomMessageWebhook,
 )
-from src.fathom.etl.call import (
+from src.fathom.webhook.call import (
     Webhook as FathomCallWebhook,
 )
-from src.octolens.etl import (
+from src.octolens.webhook import (
     Webhook as OctolensWebhook,
 )
-from src.rb2b.etl.visit import (
+from src.rb2b.webhook.visit import (
     Webhook as Rb2bVisitWebhook,
 )
-from src.caldotcom.etl.booking import (
+from src.caldotcom.webhook.booking import (
     Webhook as CaldotcomBookingWebhook,
 )
 # fmt: on

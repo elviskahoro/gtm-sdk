@@ -1,4 +1,4 @@
-"""Tests for src/octolens/etl/mention.py — ETL Webhook contract."""
+"""Tests for src/octolens/webhook/mention.py — Webhook contract."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.octolens.etl import Webhook
+from src.octolens.webhook import Webhook
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EVENTS_PATH = REPO_ROOT / "tests" / "libs" / "octolens" / "fixtures" / "events.json"

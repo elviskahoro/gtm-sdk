@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from pydantic import BaseModel
 from uuid_extensions import uuid7
 
 from libs.caldotcom import Webhook as CalcomWebhook
@@ -27,7 +28,7 @@ class Webhook(CalcomWebhook):
         return Webhook.etl_get_bucket_name()
 
     @staticmethod
-    def storage_get_base_model_type() -> None:
+    def storage_get_base_model_type() -> type[BaseModel] | None:
         return None
 
     @staticmethod

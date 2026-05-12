@@ -8,6 +8,8 @@ no validated payload shape to ingest yet.
 
 from typing import Any
 
+from pydantic import BaseModel
+
 from libs.fathom import Webhook as FathomWebhook
 
 
@@ -27,7 +29,7 @@ class Webhook(FathomWebhook):
         return Webhook.etl_get_bucket_name()
 
     @staticmethod
-    def storage_get_base_model_type() -> None:
+    def storage_get_base_model_type() -> type[BaseModel] | None:
         return None
 
     @staticmethod

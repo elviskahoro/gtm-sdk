@@ -137,16 +137,16 @@ wheels = [
 
 [[package]]
 name = "attio"
-version = "0.21.2"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpcore" },
     { name = "httpx" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/9c/7ddff8d6f8481945adaca275fd77df3a889e381902dc2277cb725acbdb10/attio-0.21.2.tar.gz", hash = "sha256:c00ebe604b819c7e848d6ab7fa66cb666faec7d4225bd71aca3628b0c8269f74", size = 260916, upload-time = "2026-03-29T16:56:43.702Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/c3/258d70b0f0ac24409146252b16cb2769255299891fb9dd4ea0463680947a/attio-0.22.0.tar.gz", hash = "sha256:e1271b132ebc74c187790373c04c29ee6364335478bf4d400cba42fb40d28f80", size = 264383, upload-time = "2026-05-12T06:22:01.477Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f6/f4/45344df52aeeb8d062599611a1daa5b26aa1f7ab8b3b1124d7cdeff025fd/attio-0.21.2-py3-none-any.whl", hash = "sha256:a207c857ac006737a74566a90ecfbd8a8f52992e1eb002c03fd02ca8763491b4", size = 380372, upload-time = "2026-03-29T16:56:42.586Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/4d/5eb4605ab86046574cdc0943ca8a39b719d40fd0231fa14be6906667c536/attio-0.22.0-py3-none-any.whl", hash = "sha256:6f9adffdeb8246b921da2e3952d4543a07bfe411d370d0d501118270b5d21551", size = 386316, upload-time = "2026-05-12T06:21:59.335Z" },
 ]
 
 [[package]]
@@ -952,7 +952,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "attio", specifier = ">=0.21.2" },
+    { name = "attio", specifier = ">=0.22.0" },
     { name = "boto3", specifier = ">=1.42.95" },
     { name = "dlt", extras = ["deltalake", "motherduck"], specifier = ">=1.0" },
     { name = "dlthub", specifier = ">=0.22.1" },
