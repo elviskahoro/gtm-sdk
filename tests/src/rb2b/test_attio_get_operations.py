@@ -7,7 +7,7 @@ import orjson
 from src.attio.ops import UpsertCompany, UpsertPerson
 from src.rb2b.webhook.visit import Webhook, extract_domain
 
-FIXTURE = Path("api/samples/hookdeck.event.redacted.json")
+FIXTURE = Path("api/samples/rb2b.visit.redacted.json")
 
 
 def _load() -> Webhook:
@@ -44,9 +44,9 @@ def test_attio_get_operations_returns_company_only_when_no_email() -> None:
 
 def test_attio_get_operations_returns_person_and_company_when_both_present() -> None:
     payload = orjson.loads(FIXTURE.read_bytes())
-    payload["payload"]["Business Email"] = "buyer@example.com"
-    payload["payload"]["First Name"] = "Pat"
-    payload["payload"]["Last Name"] = "Buyer"
+    payload["Business Email"] = "buyer@example.com"
+    payload["First Name"] = "Pat"
+    payload["Last Name"] = "Buyer"
     webhook = Webhook.model_validate(payload)
 
     plan = webhook.attio_get_operations()
@@ -66,8 +66,8 @@ def test_attio_get_operations_returns_person_and_company_when_both_present() -> 
 
 def test_attio_is_valid_webhook_false_when_no_email_and_no_domain() -> None:
     payload = orjson.loads(FIXTURE.read_bytes())
-    payload["payload"]["Website"] = None
-    payload["payload"]["Business Email"] = None
+    payload["Website"] = None
+    payload["Business Email"] = None
     webhook = Webhook.model_validate(payload)
 
     assert webhook.attio_is_valid_webhook() is False

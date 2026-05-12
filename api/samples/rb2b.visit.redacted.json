@@ -1,0 +1,20 @@
+{
+  "LinkedIn URL": "https://www.linkedin.com/company/example",
+  "First Name": null,
+  "Last Name": null,
+  "Title": null,
+  "Company Name": "Example Corp",
+  "Business Email": null,
+  "Website": "https://example.com",
+  "Industry": "Software",
+  "Employee Count": "1001-5000",
+  "Estimate Revenue": "$10M - $50M",
+  "City": "REDACTED",
+  "State": "RD",
+  "Zipcode": "00000",
+  "Seen At": "2026-01-01T00:00:00.000+00:00",
+  "Referrer": "https://example.com/",
+  "Tags": "",
+  "Captured URL": "https://example.com/path",
+  "is_repeat_visit": false
+}
