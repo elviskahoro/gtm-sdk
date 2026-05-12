@@ -18,9 +18,7 @@ def create_object(
     """
     with get_client() as client:
         objects_response = client.objects.get_v2_objects()
-        existing_slugs = {
-            getattr(obj, "api_slug", "") for obj in objects_response.data
-        }
+        existing_slugs = {getattr(obj, "api_slug", "") for obj in objects_response.data}
         object_exists = api_slug in existing_slugs
         object_created = False
 

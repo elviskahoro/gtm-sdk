@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from libs.attio.models import PersonInput
+from datetime import datetime
+
+from libs.attio.models import MentionInput, PersonInput
 from libs.attio.values import (
     build_core_person_values,
+    build_create_mention_values,
     build_optional_person_values,
+    build_update_mention_values,
     format_location,
 )
 
@@ -57,14 +61,8 @@ def test_location_mode_raw_retains_line_1() -> None:
     )
     assert values["primary_location"][0]["line_1"] == "123 Main"
 
-# ---------- Octolens mentions ----------
-from datetime import datetime
 
-from libs.attio.models import MentionInput
-from libs.attio.values import (
-    build_create_mention_values,
-    build_update_mention_values,
-)
+# ---------- Octolens mentions ----------
 
 
 def _sample_mention() -> MentionInput:

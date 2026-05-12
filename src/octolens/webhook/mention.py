@@ -1,6 +1,6 @@
 """Webhook ETL contract for Octolens mention ingestion."""
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel
 
@@ -110,10 +110,12 @@ class Webhook(OctolensWebhook):
         ]
 
 
-_SENTIMENT_VALUES = frozenset({"Positive", "Neutral", "Negative"})
+_SENTIMENT_VALUES: frozenset[str] = frozenset({"Positive", "Neutral", "Negative"})
 
 
-def _sentiment_or_none(value: str | None) -> str | None:
+def _sentiment_or_none(
+    value: str | None,
+) -> Literal["Positive", "Neutral", "Negative"] | None:
     if value in _SENTIMENT_VALUES:
-        return value
+        return cast(Literal["Positive", "Neutral", "Negative"], value)
     return None
