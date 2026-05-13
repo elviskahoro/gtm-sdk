@@ -26,6 +26,29 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 - Free tier caps the app at **8 web endpoints**. Don't silently exceed it.
 - App name resolves from the `MODAL_APP` env var (`src/modal_app.py`).
 
+## Webhook deploys
+
+`webhooks/export_to_attio.py` and `webhooks/export_to_gcp_etl.py` ship one Modal app per webhook source, but the file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
+
+To deploy one source:
+
+1. Substitute `WebhookModelToReplace` → the target class (e.g. `CaldotcomBookingWebhook`, `FathomCallWebhook`, `FathomMessageWebhook`, `OctolensWebhook`, `Rb2bVisitWebhook`).
+2. `infisical run ... -- uv run modal deploy webhooks/<file>.py` (Modal app name comes from `WebhookModel.attio_get_app_name()` — e.g. `CaldotcomBookingWebhook` → `export-to-attio-from-calcom-bookings`).
+3. Restore the `WebhookModelToReplace` placeholder so the working tree matches `main`.
+
+Do not commit the substituted form. Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols.
+
+### Scripted deploy pitfalls
+
+When looping over webhook sources in a shell script:
+
+- **`unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET` before `infisical run`.** Otherwise the parent shell's personal Modal tokens win over the dlthub-workspace tokens Infisical injects, and deploys land in the wrong workspace.
+- **Wrap with `uv run modal deploy`, not bare `modal deploy`.** Bare `modal` runs outside the project venv and can't import `src.*` packages registered in `pyproject.toml` → `ModuleNotFoundError: No module named 'src.fathom'`.
+- **Use `\cp -f` to bypass `cp -i` aliases.** A `cp` alias to interactive mode will silently answer "no" to the placeholder-restore step, leaving the previous iteration's substitution in place and deploying the wrong source on the next pass.
+- **Do not store `infisical run --token … --` in a shell variable** and then expand it inline (`$INF modal deploy …`). Zsh treats the whole variable as `argv[0]` (`command not found: infisical run …`) and the service token leaks to stderr and shell history. Use a function or a bash array.
+- **Preflight Modal secrets and GCS buckets before the loop.** A missing `modal.Secret.from_name(...)` aborts after the image build; a missing GCS bucket aborts at first write. Check with `infisical run … -- uv run modal secret list` and `gcloud storage ls --project=dlthub-sandbox`.
+- **Wrap the loop in `trap '\cp -f tmp/webhook-deploy-bak/*.py webhooks/' EXIT`** so the working tree restores even if the loop dies mid-way.
+
 ## Telemetry
 
 OTEL via `libs/telemetry.py`. Activated only when one of these is set: `HYPERDX_API_KEY`, `HYPERDX_OTLP_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`. Otherwise the tracer is a no-op — don't add fallback logging "just in case."
