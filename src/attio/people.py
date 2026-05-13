@@ -234,7 +234,7 @@ def _envelope_or_error_response(payload: Any) -> Any:
 
 @app.function(image=image, secrets=[secrets_attio])
 @modal.fastapi_endpoint(method="POST", docs=True)
-def attio_person_add_http(query: PersonAddQuery) -> Any:
+def http_attio_person_add(query: PersonAddQuery) -> Any:
     result = attio_add_person.remote(
         payload=query.model_dump(),
     )
@@ -243,7 +243,7 @@ def attio_person_add_http(query: PersonAddQuery) -> Any:
 
 @app.function(image=image, secrets=[secrets_attio])
 @modal.fastapi_endpoint(method="POST", docs=True)
-def attio_people_search_http(query: PersonSearchQuery) -> Any:
+def http_attio_people_search(query: PersonSearchQuery) -> Any:
     result = attio_search_people.remote(
         payload=query.model_dump(),
     )
@@ -252,7 +252,7 @@ def attio_people_search_http(query: PersonSearchQuery) -> Any:
 
 @app.function(image=image, secrets=[secrets_attio])
 @modal.fastapi_endpoint(method="POST", docs=True)
-def attio_person_update_http(query: PersonUpdateQuery) -> Any:
+def http_attio_person_update(query: PersonUpdateQuery) -> Any:
     result = attio_update_person.remote(
         payload=query.model_dump(),
     )
@@ -263,7 +263,7 @@ if ENABLE_ATTIO_PERSON_UPSERT_HTTP:
 
     @app.function(image=image, secrets=[secrets_attio])
     @modal.fastapi_endpoint(method="POST", docs=True)
-    def attio_person_upsert_http(query: PersonUpsertQuery) -> Any:
+    def http_attio_person_upsert(query: PersonUpsertQuery) -> Any:
         result = attio_upsert_person.remote(
             payload=query.model_dump(),
         )

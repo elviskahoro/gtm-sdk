@@ -77,7 +77,7 @@ class NoteUpdateQuery(BaseModel):
 
 @app.function(image=image, secrets=[secrets_attio])
 @modal.fastapi_endpoint(method="POST", docs=True)
-def attio_note_add_http(query: NoteAddQuery) -> Any:
+def http_attio_note_add(query: NoteAddQuery) -> Any:
     try:
         result = attio_add_note.remote(
             payload=query.model_dump(),
@@ -90,7 +90,7 @@ def attio_note_add_http(query: NoteAddQuery) -> Any:
 
 @app.function(image=image, secrets=[secrets_attio])
 @modal.fastapi_endpoint(method="POST", docs=True)
-def attio_note_update_http(query: NoteUpdateQuery) -> Any:
+def http_attio_note_update(query: NoteUpdateQuery) -> Any:
     try:
         result = attio_update_note.remote(
             payload=query.model_dump(),
