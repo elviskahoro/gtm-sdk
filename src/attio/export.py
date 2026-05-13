@@ -64,27 +64,37 @@ class LookupTable:
     def record(self, op: AttioOp, record_id: str | None) -> None:
         if record_id is None:
             return
-        key = self._key_for_op(op)
-        if key is not None:
-            self._store[key] = record_id
+        keys = self._key_for_op(op)
+        if keys is not None:
+            for key in keys:
+                self._store[key] = record_id
 
     def resolve(self, ref: PersonRef | CompanyRef | MeetingRef) -> str | None:
         return self._store.get(self._key_for_ref(ref))
 
     @staticmethod
-    def _key_for_op(op: AttioOp) -> tuple[str, str] | None:
+    def _key_for_op(op: AttioOp) -> list[tuple[str, str]] | None:
         if isinstance(op, UpsertPerson):
-            return ("person", op.email)
+            keys: list[tuple[str, str]] = []
+            if op.email:
+                keys.append(("person:email", op.email))
+            if op.linkedin:
+                keys.append(("person:linkedin", op.linkedin))
+            return keys if keys else None
         if isinstance(op, UpsertCompany):
-            return ("company", op.domain)
+            return [("company", op.domain)]
         if isinstance(op, UpsertMeeting):
-            return ("meeting", op.external_ref.ical_uid)
+            return [("meeting", op.external_ref.ical_uid)]
         return None
 
     @staticmethod
     def _key_for_ref(ref: PersonRef | CompanyRef | MeetingRef) -> tuple[str, str]:
         if isinstance(ref, PersonRef):
-            return ("person", ref.email)
+            if ref.email:
+                return ("person:email", ref.email)
+            if ref.linkedin:
+                return ("person:linkedin", ref.linkedin)
+            raise ValueError("PersonRef must have email or linkedin")
         if isinstance(ref, CompanyRef):
             return ("company", ref.domain)
         return ("meeting", ref.ical_uid)
@@ -142,6 +152,7 @@ def _handle_upsert_person(
     op: UpsertPerson,
     table: LookupTable,  # noqa: ARG001 — kept for handler signature parity
 ) -> ReliabilityEnvelope:
+    matching_attribute = "linkedin" if op.linkedin and not op.email else "email"
     return libs_upsert_person(
         PersonInput(
             email=op.email,
@@ -153,6 +164,7 @@ def _handle_upsert_person(
             additional_emails=[],
             replace_emails=False,
         ),
+        matching_attribute=matching_attribute,
     )
 
 
@@ -258,8 +270,33 @@ def _handle_add_note(
 
 def _handle_upsert_mention(
     op: UpsertMention,
-    table: LookupTable,  # noqa: ARG001 — mentions don't consult the lookup table
+    table: LookupTable,
 ) -> ReliabilityEnvelope:
+    related_person_record_id = None
+    if op.related_person:
+        related_person_record_id = table.resolve(op.related_person)
+        if related_person_record_id is None:
+            return ReliabilityEnvelope(
+                success=False,
+                partial_success=False,
+                action="failed",
+                record_id=None,
+                errors=[
+                    ErrorEntry(
+                        code="unresolved_ref",
+                        message=(
+                            f"could not resolve {op.related_person.ref_kind}:"
+                            f"{op.related_person.model_dump()}"
+                        ),
+                        error_type="UnresolvedRefError",
+                        fatal=True,
+                    ),
+                ],
+                warnings=[],
+                skipped_fields=[],
+                meta={"output_schema_version": "v1"},
+            )
+
     return libs_upsert_mention(
         MentionInput(
             mention_url=op.mention_url,
@@ -284,6 +321,7 @@ def _handle_upsert_mention(
             view_name=op.view_name,
             bookmarked=op.bookmarked,
             image_url=op.image_url,
+            related_person_record_id=related_person_record_id,
         ),
     )
 

@@ -14,14 +14,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PersonRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ref_kind: Literal["person"] = "person"
-    email: str
+    email: str | None = None
+    linkedin: str | None = None
+
+    @model_validator(mode="after")
+    def _require_identity(self) -> PersonRef:
+        if not self.email and not self.linkedin:
+            raise ValueError("At least one of 'email' or 'linkedin' must be set")
+        return self
 
 
 class CompanyRef(BaseModel):
@@ -76,12 +83,18 @@ class UpsertPerson(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     op_type: Literal["upsert_person"] = "upsert_person"
-    email: str
+    email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     linkedin: str | None = None
     phone: str | None = None
     company_domain: str | None = None
+
+    @model_validator(mode="after")
+    def _require_identity(self) -> UpsertPerson:
+        if not self.email and not self.linkedin:
+            raise ValueError("At least one of 'email' or 'linkedin' must be set")
+        return self
 
 
 class UpsertCompany(BaseModel):
@@ -141,6 +154,7 @@ class UpsertMention(BaseModel):
     view_name: str | None = None
     bookmarked: bool = False
     image_url: str | None = None
+    related_person: PersonRef | None = None
 
 
 AttioOp = Annotated[

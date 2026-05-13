@@ -48,7 +48,7 @@ class NoteResult(BaseModel):
 
 
 class PersonInput(BaseModel):
-    email: str
+    email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     phone: str | None = None
@@ -60,6 +60,13 @@ class PersonInput(BaseModel):
     location_mode: Literal["raw", "city"] = "city"
     additional_emails: list[str] = Field(default_factory=list)
     replace_emails: bool = False
+
+    @classmethod
+    def model_validate(cls, obj: Any, *args: Any, **kwargs: Any) -> PersonInput:
+        instance = super().model_validate(obj, *args, **kwargs)
+        if not instance.email and not instance.linkedin:
+            raise ValueError("At least one of 'email' or 'linkedin' must be set")
+        return instance
 
 
 class PersonResult(BaseModel):
@@ -153,7 +160,9 @@ class MentionInput(BaseModel):
 
     Fields here mirror the webhook-writable attributes only. The CRM-owned
     fields (triage_status, related_person, related_company) are intentionally
-    absent so the webhook path cannot overwrite them.
+    absent so the webhook path cannot overwrite them. However, related_person_record_id
+    is passed by the dispatcher when a linked Person record exists (e.g., from
+    LinkedIn sources) and is used only to build the mention values.
     """
 
     mention_url: str
@@ -178,3 +187,4 @@ class MentionInput(BaseModel):
     view_name: str | None = None
     bookmarked: bool = False
     image_url: str | None = None
+    related_person_record_id: str | None = None
