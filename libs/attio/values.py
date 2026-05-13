@@ -119,6 +119,12 @@ def format_company_ref(domain: str | None) -> list[dict[str, Any]] | None:
     return [{"target_object": "companies", "domains": [{"domain": domain}]}]
 
 
+def format_person_record_ref(record_id: str | None) -> list[dict[str, Any]] | None:
+    if not record_id:
+        return None
+    return [{"target_object": "people", "target_record_id": record_id}]
+
+
 def format_notes(notes: str | None) -> list[str] | None:
     if not notes:
         return None
@@ -235,8 +241,10 @@ def build_meeting_payload(input: MeetingInput) -> dict[str, Any]:
 
 # Fields the webhook MUST NEVER write. Enforced both here (builder-level) and
 # at the type level by MentionInput not declaring them. Belt-and-suspenders.
+# related_person is excluded from this set because it's written programmatically
+# by the dispatcher when linking LinkedIn mentions to Person records.
 _HUMAN_OWNED_MENTION_FIELDS: frozenset[str] = frozenset(
-    {"triage_status", "related_person", "related_company"},
+    {"triage_status", "related_company"},
 )
 
 # Fields set at record creation that must never be overwritten by an update.
@@ -297,6 +305,11 @@ def build_create_mention_values(input: MentionInput) -> dict[str, Any]:
         values["keywords"] = _multiselect_values(input.keywords)
     if input.octolens_tags:
         values["octolens_tags"] = _multiselect_values(input.octolens_tags)
+
+    if input.related_person_record_id is not None:
+        person_ref = format_person_record_ref(input.related_person_record_id)
+        if person_ref:
+            values["related_person"] = person_ref
 
     # Guard the invariant. Should be unreachable since MentionInput doesn't
     # declare these fields, but kept here in case the model grows.

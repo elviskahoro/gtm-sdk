@@ -1,0 +1,30 @@
+{
+  "action": "mention_created",
+  "data": {
+    "title": "LinkedIn Post",
+    "body": "redacted",
+    "url": "https://www.linkedin.com/feed/update/urn:li:activity:7000000000000000000/",
+    "timestamp": "2026-05-10 11:55:53.000",
+    "imageUrl": "",
+    "author": "Linkedin User",
+    "authorProfileLink": "https://www.linkedin.com/in/linkedin-user",
+    "source": "linkedin",
+    "sourceId": "00000000",
+    "relevanceScore": "high",
+    "relevanceComment": "redacted",
+    "keyword": "example_keyword",
+    "keywords": [
+      "example_keyword"
+    ],
+    "language": "english",
+    "sentimentLabel": "Positive",
+    "tags": [],
+    "viewId": 16485,
+    "viewName": "Webhook",
+    "viewKeywords": [
+      "example_keyword_1",
+      "example_keyword_2",
+      "example_keyword_3"
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -46,6 +47,28 @@ OPTIONAL_FIELD_ALIASES = {
 }
 
 logger = logging.getLogger(__name__)
+
+_LINKEDIN_PROFILE_RE = re.compile(r"^https?://(?:www\.)?linkedin\.com/in/([^/?#]+)")
+
+
+def _linkedin_url_variants(linkedin: str) -> list[str]:
+    """Return the canonical URL variants Attio records may store for a profile.
+
+    Different writers in this repo normalize LinkedIn differently
+    (`format_linkedin` emits `https://linkedin.com/in/<handle>`, the Octolens
+    path emits `https://www.linkedin.com/in/<handle>`, and user-provided URLs
+    are preserved as-is). Search both common forms before falling through to
+    creating a duplicate Person.
+    """
+    match = _LINKEDIN_PROFILE_RE.match(linkedin)
+    if not match:
+        return [linkedin]
+    handle = match.group(1).rstrip("/")
+    canonical = f"https://www.linkedin.com/in/{handle}"
+    bare = f"https://linkedin.com/in/{handle}"
+    variants = [linkedin, canonical, bare]
+    seen: set[str] = set()
+    return [v for v in variants if not (v in seen or seen.add(v))]
 
 
 def _result_envelope(
@@ -172,6 +195,7 @@ def _search_people_raw(
     email_domain: str | None = None,
     phone: str | None = None,
     company: str | None = None,
+    linkedin: str | None = None,
     sample: bool = False,
     limit: int = 25,
 ) -> list[PersonSearchResult]:
@@ -187,6 +211,12 @@ def _search_people_raw(
         )
     if phone:
         conditions.append({"phone_numbers": {"$contains": phone}})
+    if linkedin:
+        variants = _linkedin_url_variants(linkedin)
+        if len(variants) == 1:
+            conditions.append({"linkedin": variants[0]})
+        else:
+            conditions.append({"$or": [{"linkedin": v} for v in variants]})
 
     if not sample and not conditions and not company:
         raise AttioValidationError(
@@ -526,8 +556,20 @@ def update_person(
         )
 
 
-def upsert_person(input: PersonInput, *, strict: bool = False) -> ReliabilityEnvelope:
-    matches = _search_people_raw(email=input.email, limit=50)
+def upsert_person(
+    input: PersonInput,
+    *,
+    matching_attribute: Literal["email", "linkedin"] = "email",
+    strict: bool = False,
+) -> ReliabilityEnvelope:
+    if matching_attribute == "linkedin":
+        matches = _search_people_raw(linkedin=input.linkedin, limit=50)
+        identity_value = input.linkedin
+        identity_label = "linkedin"
+    else:
+        matches = _search_people_raw(email=input.email, limit=50)
+        identity_value = input.email
+        identity_label = "email"
 
     if len(matches) == 0:
         return add_person(input)
@@ -537,7 +579,7 @@ def upsert_person(input: PersonInput, *, strict: bool = False) -> ReliabilityEnv
 
     if strict:
         raise ConflictError(
-            f"Multiple people matched email {input.email}; strict mode rejects ambiguity.",
+            f"Multiple people matched {identity_label} {identity_value}; strict mode rejects ambiguity.",
         )
 
     selected = sorted(m.record_id for m in matches)[0]

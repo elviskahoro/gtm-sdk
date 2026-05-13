@@ -1,5 +1,6 @@
 """Webhook ETL contract for Octolens mention ingestion."""
 
+import re
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel
@@ -7,6 +8,42 @@ from pydantic import BaseModel
 from libs.dlt.bucket_naming import raw_bucket_name
 from libs.octolens import Webhook as OctolensWebhook
 from src.octolens.utils import generate_gcs_filename
+
+
+def normalize_linkedin_profile_url(url: str | None) -> str | None:
+    """Parse and normalize a LinkedIn profile URL.
+
+    Accepts only https?://(www.)?linkedin.com/in/<handle> URLs (reject company/feed/posts).
+    Returns canonical form: https://www.linkedin.com/in/<handle> (lowercase host, no trailing slash).
+    """
+    if not url:
+        return None
+
+    url = url.strip()
+    pattern = r"^https?://(?:www\.)?linkedin\.com/in/([^/?#]+)"
+    match = re.match(pattern, url, re.IGNORECASE)
+
+    if not match:
+        return None
+
+    handle = match.group(1)
+    return f"https://www.linkedin.com/in/{handle}"
+
+
+def split_author_name(full: str | None) -> tuple[str | None, str | None]:
+    """Split author name into first and last name (best-effort).
+
+    Single token → first_name only. Two+ tokens → first and last.
+    """
+    if not full:
+        return None, None
+
+    parts = full.strip().split(None, 1)
+    if len(parts) == 0:
+        return None, None
+    if len(parts) == 1:
+        return parts[0], None
+    return parts[0], parts[1]
 
 
 class Webhook(OctolensWebhook):
@@ -84,10 +121,28 @@ class Webhook(OctolensWebhook):
             return []
         # Local import to keep `libs/octolens/*` free of `src/attio/*` cycles
         # and to honor the no-cross-lib-import rule between adapters.
-        from src.attio.ops import UpsertMention
+        from src.attio.ops import PersonRef, UpsertMention, UpsertPerson
 
         m = self.data
-        return [
+        ops: list[Any] = []
+
+        # Emit UpsertPerson for LinkedIn mentions.
+        linkedin_url = None
+        related_person_ref = None
+        if m.source == "linkedin":
+            linkedin_url = normalize_linkedin_profile_url(m.author_profile_link)
+            if linkedin_url:
+                first_name, last_name = split_author_name(m.author)
+                ops.append(
+                    UpsertPerson(
+                        linkedin=linkedin_url,
+                        first_name=first_name,
+                        last_name=last_name,
+                    ),
+                )
+                related_person_ref = PersonRef(linkedin=linkedin_url)
+
+        ops.append(
             UpsertMention(
                 mention_url=m.url,
                 last_action=self.action,  # type: ignore[arg-type]
@@ -111,8 +166,10 @@ class Webhook(OctolensWebhook):
                 view_name=m.view_name,
                 bookmarked=m.bookmarked,
                 image_url=m.image_url,
+                related_person=related_person_ref,
             ),
-        ]
+        )
+        return ops
 
 
 _SENTIMENT_VALUES: frozenset[str] = frozenset({"Positive", "Neutral", "Negative"})
