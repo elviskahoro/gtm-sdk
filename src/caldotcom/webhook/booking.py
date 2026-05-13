@@ -130,6 +130,10 @@ class Webhook(CalcomWebhook):
     def attio_get_secret_collection_names() -> list[str]:
         return ["attio"]
 
+    @staticmethod
+    def attio_get_app_name() -> str:
+        return "export-to-attio-from-calcom-bookings"
+
     def attio_is_valid_webhook(self) -> bool:
         payload = self.payload or {}
         uid = payload.get("uid") or payload.get("bookingUid")

@@ -62,6 +62,10 @@ class Webhook(FathomWebhook):
     def attio_get_secret_collection_names() -> list[str]:
         return ["attio"]
 
+    @staticmethod
+    def attio_get_app_name() -> str:
+        return "export-to-attio-from-fathom-messages"
+
     def attio_is_valid_webhook(self) -> bool:
         # Fathom "messages" are action-items / one-line follow-ups that don't
         # cleanly map to Attio yet. Returning False keeps the contract uniform

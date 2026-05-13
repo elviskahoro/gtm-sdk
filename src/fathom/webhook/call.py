@@ -65,6 +65,10 @@ class Webhook(FathomWebhook):
     def attio_get_secret_collection_names() -> list[str]:
         return ["attio"]
 
+    @staticmethod
+    def attio_get_app_name() -> str:
+        return "export-to-attio-from-fathom-recordings"
+
     def attio_is_valid_webhook(self) -> bool:
         # Ad-hoc Fathom recordings have no calendar invitees but still carry a
         # recorder we can attribute the meeting to. Only reject payloads we

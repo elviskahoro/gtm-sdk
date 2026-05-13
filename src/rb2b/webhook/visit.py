@@ -88,6 +88,10 @@ class Webhook(Rb2bWebhook):
     def attio_get_secret_collection_names() -> list[str]:
         return ["attio"]
 
+    @staticmethod
+    def attio_get_app_name() -> str:
+        return "export-to-attio-from-rb2b-visits"
+
     def _attio_domain(self) -> str | None:
         return extract_domain(self.payload.website)
 

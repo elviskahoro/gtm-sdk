@@ -69,6 +69,10 @@ class Webhook(OctolensWebhook):
     def attio_get_secret_collection_names() -> list[str]:
         return ["attio"]
 
+    @staticmethod
+    def attio_get_app_name() -> str:
+        return "export-to-attio-from-octolens-mentions"
+
     def attio_is_valid_webhook(self) -> bool:
         return self.action in self.VALID_ACTIONS
 

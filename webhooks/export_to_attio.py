@@ -6,13 +6,18 @@ from pathlib import Path
 import modal
 from modal import Image
 
+from src.attio.export import execute
+
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
-from src.fathom.webhook.message import (
-    Webhook as FathomMessageWebhook,
+from src.caldotcom.webhook.booking import (
+    Webhook as CaldotcomBookingWebhook,
 )
 from src.fathom.webhook.call import (
     Webhook as FathomCallWebhook,
+)
+from src.fathom.webhook.message import (
+    Webhook as FathomMessageWebhook,
 )
 from src.octolens.webhook import (
     Webhook as OctolensWebhook,
@@ -20,12 +25,9 @@ from src.octolens.webhook import (
 from src.rb2b.webhook.visit import (
     Webhook as Rb2bVisitWebhook,
 )
-from src.caldotcom.webhook.booking import (
-    Webhook as CaldotcomBookingWebhook,
-)
+
 # fmt: on
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
-from src.attio.export import execute
 
 
 class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F821)
@@ -34,6 +36,7 @@ class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F
 
 WebhookModel.model_rebuild()
 
+APP_NAME: str = WebhookModel.attio_get_app_name()
 
 image: Image = modal.Image.debian_slim().uv_pip_install(
     "attio>=0.21.2",
@@ -48,7 +51,7 @@ image = image.add_local_python_source(
         "src",
     ],
 )
-app = modal.App(name="export-to-attio", image=image)
+app = modal.App(name=APP_NAME, image=image)
 
 
 def _export(webhook: WebhookModel) -> str:
