@@ -38,7 +38,7 @@ from src.caldotcom.webhook.booking import (
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 
 
-class WebhookModel(Rb2bVisitWebhook):  # type: ignore # trunk-ignore(ruff/F821)
+class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F821)
     pass
 
 
