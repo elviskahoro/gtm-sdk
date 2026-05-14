@@ -37,7 +37,6 @@ from src.caldotcom.webhook.booking import (
 # fmt: on
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 
-OctolensWebhook = OctolensMentionWebhook  # Backwards-compat alias for documented deploy flow
 
 class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F821)
     pass

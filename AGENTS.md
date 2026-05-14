@@ -32,7 +32,7 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 To deploy one source:
 
-1. Substitute `WebhookModelToReplace` → the target class (e.g. `CaldotcomBookingWebhook`, `FathomCallWebhook`, `FathomMessageWebhook`, `OctolensWebhook`, `Rb2bVisitWebhook`).
+1. Substitute `WebhookModelToReplace` → the target class (e.g. `CaldotcomBookingWebhook`, `FathomCallWebhook`, `FathomMessageWebhook`, `OctolensMentionWebhook`, `Rb2bVisitWebhook`).
 2. `infisical run ... -- uv run modal deploy webhooks/<file>.py` (Modal app name comes from `WebhookModel.attio_get_app_name()` — e.g. `CaldotcomBookingWebhook` → `export-to-attio-from-calcom-bookings`).
 3. Restore the `WebhookModelToReplace` placeholder so the working tree matches `main`.
 
