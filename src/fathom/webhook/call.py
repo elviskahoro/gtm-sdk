@@ -8,6 +8,7 @@ from libs.dlt.bucket_naming import etl_bucket_name
 from libs.fathom import Webhook as FathomWebhook
 from libs.meetings import canonical_meeting_uid
 from src.fathom.utils import (
+    _fathom_summary_title,
     generate_gcs_filename,
     recording_to_jsonl,
 )
@@ -83,8 +84,10 @@ class Webhook(FathomWebhook):
 
     def attio_get_operations(self) -> list[Any]:
         from src.attio.ops import (
+            AddNote,
             MeetingExternalRef,
             MeetingParticipant,
+            MeetingRef,
             UpsertMeeting,
         )
 
@@ -107,13 +110,14 @@ class Webhook(FathomWebhook):
                 is_organizer=True,
             ),
         ]
-        return [
+        ical_uid = canonical_meeting_uid(
+            host_email=self.recorded_by.email,
+            start=self.scheduled_start_time,
+        )
+        ops: list[Any] = [
             UpsertMeeting(
                 external_ref=MeetingExternalRef(
-                    ical_uid=canonical_meeting_uid(
-                        host_email=self.recorded_by.email,
-                        start=self.scheduled_start_time,
-                    ),
+                    ical_uid=ical_uid,
                     provider="google",
                     is_recurring=False,
                 ),
@@ -125,3 +129,14 @@ class Webhook(FathomWebhook):
                 participants=participants,
             ),
         ]
+
+        if self.default_summary and self.default_summary.markdown_formatted.strip():
+            ops.append(
+                AddNote(
+                    parent=MeetingRef(ical_uid=ical_uid),
+                    title=_fathom_summary_title(self.default_summary.template_name),
+                    content=self.default_summary.markdown_formatted,
+                ),
+            )
+
+        return ops
