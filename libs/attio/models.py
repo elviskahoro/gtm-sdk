@@ -10,6 +10,9 @@ class CompanyInput(BaseModel):
     name: str
     domain: str | None = None
     description: str | None = None
+    industry: str | None = None
+    employee_count: str | None = None
+    estimate_revenue: str | None = None
 
 
 class CompanyResult(BaseModel):
@@ -62,6 +65,10 @@ class PersonInput(BaseModel):
     location_mode: Literal["raw", "city"] = "city"
     additional_emails: list[str] = Field(default_factory=list)
     replace_emails: bool = False
+    title: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zipcode: str | None = None
 
     @model_validator(mode="after")
     def _require_identity(self) -> PersonInput:
@@ -194,3 +201,30 @@ class MentionInput(BaseModel):
     bookmarked: bool = False
     image_url: str | None = None
     related_person_record_id: str | None = None
+
+
+class TrackingEventInput(BaseModel):
+    """Resolved-record-id form of a tracking_events upsert.
+
+    The dispatcher converts UpsertTrackingEvent (which carries refs) into
+    this model, replacing refs with resolved Attio record IDs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    external_id: str
+    name: str
+    event_type: str
+    event_timestamp: datetime
+    body_json: str
+
+    captured_url: str
+    referrer: str | None = None
+    is_repeat_visit: bool | None = None
+    tags: list[str] = Field(default_factory=list)
+    city: str | None = None
+    state: str | None = None
+    zipcode: str | None = None
+
+    related_person_record_id: str | None = None
+    related_company_record_id: str | None = None

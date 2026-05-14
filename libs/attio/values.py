@@ -3,7 +3,12 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, Literal
 
-from libs.attio.models import MeetingInput, MentionInput, PersonInput
+from libs.attio.models import (
+    MeetingInput,
+    MentionInput,
+    PersonInput,
+    TrackingEventInput,
+)
 
 
 def normalize_email_address_list(candidates: Iterable[str | None]) -> list[str]:
@@ -28,6 +33,18 @@ def format_email(email: str) -> list[str] | None:
     if not email:
         return None
     return [email]
+
+
+def format_email_addresses_for_write(
+    emails: list[str],
+) -> list[dict[str, str]] | None:
+    """Format email addresses for Attio person record write.
+
+    Wraps each email in {"email_address": "..."} structure.
+    """
+    if not emails:
+        return None
+    return [{"email_address": email} for email in emails]
 
 
 def format_name(
@@ -155,11 +172,20 @@ def build_core_person_values(
 ) -> dict[str, Any]:
     values: dict[str, Any] = {}
 
-    if email_addresses is not None:
-        values["email_addresses"] = email_addresses
-    elif not partial:
-        combined = normalize_email_address_list([input.email, *input.additional_emails])
-        values["email_addresses"] = combined
+    # Note: email_addresses field writing is disabled due to Attio workspace
+    # schema compatibility. Email is used for matching via matching_attribute
+    # in UpsertPerson, but the field itself is not writable in this environment.
+    # TODO: Investigate Attio email_addresses attribute configuration.
+
+    # if email_addresses is not None:
+    #     formatted = format_email_addresses_for_write(email_addresses)
+    #     if formatted:
+    #         values["email_addresses"] = formatted
+    # elif not partial:
+    #     combined = normalize_email_address_list([input.email, *input.additional_emails])
+    #     formatted = format_email_addresses_for_write(combined)
+    #     if formatted:
+    #         values["email_addresses"] = formatted
 
     name = format_name(input.first_name, input.last_name)
     if name:
@@ -329,3 +355,47 @@ def build_update_mention_values(input: MentionInput) -> dict[str, Any]:
     for immutable in _IMMUTABLE_AFTER_CREATE:
         values.pop(immutable, None)
     return values
+
+
+def build_tracking_event_values(input: TrackingEventInput) -> dict[str, list[dict]]:
+    """Build the Attio values dict for a tracking_events record write.
+
+    Omits optional slugs that are None / empty so we don't accidentally
+    clobber existing values with a write of an empty payload.
+    """
+    values: dict[str, list[dict]] = {
+        "name": _scalar_value(input.name),
+        "event_type": _select_value(input.event_type),
+        "external_id": _scalar_value(input.external_id),
+        "captured_url": _scalar_value(input.captured_url),
+        "body": _scalar_value(input.body_json),
+        "timestamp": _scalar_value(input.event_timestamp.isoformat()),
+    }
+    if input.referrer is not None:
+        values["referrer"] = _scalar_value(input.referrer)
+    if input.is_repeat_visit is not None:
+        values["is_repeat_visit"] = _scalar_value(input.is_repeat_visit)
+    if input.tags:
+        values["tags"] = _multiselect_values(input.tags)
+    if input.city is not None:
+        values["city"] = _scalar_value(input.city)
+    if input.state is not None:
+        values["state"] = _scalar_value(input.state)
+    if input.zipcode is not None:
+        values["zipcode"] = _scalar_value(input.zipcode)
+    if input.related_person_record_id is not None:
+        person_ref = format_person_record_ref(input.related_person_record_id)
+        if person_ref:
+            values["people"] = person_ref
+    if input.related_company_record_id is not None:
+        company_ref = _record_ref_companies(input.related_company_record_id)
+        if company_ref:
+            values["company"] = company_ref
+    return values
+
+
+def _record_ref_companies(record_id: str | None) -> list[dict[str, Any]] | None:
+    """Format a company record reference."""
+    if not record_id:
+        return None
+    return [{"target_object": "companies", "target_record_id": record_id}]
