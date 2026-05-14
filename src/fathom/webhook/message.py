@@ -76,7 +76,7 @@ class Webhook(FathomWebhook):
     def attio_get_invalid_webhook_error_msg(self) -> str:
         return (
             "Fathom messages are not currently exported to Attio "
-            "(AddNote mapping deferred)"
+            "(UpsertNote mapping deferred)"
         )
 
     def attio_get_operations(self) -> list[Any]:

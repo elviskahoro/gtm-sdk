@@ -125,10 +125,10 @@ class UpsertMeeting(BaseModel):
     linked_records: list[Ref] = Field(default_factory=list)
 
 
-class AddNote(BaseModel):
+class UpsertNote(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    op_type: Literal["add_note"] = "add_note"
+    op_type: Literal["upsert_note"] = "upsert_note"
     parent: Ref
     title: str
     content: str
@@ -164,6 +164,6 @@ class UpsertMention(BaseModel):
 
 
 AttioOp = Annotated[
-    Union[UpsertPerson, UpsertCompany, UpsertMeeting, AddNote, UpsertMention],
+    Union[UpsertPerson, UpsertCompany, UpsertMeeting, UpsertNote, UpsertMention],
     Field(discriminator="op_type"),
 ]
