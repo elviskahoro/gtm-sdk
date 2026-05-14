@@ -123,3 +123,55 @@ def test_upsert_person_github_handle_construction() -> None:
     assert op.matching_attribute == "github_handle"
     assert op.github_handle == "elviskahoro"
     assert op.github_url == "https://github.com/elviskahoro"
+
+
+def _valid_tracking_event_kwargs() -> dict[str, object]:
+    return dict(
+        external_id="rb2b:abc123",
+        name="https://example.test/pricing",
+        event_type="rb2b_visit",
+        event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
+        captured_url="https://example.test/pricing",
+        body_json='{"raw": "payload"}',
+    )
+
+
+def test_upsert_tracking_event_minimal_valid() -> None:
+    from src.attio.ops import UpsertTrackingEvent
+
+    op = UpsertTrackingEvent(**_valid_tracking_event_kwargs())
+    assert op.op_type == "upsert_tracking_event"
+    assert op.tags == []
+    assert op.subject_person is None and op.subject_company is None
+
+
+def test_upsert_tracking_event_with_refs() -> None:
+    from src.attio.ops import UpsertTrackingEvent
+
+    op = UpsertTrackingEvent(
+        **_valid_tracking_event_kwargs(),
+        subject_person=PersonRef(attribute="email", value="alice@example.test"),
+        subject_company=CompanyRef(domain="example.test"),
+        tags=["pricing", "enterprise"],
+    )
+    assert op.subject_person.attribute == "email"
+    assert op.subject_person.value == "alice@example.test"
+    assert op.subject_company.domain == "example.test"
+    assert op.tags == ["pricing", "enterprise"]
+
+
+def test_upsert_tracking_event_forbids_extra_fields() -> None:
+    from src.attio.ops import UpsertTrackingEvent
+
+    with pytest.raises(ValidationError):
+        UpsertTrackingEvent(**_valid_tracking_event_kwargs(), bogus="x")
+
+
+def test_attio_op_union_discriminates_tracking_event() -> None:
+    from src.attio.ops import UpsertTrackingEvent
+
+    adapter = TypeAdapter(AttioOp)
+    raw = {"op_type": "upsert_tracking_event", **_valid_tracking_event_kwargs()}
+    raw["event_timestamp"] = raw["event_timestamp"].isoformat()
+    op = adapter.validate_python(raw)
+    assert isinstance(op, UpsertTrackingEvent)

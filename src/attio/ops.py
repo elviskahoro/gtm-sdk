@@ -163,7 +163,44 @@ class UpsertMention(BaseModel):
     related_person: PersonRef | None = None
 
 
+class UpsertTrackingEvent(BaseModel):
+    """Source-agnostic op for creating/updating a `tracking_events` row.
+
+    The dispatcher resolves `subject_person` and `subject_company` via the
+    plan's LookupTable; the libs/attio adapter is called with already-resolved
+    record IDs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    op_type: Literal["upsert_tracking_event"] = "upsert_tracking_event"
+
+    external_id: str
+    name: str
+    event_type: Literal["rb2b_visit"]
+    event_timestamp: datetime
+    body_json: str
+
+    captured_url: str
+    referrer: str | None = None
+    is_repeat_visit: bool | None = None
+    tags: list[str] = Field(default_factory=list)
+    city: str | None = None
+    state: str | None = None
+    zipcode: str | None = None
+
+    subject_person: PersonRef | None = None
+    subject_company: CompanyRef | None = None
+
+
 AttioOp = Annotated[
-    Union[UpsertPerson, UpsertCompany, UpsertMeeting, UpsertNote, UpsertMention],
+    Union[
+        UpsertPerson,
+        UpsertCompany,
+        UpsertMeeting,
+        UpsertNote,
+        UpsertMention,
+        UpsertTrackingEvent,
+    ],
     Field(discriminator="op_type"),
 ]
