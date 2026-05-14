@@ -174,7 +174,8 @@ def _is_value_populated(v: Any) -> bool:
     if isinstance(v, dict):
         # Check if any meaningful field exists
         return any(
-            v.get(k) for k in ["value", "option", "email_address", "full_name", "locality"]
+            v.get(k)
+            for k in ["value", "option", "email_address", "full_name", "locality"]
         )
     return bool(str(v).strip())
 
@@ -192,13 +193,25 @@ def _handle_upsert_person(
         existing = get_person_values(email=op.email, linkedin=op.linkedin)
         if existing is not None:
             # For each field in merge_only_if_empty, check if existing has a non-empty value
-            if "title" in op.merge_only_if_empty and _has_populated_value(existing, "name"):
+            if "title" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "name",
+            ):
                 title = None
-            if "city" in op.merge_only_if_empty and _has_populated_value(existing, "primary_location"):
+            if "city" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "primary_location",
+            ):
                 city = None
-            if "state" in op.merge_only_if_empty and _has_populated_value(existing, "primary_location"):
+            if "state" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "primary_location",
+            ):
                 state = None
-            if "zipcode" in op.merge_only_if_empty and _has_populated_value(existing, "primary_location"):
+            if "zipcode" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "primary_location",
+            ):
                 zipcode = None
 
     return libs_upsert_person(
@@ -233,11 +246,20 @@ def _handle_upsert_company(
     if op.merge_only_if_empty:
         existing = get_company_values(op.domain)
         if existing is not None:
-            if "industry" in op.merge_only_if_empty and _has_populated_value(existing, "industry"):
+            if "industry" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "industry",
+            ):
                 industry = None
-            if "employee_count" in op.merge_only_if_empty and _has_populated_value(existing, "employee_count"):
+            if "employee_count" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "employee_count",
+            ):
                 employee_count = None
-            if "estimate_revenue" in op.merge_only_if_empty and _has_populated_value(existing, "estimate_revenue"):
+            if "estimate_revenue" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "estimate_revenue",
+            ):
                 estimate_revenue = None
 
     return libs_upsert_company(

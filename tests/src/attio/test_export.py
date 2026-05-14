@@ -412,7 +412,8 @@ def test_lookup_table_records_and_resolves_linkedin_person_generalized() -> None
 @patch("src.attio.export.get_person_values")
 @patch("src.attio.export.libs_upsert_person")
 def test_handle_upsert_person_no_merge_list_overwrites(
-    mock_upsert, mock_get_values,
+    mock_upsert,
+    mock_get_values,
 ) -> None:
     """When merge_only_if_empty is empty, all fields flow through unchanged."""
     mock_get_values.return_value = None
@@ -438,7 +439,8 @@ def test_handle_upsert_person_no_merge_list_overwrites(
 @patch("src.attio.export.get_person_values")
 @patch("src.attio.export.libs_upsert_person")
 def test_handle_upsert_person_merge_strips_populated_slugs(
-    mock_upsert, mock_get_values,
+    mock_upsert,
+    mock_get_values,
 ) -> None:
     """When merge_only_if_empty is set, populated fields on existing record are nulled."""
     # Simulate existing person with title populated
@@ -474,7 +476,8 @@ def test_handle_upsert_person_merge_strips_populated_slugs(
 @patch("src.attio.export.get_company_values")
 @patch("src.attio.export.libs_upsert_company")
 def test_handle_upsert_company_no_merge_list_overwrites(
-    mock_upsert, mock_get_values,
+    mock_upsert,
+    mock_get_values,
 ) -> None:
     """When merge_only_if_empty is empty, all fields flow through unchanged."""
     mock_get_values.return_value = None
@@ -498,7 +501,8 @@ def test_handle_upsert_company_no_merge_list_overwrites(
 @patch("src.attio.export.get_company_values")
 @patch("src.attio.export.libs_upsert_company")
 def test_handle_upsert_company_merge_strips_populated_slugs(
-    mock_upsert, mock_get_values,
+    mock_upsert,
+    mock_get_values,
 ) -> None:
     """When merge_only_if_empty is set, populated fields on existing record are nulled."""
     mock_get_values.return_value = {
@@ -539,7 +543,13 @@ def test_handle_upsert_tracking_event_resolves_refs(mock_libs) -> None:
     mock_libs.return_value = MagicMock(success=True, record_id="te_1", action="created")
 
     from src.attio.export import _handle_upsert_tracking_event
-    from src.attio.ops import CompanyRef, PersonRef, UpsertPerson, UpsertCompany, UpsertTrackingEvent
+    from src.attio.ops import (
+        CompanyRef,
+        PersonRef,
+        UpsertPerson,
+        UpsertCompany,
+        UpsertTrackingEvent,
+    )
 
     table = LookupTable()
     table.record(
