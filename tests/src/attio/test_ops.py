@@ -6,7 +6,6 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from src.attio.ops import (
-    AddNote,
     AttioOp,
     CompanyRef,
     MeetingExternalRef,
@@ -16,6 +15,7 @@ from src.attio.ops import (
     Ref,
     UpsertCompany,
     UpsertMeeting,
+    UpsertNote,
     UpsertPerson,
 )
 
@@ -83,14 +83,14 @@ def test_upsert_meeting_external_ref_structured_defaults() -> None:
     assert op.linked_records == []
 
 
-def test_add_note_carries_ref() -> None:
-    op = AddNote(
+def test_upsert_note_carries_ref() -> None:
+    op = UpsertNote(
         parent=PersonRef(attribute="email", value="a@b.com"),
         title="x",
         content="y",
     )
     assert isinstance(op.parent, PersonRef)
-    assert op.op_type == "add_note"
+    assert op.op_type == "upsert_note"
 
 
 def test_person_ref_generalized_shape_email() -> None:

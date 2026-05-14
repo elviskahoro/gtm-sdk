@@ -85,7 +85,7 @@ class Webhook(FathomWebhook):
 
     def attio_get_operations(self) -> list[Any]:
         from src.attio.ops import (
-            AddNote,
+            UpsertNote,
             MeetingExternalRef,
             MeetingParticipant,
             MeetingRef,
@@ -133,7 +133,7 @@ class Webhook(FathomWebhook):
 
         if self.default_summary and self.default_summary.markdown_formatted.strip():
             ops.append(
-                AddNote(
+                UpsertNote(
                     parent=MeetingRef(ical_uid=ical_uid),
                     title=fathom_summary_title(self.default_summary.template_name),
                     content=self.default_summary.markdown_formatted,
@@ -144,7 +144,7 @@ class Webhook(FathomWebhook):
             rendered = render_action_items_markdown(self.action_items)
             if rendered.strip():
                 ops.append(
-                    AddNote(
+                    UpsertNote(
                         parent=MeetingRef(ical_uid=ical_uid),
                         title="Action items",
                         content=rendered,

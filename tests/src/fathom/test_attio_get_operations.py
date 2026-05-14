@@ -7,7 +7,7 @@ import orjson
 
 from libs.fathom.models import ActionItem, Assignee
 from libs.meetings import canonical_meeting_uid
-from src.attio.ops import AddNote, MeetingExternalRef, MeetingRef, UpsertMeeting
+from src.attio.ops import UpsertNote, MeetingExternalRef, MeetingRef, UpsertMeeting
 from src.fathom.webhook.call import Webhook
 
 
@@ -73,7 +73,7 @@ def test_attio_get_operations_returns_meeting_and_summary() -> None:
     assert len(plan) == 2
     op = plan[0]
     assert isinstance(op, UpsertMeeting)
-    assert isinstance(plan[1], AddNote)
+    assert isinstance(plan[1], UpsertNote)
 
     assert isinstance(op.external_ref, MeetingExternalRef)
     expected = canonical_meeting_uid(
@@ -115,7 +115,7 @@ def test_plan_includes_summary_note() -> None:
 
     assert len(plan) == 2
     note = plan[1]
-    assert isinstance(note, AddNote)
+    assert isinstance(note, UpsertNote)
     assert note.title.startswith("Fathom summary")
     assert note.content == w.default_summary.markdown_formatted
 
@@ -153,7 +153,7 @@ def test_plan_includes_action_items_note() -> None:
 
     assert len(plan) == 3
     note = plan[2]
-    assert isinstance(note, AddNote)
+    assert isinstance(note, UpsertNote)
     assert note.title == "Action items"
     assert "Send deck" in note.content
     assert "Confirm budget" in note.content
@@ -173,7 +173,7 @@ def test_plan_skips_action_items_when_empty_list() -> None:
     plan = w.attio_get_operations()
     assert len(plan) == 2
     assert isinstance(plan[0], UpsertMeeting)
-    assert isinstance(plan[1], AddNote)
+    assert isinstance(plan[1], UpsertNote)
     assert plan[1].title.startswith("Fathom summary")
 
 
@@ -182,5 +182,5 @@ def test_plan_skips_action_items_when_none() -> None:
     w.action_items = None
     plan = w.attio_get_operations()
     assert len(plan) == 2
-    assert isinstance(plan[1], AddNote)
+    assert isinstance(plan[1], UpsertNote)
     assert plan[1].title.startswith("Fathom summary")

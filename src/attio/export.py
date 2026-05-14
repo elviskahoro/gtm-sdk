@@ -30,10 +30,14 @@ from libs.attio.models import (
     NoteInput,
     PersonInput,
 )
-from libs.attio.notes import add_note as libs_add_note
+from libs.attio.notes import (
+    add_note as libs_add_note,
+)
+from libs.attio.notes import (
+    list_notes_for_parent as libs_list_notes_for_parent,
+)
 from libs.attio.people import upsert_person as libs_upsert_person
 from src.attio.ops import (
-    AddNote,
     AttioOp,
     CompanyRef,
     MeetingRef,
@@ -41,6 +45,7 @@ from src.attio.ops import (
     UpsertCompany,
     UpsertMeeting,
     UpsertMention,
+    UpsertNote,
     UpsertPerson,
 )
 
@@ -54,8 +59,8 @@ logger = logging.getLogger(__name__)
 class LookupTable:
     """In-plan registry mapping (kind, attribute, value) -> Attio record_id.
 
-    Handlers consult the table to resolve ``Ref`` values (e.g. ``AddNote.parent``)
-    against earlier ops in the same plan. Pass 3 wires ``_handle_add_note`` to
+    Handlers consult the table to resolve ``Ref`` values (e.g. ``UpsertNote.parent``)
+    against earlier ops in the same plan. Pass 3 wires ``_handle_upsert_note`` to
     use this.
     """
 
@@ -215,8 +220,8 @@ _REF_KIND_TO_PARENT_OBJECT: dict[str, str] = {
 }
 
 
-def _handle_add_note(
-    op: AddNote,
+def _handle_upsert_note(
+    op: UpsertNote,
     table: LookupTable,
 ) -> ReliabilityEnvelope:
     parent_record_id = table.resolve(op.parent)
@@ -243,6 +248,29 @@ def _handle_add_note(
         )
 
     parent_object = _REF_KIND_TO_PARENT_OBJECT[op.parent.ref_kind]
+
+    # Idempotency: Attio has no native upsert for notes and no natural key,
+    # so skip creation when a note with the same title already exists on the
+    # parent. Titles emitted by webhook producers are deterministic per note
+    # kind (e.g. "Fathom summary — Sales Discovery", "Action items"), so an
+    # exact-title match is a reliable replay signal.
+    existing = libs_list_notes_for_parent(
+        parent_object=parent_object,
+        parent_record_id=parent_record_id,
+    )
+    for note in existing:
+        if note.title == op.title:
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=note.note_id,
+                errors=[],
+                warnings=[],
+                skipped_fields=[],
+                meta={"output_schema_version": "v1"},
+            )
+
     result = libs_add_note(
         NoteInput(
             title=op.title,
@@ -325,7 +353,7 @@ OP_HANDLERS: dict[type, Callable[[Any, LookupTable], ReliabilityEnvelope]] = {
     UpsertPerson: _handle_upsert_person,
     UpsertCompany: _handle_upsert_company,
     UpsertMeeting: _handle_upsert_meeting,
-    AddNote: _handle_add_note,
+    UpsertNote: _handle_upsert_note,
     UpsertMention: _handle_upsert_mention,
 }
 

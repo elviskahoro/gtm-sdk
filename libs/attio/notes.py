@@ -67,6 +67,18 @@ def _extract_result(note: Any) -> NoteResult:
     )
 
 
+def list_notes_for_parent(
+    parent_object: str,
+    parent_record_id: str,
+) -> list[NoteResult]:
+    with get_client() as client:
+        response = client.notes.get_v2_notes(
+            parent_object=parent_object,
+            parent_record_id=parent_record_id,
+        )
+        return [_extract_result(n) for n in response.data]
+
+
 def add_note(input: NoteInput) -> NoteResult:
     with get_client() as client:
         record_id = _resolve_parent_record_id(

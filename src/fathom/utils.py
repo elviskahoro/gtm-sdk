@@ -121,7 +121,7 @@ def render_action_items_markdown(items: list[ActionItem]) -> str:
 
 
 def fathom_summary_title(template_name: str | None) -> str:
-    """Build the title used for the Fathom-summary AddNote.
+    """Build the title used for the Fathom-summary UpsertNote.
 
     Fathom ships templates like "General", "Sales Discovery", etc. When
     present, surface the template in the title so a teammate scanning the
