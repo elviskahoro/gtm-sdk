@@ -114,6 +114,10 @@ class UpsertCompany(BaseModel):
     op_type: Literal["upsert_company"] = "upsert_company"
     domain: str
     name: str | None = None
+    industry: str | None = None
+    employee_count: str | None = None
+    estimate_revenue: str | None = None
+    merge_only_if_empty: list[str] = Field(default_factory=list)
 
 
 class UpsertMeeting(BaseModel):

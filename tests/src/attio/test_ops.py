@@ -196,3 +196,21 @@ def test_upsert_person_defaults_preserve_existing_call_sites() -> None:
     assert op.title is None
     assert op.city is None
     assert op.merge_only_if_empty == []
+
+
+def test_upsert_company_accepts_enrichment_fields() -> None:
+    op = UpsertCompany(
+        domain="example.test",
+        industry="Software",
+        employee_count="200-500",
+        estimate_revenue="$10M-$50M",
+        merge_only_if_empty=["industry", "employee_count", "estimate_revenue"],
+    )
+    assert op.industry == "Software"
+    assert op.merge_only_if_empty == ["industry", "employee_count", "estimate_revenue"]
+
+
+def test_upsert_company_defaults_preserve_existing_call_sites() -> None:
+    op = UpsertCompany(domain="example.test")
+    assert op.industry is None
+    assert op.merge_only_if_empty == []
