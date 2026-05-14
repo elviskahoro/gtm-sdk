@@ -33,6 +33,7 @@ dependencies = [
   "phonenumbers>=9.0.29",
   "resend>=2.30.0",
   "uuid7>=0.1.0",
+  "dagger-io>=0.20.8",
 ]
 
 [tool.setuptools.packages.find]

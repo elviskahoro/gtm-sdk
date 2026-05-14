@@ -15,6 +15,7 @@ __pycache__/
 # Project scratch
 tmp/
 data/
+out/
 worktrees/
 
 # Real webhook payloads — keep raw evt_*.json samples out of version control.
