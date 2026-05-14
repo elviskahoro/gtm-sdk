@@ -30,7 +30,10 @@ def normalize_linkedin_profile_url(url: str | None) -> str | None:
     return f"https://www.linkedin.com/in/{handle}"
 
 
-def _extract_github_handle(author: str | None, author_profile_link: str | None) -> str | None:
+def _extract_github_handle(
+    author: str | None,
+    author_profile_link: str | None,
+) -> str | None:
     """Extract and validate a GitHub handle from author or profile URL.
 
     Rules:
@@ -189,7 +192,10 @@ class Webhook(OctolensMentionWebhook):
                         github_url=f"https://github.com/{github_handle}",
                     ),
                 )
-                related_person_ref = PersonRef(attribute="github_handle", value=github_handle)
+                related_person_ref = PersonRef(
+                    attribute="github_handle",
+                    value=github_handle,
+                )
 
         ops.append(
             UpsertMention(

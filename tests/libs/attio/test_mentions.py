@@ -32,8 +32,11 @@ def _mock_client_with_response(record_id: str) -> MagicMock:
 
 def test_upsert_mention_calls_assert_endpoint() -> None:
     client = _mock_client_with_response("rec-1")
-    with patch("libs.attio.mentions.get_client", return_value=client), patch(
-        "libs.attio.mentions.ensure_select_options"
+    with (
+        patch("libs.attio.mentions.get_client", return_value=client),
+        patch(
+            "libs.attio.mentions.ensure_select_options",
+        ),
     ):
         envelope = upsert_mention(_sample())
     client.records.put_v2_objects_object_records.assert_called_once()
@@ -47,8 +50,11 @@ def test_upsert_mention_calls_assert_endpoint() -> None:
 def test_upsert_mention_update_path_omits_immutables() -> None:
     """The update value builder must omit source_platform / source_id."""
     client = _mock_client_with_response("rec-1")
-    with patch("libs.attio.mentions.get_client", return_value=client), patch(
-        "libs.attio.mentions.ensure_select_options"
+    with (
+        patch("libs.attio.mentions.get_client", return_value=client),
+        patch(
+            "libs.attio.mentions.ensure_select_options",
+        ),
     ):
         upsert_mention(_sample(action="mention_updated"))
     _, kwargs = client.records.put_v2_objects_object_records.call_args

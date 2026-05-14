@@ -66,17 +66,16 @@ def _meeting(ical_uid: str = "fathom-call-1") -> UpsertMeeting:
 
 def test_lookup_table_resolves_person_ref() -> None:
     table = LookupTable()
-    table.record(UpsertPerson(matching_attribute="email", email="a@example.com"), "rec-1")
-    assert (
-        table.resolve(PersonRef(attribute="email", value="a@example.com")) == "rec-1"
+    table.record(
+        UpsertPerson(matching_attribute="email", email="a@example.com"),
+        "rec-1",
     )
+    assert table.resolve(PersonRef(attribute="email", value="a@example.com")) == "rec-1"
 
 
 def test_lookup_table_missing_returns_none() -> None:
     table = LookupTable()
-    assert (
-        table.resolve(PersonRef(attribute="email", value="nope@example.com")) is None
-    )
+    assert table.resolve(PersonRef(attribute="email", value="nope@example.com")) is None
 
 
 def test_lookup_table_resolves_meeting_ref() -> None:
@@ -88,9 +87,7 @@ def test_lookup_table_resolves_meeting_ref() -> None:
 def test_lookup_table_ignores_none_record_id() -> None:
     table = LookupTable()
     table.record(UpsertPerson(matching_attribute="email", email="a@example.com"), None)
-    assert (
-        table.resolve(PersonRef(attribute="email", value="a@example.com")) is None
-    )
+    assert table.resolve(PersonRef(attribute="email", value="a@example.com")) is None
 
 
 def test_execute_happy_single_op(monkeypatch) -> None:
@@ -322,14 +319,20 @@ def test_lookup_table_records_and_resolves_github_handle_person() -> None:
         github_url="https://github.com/elviskahoro",
     )
     table.record(op, "rec_gh_1")
-    assert table.resolve(PersonRef(attribute="github_handle", value="elviskahoro")) == "rec_gh_1"
+    assert (
+        table.resolve(PersonRef(attribute="github_handle", value="elviskahoro"))
+        == "rec_gh_1"
+    )
 
 
 def test_lookup_table_records_and_resolves_email_person_generalized() -> None:
     table = LookupTable()
     op = UpsertPerson(matching_attribute="email", email="a@example.com")
     table.record(op, "rec_email_1")
-    assert table.resolve(PersonRef(attribute="email", value="a@example.com")) == "rec_email_1"
+    assert (
+        table.resolve(PersonRef(attribute="email", value="a@example.com"))
+        == "rec_email_1"
+    )
 
 
 def test_lookup_table_records_and_resolves_linkedin_person_generalized() -> None:

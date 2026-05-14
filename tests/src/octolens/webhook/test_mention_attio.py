@@ -8,6 +8,7 @@ import pytest
 from src.attio.ops import UpsertMention, UpsertPerson
 from src.octolens.webhook.mention import (
     Webhook,
+    _extract_github_handle,  # pyright: ignore[reportPrivateUsage]
     normalize_linkedin_profile_url,
     split_author_name,
 )
@@ -78,8 +79,7 @@ def test_linkedin_sample_produces_upsert_person_and_mention() -> None:
     assert mention_op.related_person is not None
     assert mention_op.related_person.attribute == "linkedin"
     assert (
-        mention_op.related_person.value
-        == "https://www.linkedin.com/in/linkedin-user"
+        mention_op.related_person.value == "https://www.linkedin.com/in/linkedin-user"
     )
 
 
@@ -153,56 +153,42 @@ def test_split_author_name() -> None:
 
 def test_extract_github_handle_profile_url_canonical() -> None:
     """Test extraction from canonical GitHub profile URL."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("GitHub User", "https://github.com/elviskahoro")
     assert result == "elviskahoro"
 
 
 def test_extract_github_handle_profile_url_with_www() -> None:
     """Test extraction from GitHub profile URL with www."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("GitHub User", "https://www.github.com/elviskahoro")
     assert result == "elviskahoro"
 
 
 def test_extract_github_handle_profile_url_trailing_slash() -> None:
     """Test extraction from GitHub profile URL with trailing slash."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("GitHub User", "https://github.com/elviskahoro/")
     assert result == "elviskahoro"
 
 
 def test_extract_github_handle_bare_handle_simple() -> None:
     """Test extraction from bare GitHub handle (fallback when URL absent)."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("elviskahoro", None)
     assert result == "elviskahoro"
 
 
 def test_extract_github_handle_bare_handle_with_hyphens() -> None:
     """Test extraction from bare handle with hyphens."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("john-doe-123", None)
     assert result == "john-doe-123"
 
 
 def test_extract_github_handle_bare_handle_single_char() -> None:
     """Test extraction from single character handle."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("a", None)
     assert result == "a"
 
 
 def test_extract_github_handle_bare_handle_max_length() -> None:
     """Test extraction from maximum length handle (39 chars)."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     handle = "a" * 39
     result = _extract_github_handle(handle, None)
     assert result == handle
@@ -210,48 +196,36 @@ def test_extract_github_handle_bare_handle_max_length() -> None:
 
 def test_extract_github_handle_rejects_display_name() -> None:
     """Test that display name without URL or matching pattern returns None."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("John Doe", None)
     assert result is None
 
 
 def test_extract_github_handle_rejects_org_repo_path() -> None:
     """Test that GitHub org/repo paths are rejected."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("Random Name", "https://github.com/owner/repo")
     assert result is None
 
 
 def test_extract_github_handle_rejects_non_github_url() -> None:
     """Test that non-GitHub URLs are rejected."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("Random Name", "https://gitlab.com/user")
     assert result is None
 
 
 def test_extract_github_handle_rejects_trailing_hyphens() -> None:
     """Test that handles with trailing hyphens are rejected."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("user-", None)
     assert result is None
 
 
 def test_extract_github_handle_rejects_leading_hyphens() -> None:
     """Test that handles with leading hyphens are rejected."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("-user", None)
     assert result is None
 
 
 def test_extract_github_handle_rejects_too_long() -> None:
     """Test that handles over 39 chars are rejected."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     handle = "a" * 40
     result = _extract_github_handle(handle, None)
     assert result is None
@@ -259,32 +233,24 @@ def test_extract_github_handle_rejects_too_long() -> None:
 
 def test_extract_github_handle_rejects_special_chars() -> None:
     """Test that handles with special chars are rejected."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("user@name", None)
     assert result is None
 
 
 def test_extract_github_handle_none_author() -> None:
     """Test that None author returns None."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle(None, None)
     assert result is None
 
 
 def test_extract_github_handle_empty_string() -> None:
     """Test that empty string author returns None."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("", None)
     assert result is None
 
 
 def test_extract_github_handle_http_url() -> None:
     """Test extraction from GitHub profile URL with http (not https)."""
-    from src.octolens.webhook.mention import _extract_github_handle
-
     result = _extract_github_handle("GitHub User", "http://github.com/elviskahoro")
     assert result == "elviskahoro"
 
