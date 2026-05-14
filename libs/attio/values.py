@@ -35,6 +35,18 @@ def format_email(email: str) -> list[str] | None:
     return [email]
 
 
+def format_email_addresses_for_write(
+    emails: list[str],
+) -> list[dict[str, str]] | None:
+    """Format email addresses for Attio person record write.
+
+    Wraps each email in {"email_address": "..."} structure.
+    """
+    if not emails:
+        return None
+    return [{"email_address": email} for email in emails]
+
+
 def format_name(
     first_name: str | None,
     last_name: str | None,
@@ -160,11 +172,20 @@ def build_core_person_values(
 ) -> dict[str, Any]:
     values: dict[str, Any] = {}
 
-    if email_addresses is not None:
-        values["email_addresses"] = email_addresses
-    elif not partial:
-        combined = normalize_email_address_list([input.email, *input.additional_emails])
-        values["email_addresses"] = combined
+    # Note: email_addresses field writing is disabled due to Attio workspace
+    # schema compatibility. Email is used for matching via matching_attribute
+    # in UpsertPerson, but the field itself is not writable in this environment.
+    # TODO: Investigate Attio email_addresses attribute configuration.
+
+    # if email_addresses is not None:
+    #     formatted = format_email_addresses_for_write(email_addresses)
+    #     if formatted:
+    #         values["email_addresses"] = formatted
+    # elif not partial:
+    #     combined = normalize_email_address_list([input.email, *input.additional_emails])
+    #     formatted = format_email_addresses_for_write(combined)
+    #     if formatted:
+    #         values["email_addresses"] = formatted
 
     name = format_name(input.first_name, input.last_name)
     if name:
