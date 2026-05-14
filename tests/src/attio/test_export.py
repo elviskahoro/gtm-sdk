@@ -528,3 +528,95 @@ def test_handle_upsert_company_merge_strips_populated_slugs(
     assert company_input.industry is None  # stripped (existing was populated)
     assert company_input.employee_count == "50-100"  # kept (existing was None)
     mock_get_values.assert_called_once_with("example.test")
+
+
+# Tests for _handle_upsert_tracking_event
+
+
+@patch("src.attio.export.find_or_create_tracking_event")
+def test_handle_upsert_tracking_event_resolves_refs(mock_libs) -> None:
+    """Test that refs are resolved through LookupTable and passed to the lib."""
+    mock_libs.return_value = MagicMock(success=True, record_id="te_1", action="created")
+
+    from src.attio.export import _handle_upsert_tracking_event
+    from src.attio.ops import CompanyRef, PersonRef, UpsertPerson, UpsertCompany, UpsertTrackingEvent
+
+    table = LookupTable()
+    table.record(
+        UpsertPerson(matching_attribute="email", email="a@b.test"),
+        "pe_1",
+    )
+    table.record(
+        UpsertCompany(domain="b.test"),
+        "co_1",
+    )
+
+    result = _handle_upsert_tracking_event(
+        UpsertTrackingEvent(
+            external_id="rb2b:abc123",
+            name="https://example.test/pricing",
+            event_type="rb2b_visit",
+            event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
+            body_json='{"raw": "payload"}',
+            captured_url="https://example.test/pricing",
+            subject_person=PersonRef(attribute="email", value="a@b.test"),
+            subject_company=CompanyRef(domain="b.test"),
+        ),
+        table,
+    )
+
+    assert result.success is True
+    input_arg = mock_libs.call_args.args[0]
+    assert input_arg.related_person_record_id == "pe_1"
+    assert input_arg.related_company_record_id == "co_1"
+
+
+@patch("src.attio.export.find_or_create_tracking_event")
+def test_handle_upsert_tracking_event_unresolved_ref_is_fatal(mock_libs) -> None:
+    """Test that unresolvable PersonRef causes fatal error."""
+    from src.attio.export import _handle_upsert_tracking_event
+    from src.attio.ops import PersonRef, UpsertTrackingEvent
+
+    result = _handle_upsert_tracking_event(
+        UpsertTrackingEvent(
+            external_id="rb2b:abc123",
+            name="https://example.test/pricing",
+            event_type="rb2b_visit",
+            event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
+            body_json='{"raw": "payload"}',
+            captured_url="https://example.test/pricing",
+            subject_person=PersonRef(attribute="email", value="missing@b.test"),
+        ),
+        LookupTable(),  # empty — nothing to resolve
+    )
+
+    assert result.success is False
+    assert result.errors[0].code == "unresolved_ref"
+    assert result.errors[0].fatal is True
+    mock_libs.assert_not_called()
+
+
+@patch("src.attio.export.find_or_create_tracking_event")
+def test_handle_upsert_tracking_event_no_refs_passes_none(mock_libs) -> None:
+    """Test that when no refs are provided, None is passed to the lib."""
+    mock_libs.return_value = MagicMock(success=True, record_id="te_2", action="created")
+
+    from src.attio.export import _handle_upsert_tracking_event
+    from src.attio.ops import UpsertTrackingEvent
+
+    result = _handle_upsert_tracking_event(
+        UpsertTrackingEvent(
+            external_id="rb2b:abc123",
+            name="https://example.test/pricing",
+            event_type="rb2b_visit",
+            event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
+            body_json='{"raw": "payload"}',
+            captured_url="https://example.test/pricing",
+        ),
+        LookupTable(),
+    )
+
+    assert result.success is True
+    input_arg = mock_libs.call_args.args[0]
+    assert input_arg.related_person_record_id is None
+    assert input_arg.related_company_record_id is None
