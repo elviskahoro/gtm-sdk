@@ -102,12 +102,26 @@ def ensure_select_options(
         for title in options:
             if title in existing_titles:
                 continue
-            client.attributes.post_v2_target_identifier_attributes_attribute_options(
-                target="objects",
-                identifier=target_object,
-                attribute=attribute_slug,
-                data={"title": title},
-            )
+            try:
+                client.attributes.post_v2_target_identifier_attributes_attribute_options(
+                    target="objects",
+                    identifier=target_object,
+                    attribute=attribute_slug,
+                    data={"title": title},
+                )
+            except SDKError as exc:
+                # Under concurrent webhook deliveries two callers can race past
+                # the pre-read above and both POST the same new option title.
+                # The loser gets 409; treat it as success since the option now
+                # exists, which is the post-condition this function promises.
+                status = getattr(
+                    getattr(exc, "raw_response", None),
+                    "status_code",
+                    None,
+                )
+                if status != 409:
+                    raise
+                continue
             created.append(title)
     return created
 
