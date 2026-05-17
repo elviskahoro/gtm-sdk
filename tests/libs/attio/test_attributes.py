@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from libs.attio.attributes import create_companies_attribute
+import pytest
+from attio.errors.sdkerror import SDKError
+
+from libs.attio.attributes import create_companies_attribute, ensure_select_options
 from libs.attio.models import AttributeCreateResult
 
 
@@ -15,9 +18,18 @@ def _attr(slug: str):
 
 
 class _FakeAttributes:
-    def __init__(self, attrs=None):
+    def __init__(self, attrs=None, options=None, option_post_errors=None):
         self.attrs = attrs or []
         self.created_attrs: list[dict[str, object]] = []
+        self.options = options or []
+        self.created_options: list[dict[str, object]] = []
+        # Mapping of option title -> Exception to raise when POSTed. Each entry
+        # is consumed at most once so subsequent calls succeed (mirrors the
+        # production race where a second attempt would also conflict, but lets
+        # tests assert "later titles still POST" cleanly).
+        self.option_post_errors: dict[str, Exception] = dict(
+            option_post_errors or {},
+        )
 
     def get_v2_target_identifier_attributes(self, *, target, identifier):
         assert target == "objects"
@@ -30,6 +42,45 @@ class _FakeAttributes:
         self.created_attrs.append(data)
         self.attrs.append(_attr(data["api_slug"]))
         return _resp(_attr(data["api_slug"]))
+
+    def get_v2_target_identifier_attributes_attribute_options(
+        self,
+        *,
+        target,
+        identifier,
+        attribute,
+    ):
+        assert target == "objects"
+        del identifier, attribute  # not asserted by these tests
+        return _resp([SimpleNamespace(title=t) for t in self.options])
+
+    def post_v2_target_identifier_attributes_attribute_options(
+        self,
+        *,
+        target,
+        identifier,
+        attribute,
+        data,
+    ):
+        assert target == "objects"
+        del identifier, attribute
+        title = data["title"]
+        if title in self.option_post_errors:
+            raise self.option_post_errors.pop(title)
+        self.created_options.append(data)
+        self.options.append(title)
+        return _resp(SimpleNamespace(title=title))
+
+
+def _make_sdk_error(status_code: int, message: str = "boom") -> SDKError:
+    """Build a SDKError without spinning up a real httpx.Response.
+
+    The real SDKError signature expects an httpx.Response, but its __init__
+    only reads .status_code/.headers/.text — a SimpleNamespace is sufficient
+    for the duck-typed access pattern in production (`raw_response.status_code`).
+    """
+    raw_response = SimpleNamespace(status_code=status_code, headers={}, text=message)
+    return SDKError(message, raw_response, message)  # type: ignore[arg-type]
 
 
 class _FakeClient:
@@ -108,3 +159,51 @@ def test_create_companies_attribute_apply_is_noop_when_already_exists(
     assert result.attribute_exists is True
     assert result.attribute_created is False
     assert fake.created_attrs == []
+
+
+def test_ensure_select_options_swallows_409_conflict(monkeypatch) -> None:
+    fake = _FakeAttributes(
+        options=[],
+        option_post_errors={"kw_a": _make_sdk_error(409, "slug conflict")},
+    )
+    monkeypatch.setattr("libs.attio.attributes.get_client", lambda: _FakeClient(fake))
+
+    created = ensure_select_options(
+        target_object="social_mention",
+        attribute_slug="keywords",
+        options=["kw_a", "kw_b"],
+    )
+
+    # kw_a races a concurrent caller and 409s — not counted as created here.
+    # kw_b still POSTs successfully on the same call.
+    assert created == ["kw_b"]
+    assert fake.created_options == [{"title": "kw_b"}]
+
+
+def test_ensure_select_options_reraises_non_409_sdkerror(monkeypatch) -> None:
+    fake = _FakeAttributes(
+        options=[],
+        option_post_errors={"kw_a": _make_sdk_error(500, "server error")},
+    )
+    monkeypatch.setattr("libs.attio.attributes.get_client", lambda: _FakeClient(fake))
+
+    with pytest.raises(SDKError):
+        ensure_select_options(
+            target_object="social_mention",
+            attribute_slug="keywords",
+            options=["kw_a"],
+        )
+
+
+def test_ensure_select_options_skips_existing(monkeypatch) -> None:
+    fake = _FakeAttributes(options=["kw_a"])
+    monkeypatch.setattr("libs.attio.attributes.get_client", lambda: _FakeClient(fake))
+
+    created = ensure_select_options(
+        target_object="social_mention",
+        attribute_slug="keywords",
+        options=["kw_a", "kw_b"],
+    )
+
+    assert created == ["kw_b"]
+    assert fake.created_options == [{"title": "kw_b"}]
