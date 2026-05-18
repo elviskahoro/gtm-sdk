@@ -226,6 +226,9 @@ _SENTIMENT_VALUES: frozenset[str] = frozenset({"Positive", "Neutral", "Negative"
 def _sentiment_or_none(
     value: str | None,
 ) -> Literal["Positive", "Neutral", "Negative"] | None:
-    if value in _SENTIMENT_VALUES:
-        return cast(Literal["Positive", "Neutral", "Negative"], value)
+    if not value:
+        return None
+    normalized = value.strip().title()
+    if normalized in _SENTIMENT_VALUES:
+        return cast(Literal["Positive", "Neutral", "Negative"], normalized)
     return None
