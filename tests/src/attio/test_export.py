@@ -724,6 +724,22 @@ def test_is_attio_health_failure_false_for_data_error() -> None:
     assert is_attio_health_failure(result) is False
 
 
+def test_is_attio_health_failure_false_for_sdk_default_error() -> None:
+    """SDKDefaultError covers unmodeled 4xx and 5xx alike; can't be used as a
+    transport-failure signal without misclassifying caller/data errors."""
+    from src.attio.export import ExecutionResult, OpOutcome, is_attio_health_failure
+
+    outcome = OpOutcome(
+        op_index=0,
+        op_type="UpsertMeeting",
+        success=False,
+        record_id=None,
+        envelope=_transport_fail("SDKDefaultError"),
+    )
+    result = ExecutionResult(success=False, outcomes=[outcome], fail_index=0)
+    assert is_attio_health_failure(result) is False
+
+
 def test_is_attio_health_failure_false_for_success() -> None:
     from src.attio.export import ExecutionResult, OpOutcome, is_attio_health_failure
 

@@ -34,8 +34,12 @@ class CircuitBreaker:
       opening on a single failure from a cold container).
 
     Auto-transitions to ``half_open`` after ``open_duration_seconds``. While
-    half-open, a single success closes the breaker and a single failure
-    re-opens it.
+    half-open, exactly one in-flight probe is allowed: the first caller to
+    ``allow_call()`` is permitted through and all subsequent callers are
+    rejected (return False) until that probe records an outcome. The probe's
+    success closes the breaker; its failure re-opens it. This matters under
+    Modal's ``@modal.concurrent`` where hundreds of webhook requests may hit
+    ``allow_call()`` simultaneously at the moment we transition out of OPEN.
     """
 
     def __init__(
@@ -54,6 +58,11 @@ class CircuitBreaker:
         self._consecutive_failures = 0
         self._opened_at: float | None = None
         self._window: deque[tuple[float, bool]] = deque()
+        # Tracks whether a probe call is in flight while half-open. Set by
+        # allow_call() when it grants a probe; cleared by record_success /
+        # record_failure (or any state transition). Prevents a burst of
+        # concurrent callers from all firing probes simultaneously.
+        self._probe_in_flight = False
 
     @property
     def name(self) -> str:
@@ -68,7 +77,12 @@ class CircuitBreaker:
     def allow_call(self) -> bool:
         with self._lock:
             self._maybe_half_open_locked()
-            return self._state in (State.CLOSED, State.HALF_OPEN)
+            if self._state == State.CLOSED:
+                return True
+            if self._state == State.HALF_OPEN and not self._probe_in_flight:
+                self._probe_in_flight = True
+                return True
+            return False
 
     def record_success(self) -> None:
         with self._lock:
@@ -77,6 +91,7 @@ class CircuitBreaker:
             self._append_locked(success=True)
             if self._state == State.HALF_OPEN:
                 self._transition_locked(State.CLOSED)
+            self._probe_in_flight = False
 
     def record_failure(self) -> None:
         with self._lock:
@@ -85,9 +100,11 @@ class CircuitBreaker:
             self._append_locked(success=False)
             if self._state == State.HALF_OPEN:
                 self._transition_locked(State.OPEN)
+                self._probe_in_flight = False
                 return
             if self._state == State.CLOSED and self._should_open_locked():
                 self._transition_locked(State.OPEN)
+            self._probe_in_flight = False
 
     def _maybe_half_open_locked(self) -> None:
         if self._state != State.OPEN or self._opened_at is None:
@@ -120,5 +137,8 @@ class CircuitBreaker:
         if new_state == State.CLOSED:
             self._window.clear()
             self._consecutive_failures = 0
+        # Any state change ends the previous half-open probe (if any). The
+        # next half-open epoch starts with a fresh probe slot.
+        self._probe_in_flight = False
         if self._on_transition is not None:
             self._on_transition(old, new_state)
