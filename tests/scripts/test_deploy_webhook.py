@@ -146,8 +146,14 @@ def ensure_handler_restored() -> Iterator[None]:
 
     original_bytes = HANDLER_FILE.read_bytes()
     LOCK_DIR.parent.mkdir(parents=True, exist_ok=True)
+    # Never remove an existing lock — it may belong to a concurrent real
+    # `scripts/deploy_webhook.sh` invocation, and that lock is the script's
+    # only serialization guard. Skip rather than racing the live deploy.
     if LOCK_DIR.exists():
-        LOCK_DIR.rmdir()
+        pytest.skip(
+            f"{LOCK_DIR} already exists; a deploy may be in progress. "
+            f"Refusing to remove it. Remove it manually if it is stale.",
+        )
     bak = HANDLER_FILE.with_suffix(HANDLER_FILE.suffix + ".bak")
     if bak.exists():
         bak.unlink()
@@ -155,6 +161,8 @@ def ensure_handler_restored() -> Iterator[None]:
         yield
     finally:
         HANDLER_FILE.write_bytes(original_bytes)
+        # Safe to remove here: we verified LOCK_DIR did not exist at entry,
+        # so any lock present now was created by the stubbed deploy under test.
         if LOCK_DIR.exists():
             LOCK_DIR.rmdir()
         if bak.exists():
