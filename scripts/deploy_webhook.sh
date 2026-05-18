@@ -160,15 +160,15 @@ unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET
 
 # --- preflight: working tree -----------------------------------------------
 
-if ! git diff --quiet -- webhooks/; then
-  echo "ERROR: webhooks/ has uncommitted changes. Aborting." >&2
-  git diff --stat -- webhooks/ >&2
+# `git diff --quiet` only compares the worktree against the index, so a
+# staged-but-uncommitted edit would slip past. `git status --porcelain` flags
+# any deviation from HEAD: staged, unstaged, or untracked.
+WEBHOOKS_STATUS="$(git status --porcelain -- webhooks/)"
+if [[ -n ${WEBHOOKS_STATUS} ]]; then
+  echo "ERROR: webhooks/ has uncommitted changes (staged, unstaged, or untracked). Aborting." >&2
+  echo "${WEBHOOKS_STATUS}" >&2
   exit 1
 fi
-
-# --- trap before any mutation ----------------------------------------------
-
-trap 'restore_all' EXIT
 
 # --- preflight: Modal secrets ----------------------------------------------
 
@@ -201,12 +201,89 @@ for secret in "${REQUIRED_SECRETS[@]}"; do
   fi
 done
 
-# --- backup once, before the loop ------------------------------------------
+# --- preflight: GCS buckets (handlers that write to gs://) -----------------
 
-mkdir -p "${BACKUP_DIR}"
-if [[ ! -f "${BACKUP_DIR}/${HANDLER}.py" ]]; then
-  \cp -f "${HANDLER_FILE}" "${BACKUP_DIR}/${HANDLER}.py"
+# Auto-detect whether the handler routes to a per-source GCS bucket by
+# grepping for `WebhookModel.<prefix>_get_bucket_name`. The etl handler
+# uses `etl_get_bucket_name`; the (future) raw handler will use
+# `raw_get_bucket_name`. The attio handler doesn't write to GCS, so this
+# pattern is absent and the preflight is skipped.
+#
+# This matches AGENTS.md "Scripted deploy pitfalls": a missing bucket aborts
+# at first webhook write — a deployed-but-broken endpoint. Catching it here
+# means no Modal app gets created against a bucket that doesn't exist.
+# Use a bash regex loop rather than `grep | head | sed`: with `set -o
+# pipefail`, an empty grep result (attio handler — no bucket) propagates
+# exit code 1 through the pipe and trips `set -e`. The loop returns an
+# empty string cleanly when no match is found.
+BUCKET_METHOD=""
+while IFS= read -r _line; do
+  if [[ ${_line} =~ WebhookModel\.([a-z_]+_get_bucket_name) ]]; then
+    BUCKET_METHOD="${BASH_REMATCH[1]}"
+    break
+  fi
+done <"${HANDLER_FILE}"
+
+# Map `<SourceClass>` to its module path by parsing the handler's import
+# block. Each source is imported via the canonical shape:
+#   from src.<pkg>.webhook.<mod> import (
+#       Webhook as <SourceClass>,
+#   )
+# awk walks the file and tracks the most recent `from src…` line; when it
+# sees `Webhook as <source>` it strips `from ` and ` import (` and emits the
+# dotted module path.
+source_module_for() {
+  local handler_file="$1" source="$2"
+  awk -v target="Webhook as ${source}" '
+    /^from src\.[A-Za-z0-9_.]+ import \(/ { last_from = $0 }
+    index($0, target) {
+      sub(/^from /, "", last_from)
+      sub(/ import \(.*$/, "", last_from)
+      print last_from
+      exit
+    }
+  ' "${handler_file}"
+}
+
+if [[ -n ${BUCKET_METHOD} ]]; then
+  command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI not found — required to preflight GCS buckets for ${HANDLER}."
+  echo "Preflighting GCS buckets via WebhookModel.${BUCKET_METHOD}()"
+  for source in "${SOURCES_TO_DEPLOY[@]}"; do
+    module="$(source_module_for "${HANDLER_FILE}" "${source}")"
+    [[ -n ${module} ]] || fail "Could not resolve module path for ${source} in ${HANDLER_FILE}."
+
+    # Pure static method on the Webhook subclass — no env / secrets needed,
+    # so we don't pay the infisical-injection round-trip here.
+    bucket="$(uv run python -c "from ${module} import Webhook; print(Webhook.${BUCKET_METHOD}())" 2>/dev/null)" ||
+      fail "Could not resolve bucket name for ${source} via ${module}.Webhook.${BUCKET_METHOD}()."
+
+    if ! gcloud storage ls --project=dlthub-sandbox "gs://${bucket}" >/dev/null 2>&1; then
+      fail "Missing GCS bucket: gs://${bucket} (source ${source}). Create it before deploying."
+    fi
+    echo "  ${source}: gs://${bucket} ✓"
+  done
 fi
+
+# --- backup + trap (in that order, so trap never sees stale state) ---------
+
+# Clear any stale backups from prior runs *before* taking the fresh one.
+# Otherwise a leftover backup from an earlier session — possibly for a
+# different handler entirely — would be used as the restore source, leaving
+# the worktree dirty after restore (and the EXIT trap could clobber an
+# unrelated webhooks/ file with that stale content).
+#
+# Safe because the working-tree preflight above guarantees webhooks/ matches
+# HEAD; the new backup we're about to write is the committed form.
+#
+# The trap is registered *after* the fresh backup is in place, so even if a
+# later step fails before the first sed, the restore is a no-op against an
+# already-clean tree. Before this point, any failure leaves webhooks/
+# untouched, so no restore is needed.
+mkdir -p "${BACKUP_DIR}"
+rm -f "${BACKUP_DIR}"/*.py
+\cp -f "${HANDLER_FILE}" "${BACKUP_DIR}/${HANDLER}.py"
+
+trap 'restore_all' EXIT
 
 # --- deploy loop -----------------------------------------------------------
 
@@ -235,10 +312,14 @@ deploy_one() {
 
   # Verify the restore actually worked. If a `cp -i` alias somehow won
   # over the backslash form (shell function shadowing, etc.), the tree
-  # would still be dirty here — fail loudly with the diff dumped.
-  if ! git diff --quiet -- "${HANDLER_FILE}"; then
+  # would still be dirty here — fail loudly with the diff dumped. Uses
+  # porcelain to also catch the staged-edit case (matches preflight).
+  local post_restore_status
+  post_restore_status="$(git status --porcelain -- "${HANDLER_FILE}")"
+  if [[ -n ${post_restore_status} ]]; then
     echo "ERROR: ${HANDLER_FILE} is dirty after restore — placeholder swap failed." >&2
-    git diff -- "${HANDLER_FILE}" >&2
+    echo "${post_restore_status}" >&2
+    git diff HEAD -- "${HANDLER_FILE}" >&2
     exit 1
   fi
 }
