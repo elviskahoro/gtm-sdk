@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from src.rb2b.webhook.visit import Webhook, extract_domain
 
@@ -12,6 +13,25 @@ def _load(name: str) -> Webhook:
     import orjson
 
     return Webhook.model_validate(orjson.loads((SAMPLES / name).read_text()))
+
+
+def _load_raw(name: str) -> dict[str, Any]:
+    import orjson
+
+    return orjson.loads((SAMPLES / name).read_text())
+
+
+def _person_op_linkedin(w: Webhook) -> str | None:
+    for op in w.attio_get_operations():
+        if type(op).__name__ == "UpsertPerson":
+            return op.linkedin
+    raise AssertionError("expected an UpsertPerson op")
+
+
+def _person_webhook_with_linkedin(value: str | None) -> Webhook:
+    raw = _load_raw("rb2b.visit.person_only.redacted.json")
+    raw["payload"]["LinkedIn URL"] = value
+    return Webhook.model_validate(raw)
 
 
 def test_attio_get_secret_collection_names() -> None:
@@ -91,6 +111,43 @@ def test_attio_get_operations_repeat_visit_sets_flag() -> None:
         o for o in w.attio_get_operations() if type(o).__name__ == "UpsertTrackingEvent"
     ][0]
     assert te.is_repeat_visit is True
+
+
+def test_linkedin_canonical_url_passes_through() -> None:
+    w = _person_webhook_with_linkedin("https://www.linkedin.com/in/bob-jones")
+    assert _person_op_linkedin(w) == "https://www.linkedin.com/in/bob-jones"
+
+
+def test_linkedin_trailing_slash_is_collapsed() -> None:
+    w = _person_webhook_with_linkedin("https://www.linkedin.com/in/bob-jones/")
+    assert _person_op_linkedin(w) == "https://www.linkedin.com/in/bob-jones"
+
+
+def test_linkedin_http_is_upgraded_to_https() -> None:
+    w = _person_webhook_with_linkedin("http://linkedin.com/in/bob-jones")
+    assert _person_op_linkedin(w) == "https://www.linkedin.com/in/bob-jones"
+
+
+def test_linkedin_query_string_is_stripped() -> None:
+    w = _person_webhook_with_linkedin("https://www.linkedin.com/in/bob-jones?trk=foo")
+    assert _person_op_linkedin(w) == "https://www.linkedin.com/in/bob-jones"
+
+
+def test_linkedin_company_url_is_dropped_but_person_still_created() -> None:
+    w = _person_webhook_with_linkedin("https://www.linkedin.com/company/acme")
+    ops = w.attio_get_operations()
+    assert any(type(op).__name__ == "UpsertPerson" for op in ops)
+    assert _person_op_linkedin(w) is None
+
+
+def test_linkedin_none_passes_through_as_none() -> None:
+    w = _person_webhook_with_linkedin(None)
+    assert _person_op_linkedin(w) is None
+
+
+def test_linkedin_empty_string_normalizes_to_none() -> None:
+    w = _person_webhook_with_linkedin("")
+    assert _person_op_linkedin(w) is None
 
 
 def test_attio_get_operations_flat_envelope_normalizes() -> None:

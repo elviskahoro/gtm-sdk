@@ -17,9 +17,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-
 from libs.attio.attributes import create_attribute, ensure_select_options
+
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 TARGET = "tracking_events"
 
