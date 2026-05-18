@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Callable
 
+# trunk-ignore(pyrefly/missing-import)
 import pytest
 
 from libs.reliability.circuit_breaker import (
@@ -231,6 +232,7 @@ def test_thread_safety_smoke() -> None:
     assert breaker.state in (State.CLOSED, State.OPEN, State.HALF_OPEN)
 
 
+# trunk-ignore(pyright/reportUntypedFunctionDecorator)
 @pytest.mark.parametrize(
     ("threshold", "failures", "expected"),
     [

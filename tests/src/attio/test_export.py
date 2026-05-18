@@ -786,6 +786,7 @@ def test_execute_with_breaker_records_success_on_happy_path(monkeypatch) -> None
 def test_execute_with_breaker_records_failure_on_transport_error(
     monkeypatch,
 ) -> None:
+    # trunk-ignore(pyrefly/missing-import)
     import httpx
 
     from src.attio.export import execute_with_breaker
@@ -821,6 +822,7 @@ def test_execute_with_breaker_ignores_data_failures(monkeypatch) -> None:
 
 
 def test_execute_with_breaker_integration_opens_real_breaker(monkeypatch) -> None:
+    # trunk-ignore(pyrefly/missing-import)
     import httpx
 
     from libs.reliability.circuit_breaker import (

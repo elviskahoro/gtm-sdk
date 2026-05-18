@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 from types import ModuleType
 
+# trunk-ignore(pyrefly/missing-import)
 import pytest
 
 
