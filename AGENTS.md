@@ -28,19 +28,21 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 ## Webhook deploys
 
-`webhooks/export_to_attio.py` and `webhooks/export_to_gcp_etl.py` ship one Modal app per webhook source, but the file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
+`webhooks/export_to_attio.py` and `webhooks/export_to_gcp_etl.py` ship one Modal app per webhook source, but each file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
 
-To deploy one source:
+Use `scripts/deploy_webhook.sh <handler> <source>` (or `<handler> --all`) to substitute the placeholder, deploy, and restore in one step. The script encodes every footgun in the "Scripted deploy pitfalls" section below.
 
-1. Substitute `WebhookModelToReplace` → the target class (e.g. `CaldotcomBookingWebhook`, `FathomCallWebhook`, `FathomMessageWebhook`, `OctolensMentionWebhook`, `Rb2bVisitWebhook`).
-2. `infisical run ... -- uv run modal deploy webhooks/<file>.py` (Modal app name comes from `WebhookModel.attio_get_app_name()` — e.g. `CaldotcomBookingWebhook` → `export-to-attio-from-calcom-bookings`).
-3. Restore the `WebhookModelToReplace` placeholder so the working tree matches `main`.
+```shell
+set -a && source .env.local && set +a   # once per shell
+scripts/deploy_webhook.sh export_to_attio CaldotcomBookingWebhook
+scripts/deploy_webhook.sh export_to_gcp_etl --all
+```
 
-Do not commit the substituted form. Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols.
+Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols. Do not commit the substituted form; the script's `trap` restores the placeholder even if `modal deploy` fails or the script is interrupted.
 
 ### Scripted deploy pitfalls
 
-When looping over webhook sources in a shell script:
+The pitfalls below explain why `scripts/deploy_webhook.sh` is shaped the way it is. The script encodes the answer to each one; keep them here as design rationale for anyone touching the script:
 
 - **`unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET` before `infisical run`.** Otherwise the parent shell's personal Modal tokens win over the dlthub-workspace tokens Infisical injects, and deploys land in the wrong workspace.
 - **Wrap with `uv run modal deploy`, not bare `modal deploy`.** Bare `modal` runs outside the project venv and can't import `src.*` packages registered in `pyproject.toml` → `ModuleNotFoundError: No module named 'src.fathom'`.
