@@ -8,8 +8,8 @@ Adds:
   - multiselect attribute: tags
 
 Usage:
-  uv run python scripts/tracking_events_rb2b_bootstrap.py --preview
-  uv run python scripts/tracking_events_rb2b_bootstrap.py --apply
+  uv run python scripts/tracking-events-rb2b-bootstrap.py --preview
+  uv run python scripts/tracking-events-rb2b-bootstrap.py --apply
 """
 
 from __future__ import annotations

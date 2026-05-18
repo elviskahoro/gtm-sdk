@@ -1,8 +1,8 @@
 """One-off bootstrap for the social_mention custom object.
 
 Usage:
-    infisical run -- uv run python scripts/social_mention_bootstrap.py --preview
-    infisical run -- uv run python scripts/social_mention_bootstrap.py --apply
+    infisical run -- uv run python scripts/social-mention-bootstrap.py --preview
+    infisical run -- uv run python scripts/social-mention-bootstrap.py --apply
 
 Idempotent. Safe to re-run. Adding a new attribute = edit ATTRIBUTES below
 and re-run.
