@@ -14,9 +14,11 @@ def _new_test_email() -> str:
     return f"attio-validation-test-{secrets.token_hex(4)}@example.com"
 
 
-def test_attio_integration_credentials_preflight(attio_auth_probe: None) -> None:
-    # The `attio_auth_probe` fixture (in tests/conftest.py) skips the session
-    # when ATTIO_API_KEY is unset OR the key fails an auth probe against Attio.
+@pytest.mark.usefixtures("attio_auth_probe")
+def test_attio_integration_credentials_preflight() -> None:
+    # `attio_auth_probe` (declared in tests/conftest.py and pulled in via the
+    # usefixtures marker above for its side effects) skips the session when
+    # ATTIO_API_KEY is unset OR the key fails an auth probe against Attio.
     key = os.environ.get("ATTIO_API_KEY", "").strip()
     assert key, "ATTIO_API_KEY should be present once the probe fixture has resolved"
 
