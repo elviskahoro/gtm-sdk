@@ -1029,6 +1029,7 @@ dependencies = [
     { name = "ibis-framework", extra = ["duckdb"] },
     { name = "logfire" },
     { name = "modal" },
+    { name = "narwhals" },
     { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -1037,12 +1038,17 @@ dependencies = [
     { name = "orjson" },
     { name = "parallel-web" },
     { name = "phonenumbers" },
-    { name = "polars" },
+    { name = "pyarrow" },
     { name = "pydantic" },
     { name = "requests" },
     { name = "resend" },
     { name = "typer" },
     { name = "uuid7" },
+]
+
+[package.optional-dependencies]
+marketplace = [
+    { name = "polars" },
 ]
 
 [package.dev-dependencies]
@@ -1068,6 +1074,7 @@ requires-dist = [
     { name = "ibis-framework", extras = ["duckdb"] },
     { name = "logfire", specifier = ">=4.32.1" },
     { name = "modal" },
+    { name = "narwhals", specifier = ">=2.21.0" },
     { name = "openai", specifier = ">=2.34.0" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -1076,13 +1083,15 @@ requires-dist = [
     { name = "orjson", specifier = ">=3.10.0" },
     { name = "parallel-web" },
     { name = "phonenumbers", specifier = ">=9.0.29" },
-    { name = "polars", specifier = ">=1.10.0" },
+    { name = "polars", marker = "extra == 'marketplace'", specifier = ">=1.10.0" },
+    { name = "pyarrow", specifier = ">=18.0.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "requests", specifier = ">=2.33.1" },
     { name = "resend", specifier = ">=2.30.0" },
     { name = "typer", specifier = ">=0.15" },
     { name = "uuid7", specifier = ">=0.1.0" },
 ]
+provides-extras = ["marketplace"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1457,6 +1466,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ac/5b/2d2d1d522e51285bd61b1e20df8f47ae1a9d80839db0b24ea783b3832832/multidict-6.7.1-cp313-cp313t-win_amd64.whl", hash = "sha256:d54ecf9f301853f2c5e802da559604b3e95bb7a3b01a9c295c6ee591b9882de8", size = 53109, upload-time = "2026-01-26T02:45:08.044Z" },
     { url = "https://files.pythonhosted.org/packages/3d/a3/cc409ba012c83ca024a308516703cf339bdc4b696195644a7215a5164a24/multidict-6.7.1-cp313-cp313t-win_arm64.whl", hash = "sha256:5a37ca18e360377cfda1d62f5f382ff41f2b8c4ccb329ed974cc2e1643440118", size = 45573, upload-time = "2026-01-26T02:45:09.349Z" },
     { url = "https://files.pythonhosted.org/packages/81/08/7036c080d7117f28a4af526d794aab6a84463126db031b007717c1a6676e/multidict-6.7.1-py3-none-any.whl", hash = "sha256:55d97cc6dae627efa6a6e548885712d4864b81110ac76fa4e534c03819fa4a56", size = 12319, upload-time = "2026-01-26T02:46:44.004Z" },
+]
+
+[[package]]
+name = "narwhals"
+version = "2.21.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/a0/6198c56d42ef2f3c6ed0c42ba30dbcefdc86a91262d7d449010770ae085b/narwhals-2.21.2.tar.gz", hash = "sha256:5c5b2d0b47aef7c73ea412cfcbcd467f2f2d5be73e3c2ab19d78f4a97718790a", size = 632176, upload-time = "2026-05-16T08:49:08.314Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1d/77/928ea2e70641ca177a11140062cc5840d421795f2e82749d408d0cce900a/narwhals-2.21.2-py3-none-any.whl", hash = "sha256:7bb57c3700486039215455b9bf2d64261915cc0fd845cc30272d631df696b251", size = 451201, upload-time = "2026-05-16T08:49:05.536Z" },
 ]
 
 [[package]]
