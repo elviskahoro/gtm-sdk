@@ -7,15 +7,20 @@ import pytest
 from attio.errors import ResponseValidationError
 from libs.attio.sdk_boundary import build_post_record_request
 
+pytestmark = pytest.mark.integration
+
 
 def _new_test_email() -> str:
     return f"attio-validation-test-{secrets.token_hex(4)}@example.com"
 
 
+@pytest.mark.usefixtures("attio_auth_probe")  # pyright: ignore[reportUntypedFunctionDecorator]
 def test_attio_integration_credentials_preflight() -> None:
+    # `attio_auth_probe` (declared in tests/conftest.py and pulled in via the
+    # usefixtures marker above for its side effects) skips the session when
+    # ATTIO_API_KEY is unset OR the key fails an auth probe against Attio.
     key = os.environ.get("ATTIO_API_KEY", "").strip()
-    if not key:
-        pytest.skip("ATTIO_API_KEY not set — skipping integration tests")
+    assert key, "ATTIO_API_KEY should be present once the probe fixture has resolved"
 
 
 def test_add_person_with_valid_data_or_typed_api_error(

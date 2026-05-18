@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from attio.errors import SDKError  # noqa: E402  # pyrefly: ignore[missing-import]
+
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
@@ -32,9 +34,32 @@ def modal_credentials_available() -> bool:
     return bool(token_id and token_secret)
 
 
+@pytest.fixture(scope="session")  # pyright: ignore[reportUntypedFunctionDecorator]
+def attio_auth_probe(attio_api_key: str) -> None:
+    # Cheap auth probe so a stale/invalid ATTIO_API_KEY skips integration tests
+    # rather than 401-ing through every one. Runs once per session. Only auth
+    # failures (401/403) get converted to skip — every other error propagates
+    # so genuine SDK / schema / network regressions still surface.
+    sdk_client_class = get_attio_sdk_client_class()
+    probe_client = sdk_client_class(oauth2=attio_api_key)
+    try:
+        probe_client.records.post_v2_objects_object_records_query(
+            object="people",
+            filter_={},
+            limit=1,
+        )
+    except SDKError as exc:
+        if exc.status_code in (401, 403):
+            pytest.skip(
+                f"Attio credentials present but auth probe returned {exc.status_code}: {exc}",
+            )
+        raise
+
+
 @pytest.fixture
 def client(
     attio_api_key: str,
+    attio_auth_probe: None,
 ) -> Any:
     sdk_client_class = get_attio_sdk_client_class()
     return sdk_client_class(oauth2=attio_api_key)
