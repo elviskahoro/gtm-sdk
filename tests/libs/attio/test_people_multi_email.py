@@ -140,7 +140,7 @@ def test_update_person_merges_additional_emails(monkeypatch) -> None:
         ),
     )
     assert env.success is True
-    merged = patch_values[0]["email_addresses"]
+    merged = [ev["email_address"] for ev in patch_values[0]["email_addresses"]]
     assert sorted(merged) == ["a@example.com", "b@example.com"]
     assert any(w.code == "multiple_emails_added" for w in env.warnings)
 

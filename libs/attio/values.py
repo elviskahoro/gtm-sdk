@@ -63,6 +63,16 @@ def format_email_addresses_for_write(
     """Format email addresses for Attio person record write.
 
     Wraps each email in {"email_address": "..."} structure.
+
+    Gotcha: Attio's `email_addresses` attribute applies email validation and
+    rejects RFC-2606 reserved TLDs (`.test`, `.invalid`, `.example`, `.localhost`)
+    with the *misleading* error
+    ``An invalid value was passed to attribute with slug "email_addresses"``.
+    The error names the attribute, not the value, so it reads like a schema or
+    shape problem. It isn't — the writer below is shape-correct; the offending
+    input is a value with a reserved TLD. Commit ``5ac70af`` misdiagnosed this
+    and disabled the writer entirely; AI-291 restored it. Use ``example.com``
+    (also RFC-reserved but accepted by Attio) for any probe/fixture emails.
     """
     if not emails:
         return None
@@ -195,20 +205,15 @@ def build_core_person_values(
 ) -> dict[str, Any]:
     values: dict[str, Any] = {}
 
-    # Note: email_addresses field writing is disabled due to Attio workspace
-    # schema compatibility. Email is used for matching via matching_attribute
-    # in UpsertPerson, but the field itself is not writable in this environment.
-    # TODO: Investigate Attio email_addresses attribute configuration.
-
-    # if email_addresses is not None:
-    #     formatted = format_email_addresses_for_write(email_addresses)
-    #     if formatted:
-    #         values["email_addresses"] = formatted
-    # elif not partial:
-    #     combined = normalize_email_address_list([input.email, *input.additional_emails])
-    #     formatted = format_email_addresses_for_write(combined)
-    #     if formatted:
-    #         values["email_addresses"] = formatted
+    if email_addresses is not None:
+        formatted = format_email_addresses_for_write(email_addresses)
+        if formatted:
+            values["email_addresses"] = formatted
+    elif not partial:
+        combined = normalize_email_address_list([input.email, *input.additional_emails])
+        formatted = format_email_addresses_for_write(combined)
+        if formatted:
+            values["email_addresses"] = formatted
 
     name = format_name(input.first_name, input.last_name)
     if name:
