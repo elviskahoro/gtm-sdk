@@ -134,6 +134,52 @@ def test_half_open_after_open_duration() -> None:
     assert breaker.allow_call() is True
 
 
+def test_half_open_allows_only_one_concurrent_probe() -> None:
+    """Under @modal.concurrent, a burst of callers must not all become probes."""
+    breaker, clock, _ = _make(
+        consecutive_failure_threshold=2,
+        open_duration_seconds=10.0,
+    )
+    breaker.record_failure()
+    breaker.record_failure()
+    assert breaker.state == State.OPEN
+
+    clock.advance(11.0)
+    # First caller in half-open gets the probe slot
+    assert breaker.allow_call() is True
+    # Every subsequent caller before the probe records is rejected
+    assert breaker.allow_call() is False
+    assert breaker.allow_call() is False
+
+    # Probe completes successfully — breaker closes and probe slot is released
+    breaker.record_success()
+    assert breaker.state == State.CLOSED
+    # In CLOSED, calls are no longer rationed
+    assert breaker.allow_call() is True
+    assert breaker.allow_call() is True
+
+
+def test_half_open_probe_slot_resets_after_reopen() -> None:
+    """If the probe fails, the breaker reopens and a fresh slot appears next cycle."""
+    breaker, clock, _ = _make(
+        consecutive_failure_threshold=2,
+        open_duration_seconds=10.0,
+    )
+    breaker.record_failure()
+    breaker.record_failure()
+
+    # First half-open cycle: probe fails
+    clock.advance(11.0)
+    assert breaker.allow_call() is True
+    breaker.record_failure()
+    assert breaker.state == State.OPEN
+
+    # Second half-open cycle: fresh probe slot
+    clock.advance(11.0)
+    assert breaker.allow_call() is True
+    assert breaker.allow_call() is False
+
+
 def test_half_open_success_closes() -> None:
     breaker, clock, transitions = _make(
         consecutive_failure_threshold=2,

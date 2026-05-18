@@ -598,6 +598,11 @@ def execute(plan: Iterable[AttioOp]) -> ExecutionResult:
 # Error type names that indicate Attio is unhealthy (transport-layer failures),
 # as opposed to per-payload data failures. Used to drive the circuit breaker so
 # that bad payloads from one source don't trip the breaker for every source.
+#
+# Intentionally excludes Attio's ``SDKDefaultError``: the generated SDK raises
+# it for any unmodeled response, which includes 4xx (caller/data errors) as
+# well as 5xx. Including it would let a single source with malformed payloads
+# open the breaker for every webhook source.
 _ATTIO_HEALTH_FAILURE_ERROR_TYPES: frozenset[str] = frozenset(
     {
         # httpx timeouts
@@ -613,9 +618,8 @@ _ATTIO_HEALTH_FAILURE_ERROR_TYPES: frozenset[str] = frozenset(
         "RemoteProtocolError",
         "NetworkError",
         "TransportError",
-        # Attio SDK errors that wrap transport failures / 5xx
+        # Attio SDK: no HTTP response received (network failure)
         "NoResponseError",
-        "SDKDefaultError",
     },
 )
 
