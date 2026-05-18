@@ -12,6 +12,7 @@ from src.attio.ops import (
     PersonRef,
     UpsertCompany,
     UpsertMeeting,
+    UpsertMention,
     UpsertNote,
     UpsertPerson,
 )
@@ -353,6 +354,43 @@ def test_handle_upsert_note_unresolved_ref_returns_failed_envelope(monkeypatch) 
     assert err.fatal is True
     list_notes_mock.assert_not_called()
     add_note_mock.assert_not_called()
+
+
+def test_handle_upsert_mention_unresolved_ref_returns_failed_envelope(monkeypatch) -> None:
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_mention = OP_HANDLERS[UpsertMention]
+
+    upsert_mention_mock = MagicMock()
+    monkeypatch.setattr(
+        "src.attio.export.libs_upsert_mention",
+        upsert_mention_mock,
+    )
+
+    envelope = _handle_upsert_mention(
+        UpsertMention(
+            mention_url="https://reddit.com/r/x/comments/abc",
+            last_action="mention_created",
+            source_platform="reddit",
+            source_id="abc",
+            mention_body="hello",
+            mention_timestamp=datetime(2026, 5, 10, 11, 55, 53, tzinfo=timezone.utc),
+            author_handle="u",
+            primary_keyword="kw",
+            related_person=PersonRef(attribute="email", value="missing@example.com"),
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is False
+    assert envelope.action == "failed"
+    assert envelope.record_id is None
+    assert len(envelope.errors) == 1
+    err = envelope.errors[0]
+    assert err.code == "unresolved_ref"
+    assert err.error_type == "UnresolvedRefError"
+    assert err.fatal is True
+    upsert_mention_mock.assert_not_called()
 
 
 def test_execution_result_body_failure(monkeypatch) -> None:
