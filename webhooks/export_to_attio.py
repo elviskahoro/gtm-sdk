@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import modal
+
+# trunk-ignore(pyrefly/missing-import)
 from fastapi import Response
 from modal import Image
 
