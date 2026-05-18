@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "setup": "PARENT_REPO=\"$(dirname \"$(git rev-parse --git-common-dir)\")/..\" && PRIMARY_REPO_ROOT=\"$(cd \"$PARENT_REPO\" && pwd)\"; [ ! -f .env.local ] && [ -f \"$PRIMARY_REPO_ROOT/.env.local\" ] && ln -s \"$PRIMARY_REPO_ROOT/.env.local\" .env.local; [ ! -L .agents ] && [ -d \"$PRIMARY_REPO_ROOT/.agents\" ] && ln -s \"$PRIMARY_REPO_ROOT/.agents\" .agents; [ ! -L .claude ] && [ -d \"$PRIMARY_REPO_ROOT/.claude\" ] && ln -s \"$PRIMARY_REPO_ROOT/.claude\" .claude; git submodule update --init --recursive && uv sync",
+    "run": "uv run elvis"
+  }
+}
