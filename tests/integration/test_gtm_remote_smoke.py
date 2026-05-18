@@ -7,6 +7,8 @@ import pytest
 
 from src.modal_app import MODAL_APP
 
+pytestmark = pytest.mark.integration
+
 REQUIRED_ENV_VARS = [
     "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET",

@@ -37,7 +37,8 @@ def test_build_optional_person_values_serializes_notes_and_company() -> None:
 
 @pytest.mark.xfail(
     reason="email_addresses writer disabled — re-enabled by backlog-202605172107-attio_reenable_email_addresses_writer-prompt.md",
-    strict=False,
+    raises=KeyError,
+    strict=True,
 )
 def test_build_core_person_values_combines_primary_and_additional_emails() -> None:
     inp = PersonInput(
