@@ -15,6 +15,7 @@ from src.attio.ops import (
     Ref,
     UpsertCompany,
     UpsertMeeting,
+    UpsertMention,
     UpsertNote,
     UpsertPerson,
 )
@@ -214,3 +215,49 @@ def test_upsert_company_defaults_preserve_existing_call_sites() -> None:
     op = UpsertCompany(domain="example.test")
     assert op.industry is None
     assert op.merge_only_if_empty == []
+
+
+# AI-286 regression: identity invariant must fire on every construction path,
+# not only on an explicit `model_validate` call. See src/attio/ops.py:101-108.
+
+
+def test_upsert_person_validator_fires_via_model_validate() -> None:
+    with pytest.raises(ValidationError):
+        UpsertPerson.model_validate({"matching_attribute": "email"})
+
+
+def test_upsert_person_validator_fires_for_linkedin_matching_attribute() -> None:
+    with pytest.raises(ValidationError):
+        UpsertPerson(matching_attribute="linkedin", email="a@b.com")
+
+
+def test_upsert_person_validator_fires_for_github_handle_matching_attribute() -> None:
+    with pytest.raises(ValidationError):
+        UpsertPerson(matching_attribute="github_handle", email="a@b.com")
+
+
+def test_person_ref_rejects_missing_attribute() -> None:
+    with pytest.raises(ValidationError):
+        PersonRef(value="a@b.com")  # type: ignore[call-arg]
+
+
+def test_person_ref_rejects_invalid_attribute_literal() -> None:
+    with pytest.raises(ValidationError):
+        PersonRef(attribute="phone", value="555")  # type: ignore[arg-type]
+
+
+def test_upsert_mention_related_person_validates_nested_person_ref() -> None:
+    with pytest.raises(ValidationError):
+        UpsertMention.model_validate(
+            {
+                "mention_url": "https://example.test/m/1",
+                "last_action": "mention_created",
+                "source_platform": "octolens",
+                "source_id": "abc",
+                "mention_body": "hi",
+                "mention_timestamp": "2026-05-14T00:00:00Z",
+                "author_handle": "@x",
+                "primary_keyword": "foo",
+                "related_person": {"attribute": "phone", "value": "555"},
+            },
+        )
