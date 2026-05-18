@@ -301,9 +301,6 @@ _HUMAN_OWNED_MENTION_FIELDS: frozenset[str] = frozenset(
     {"triage_status", "related_company"},
 )
 
-# Fields set at record creation that must never be overwritten by an update.
-_IMMUTABLE_AFTER_CREATE: frozenset[str] = frozenset({"source_platform", "source_id"})
-
 
 def _scalar_value(v: Any) -> list[dict[str, Any]]:
     """Wrap a scalar into Attio's standard ``[{"value": ...}]`` list shape."""
@@ -319,7 +316,17 @@ def _multiselect_values(options: list[str]) -> list[dict[str, str]]:
     return [{"option": opt} for opt in options]
 
 
-def build_create_mention_values(input: MentionInput) -> dict[str, Any]:
+def build_mention_values(input: MentionInput) -> dict[str, Any]:
+    """Build the Attio values payload for a social_mention assert call.
+
+    Always includes `source_platform` and `source_id`. Attio's assert endpoint
+    may create the record on the first delivery the system processes for a
+    given `mention_url` (e.g. a `mention_updated` that arrives before its
+    `mention_created`), and the new record must carry its source identity.
+    Both fields are derived from the webhook payload itself and are invariant
+    per mention URL, so re-sending them on a true update is a no-op rewrite
+    of identical values.
+    """
     values: dict[str, Any] = {}
 
     values["mention_url"] = _scalar_value(input.mention_url)
@@ -370,13 +377,6 @@ def build_create_mention_values(input: MentionInput) -> dict[str, Any]:
     for forbidden in _HUMAN_OWNED_MENTION_FIELDS:
         assert forbidden not in values, f"Webhook tried to write {forbidden!r}"
 
-    return values
-
-
-def build_update_mention_values(input: MentionInput) -> dict[str, Any]:
-    values = build_create_mention_values(input)
-    for immutable in _IMMUTABLE_AFTER_CREATE:
-        values.pop(immutable, None)
     return values
 
 

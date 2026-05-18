@@ -5,9 +5,8 @@ from datetime import datetime
 from libs.attio.models import MentionInput, PersonInput
 from libs.attio.values import (
     build_core_person_values,
-    build_create_mention_values,
+    build_mention_values,
     build_optional_person_values,
-    build_update_mention_values,
     format_linkedin,
     format_location,
     normalize_linkedin_url,
@@ -97,8 +96,8 @@ def _sample_mention() -> MentionInput:
 HUMAN_OWNED = {"triage_status", "related_person", "related_company"}
 
 
-def test_create_builder_includes_all_writable_fields() -> None:
-    values = build_create_mention_values(_sample_mention())
+def test_mention_builder_includes_all_writable_fields() -> None:
+    values = build_mention_values(_sample_mention())
     assert "mention_url" in values
     assert "source_platform" in values
     assert "source_id" in values
@@ -107,27 +106,28 @@ def test_create_builder_includes_all_writable_fields() -> None:
     assert "octolens_tags" in values
 
 
-def test_create_builder_never_includes_human_owned_fields() -> None:
-    values = build_create_mention_values(_sample_mention())
+def test_mention_builder_never_includes_human_owned_fields() -> None:
+    values = build_mention_values(_sample_mention())
     assert HUMAN_OWNED.isdisjoint(values.keys())
 
 
-def test_update_builder_omits_immutable_fields() -> None:
-    values = build_update_mention_values(_sample_mention())
-    assert "source_platform" not in values
-    assert "source_id" not in values
+def test_mention_builder_keeps_source_identity_on_update_action() -> None:
+    """Regression for AI-290: source identity must survive `mention_updated`
+    so that an assert-create from a missed `mention_created` still lands a
+    complete record.
+    """
+    sample = _sample_mention()
+    sample.last_action = "mention_updated"
+    values = build_mention_values(sample)
+    assert "source_platform" in values
+    assert "source_id" in values
 
 
-def test_update_builder_never_includes_human_owned_fields() -> None:
-    values = build_update_mention_values(_sample_mention())
-    assert HUMAN_OWNED.isdisjoint(values.keys())
-
-
-def test_create_builder_handles_null_optionals() -> None:
+def test_mention_builder_handles_null_optionals() -> None:
     sample = _sample_mention()
     sample.mention_title = None
     sample.subreddit = None
-    values = build_create_mention_values(sample)
+    values = build_mention_values(sample)
     assert "mention_body" in values
 
 

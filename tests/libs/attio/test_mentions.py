@@ -47,8 +47,15 @@ def test_upsert_mention_calls_assert_endpoint() -> None:
     assert envelope.record_id == "rec-1"
 
 
-def test_upsert_mention_update_path_omits_immutables() -> None:
-    """The update value builder must omit source_platform / source_id."""
+def test_upsert_mention_update_path_preserves_source_identity() -> None:
+    """Regression for AI-290.
+
+    The assert endpoint creates the record on the first delivery the system
+    processes for a `mention_url`. If that first delivery happens to be a
+    `mention_updated` (e.g. the create event was dropped or replayed
+    out of order), the new record must still carry source_platform /
+    source_id — otherwise it lands without its required identity fields.
+    """
     client = _mock_client_with_response("rec-1")
     with (
         patch("libs.attio.mentions.get_client", return_value=client),
@@ -62,5 +69,5 @@ def test_upsert_mention_update_path_omits_immutables() -> None:
     # data_obj is the assert-request Pydantic model from the Attio SDK;
     # `values` is accessible as a pydantic field.
     values = data_obj.values
-    assert "source_platform" not in values
-    assert "source_id" not in values
+    assert "source_platform" in values
+    assert "source_id" in values
