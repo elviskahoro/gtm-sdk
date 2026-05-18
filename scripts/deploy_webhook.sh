@@ -34,6 +34,16 @@ cd "${REPO_ROOT}"
 BACKUP_DIR="tmp/webhook-deploy-bak"
 LOCK_DIR="tmp/webhook-deploy.lock"
 
+# Flipped to 1 only after this invocation has written a fresh backup of the
+# current handler (see the "backup" block below). The EXIT trap checks this
+# before touching webhooks/, so a stale backup left behind by a prior failed
+# run can never be restored on top of the current HEAD — without this guard,
+# an early failure (e.g. during Modal/GCS preflight) would exit through the
+# trap and copy a stale `tmp/webhook-deploy-bak/${HANDLER}.py` over the
+# working tree, dirtying or reverting it even though this run never
+# substituted the placeholder.
+BACKUP_FRESHLY_WRITTEN=0
+
 # Discover valid handlers: any .py file in webhooks/ that uses the
 # WebhookModelToReplace placeholder pattern. New handlers (e.g. when
 # export_to_gcp_raw adopts the placeholder pattern) are picked up
@@ -114,11 +124,18 @@ in_array() {
 # value, so this is safe before HANDLER is set: the trap simply does
 # nothing when no backup file exists.
 #
+# Gated on BACKUP_FRESHLY_WRITTEN: until this invocation has written its
+# own backup, the file in BACKUP_DIR (if any) belongs to a prior run and
+# may not match the current HEAD. Restoring it would dirty the worktree
+# on an early-failure path where no placeholder substitution ever
+# happened.
+#
 # Uses \cp -f to bypass any cp -i alias the user might have set; without
 # the backslash, an interactive cp would silently answer "no" and leave
 # the substituted form in place — the classic pitfall this script exists
 # to prevent.
 restore_current_handler() {
+  [[ ${BACKUP_FRESHLY_WRITTEN-0} -eq 1 ]] || return 0
   local backup="${BACKUP_DIR}/${HANDLER-}.py"
   [[ -f ${backup} ]] || return 0
   \cp -f "${backup}" "webhooks/${HANDLER}.py"
@@ -311,12 +328,13 @@ fi
 # HEAD; the new backup we're about to write is the committed form.
 #
 # The trap was already installed up at the lock-acquisition block so the
-# lock is always released. restore_current_handler is a no-op until this
-# backup exists (it returns early when ${BACKUP_DIR}/${HANDLER}.py is
-# missing), so installing the trap early is safe.
+# lock is always released. restore_current_handler is a no-op until
+# BACKUP_FRESHLY_WRITTEN flips to 1 below, so installing the trap early
+# can never clobber the worktree with a stale backup from a prior run.
 mkdir -p "${BACKUP_DIR}"
 rm -f "${BACKUP_DIR}"/*.py
 \cp -f "${HANDLER_FILE}" "${BACKUP_DIR}/${HANDLER}.py"
+BACKUP_FRESHLY_WRITTEN=1
 
 # --- deploy loop -----------------------------------------------------------
 
