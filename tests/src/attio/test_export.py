@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -356,7 +357,9 @@ def test_handle_upsert_note_unresolved_ref_returns_failed_envelope(monkeypatch) 
     add_note_mock.assert_not_called()
 
 
-def test_handle_upsert_mention_unresolved_ref_returns_failed_envelope(monkeypatch) -> None:
+def test_handle_upsert_mention_unresolved_ref_returns_failed_envelope(
+    monkeypatch,
+) -> None:
     from src.attio.export import OP_HANDLERS
 
     _handle_upsert_mention = OP_HANDLERS[UpsertMention]
