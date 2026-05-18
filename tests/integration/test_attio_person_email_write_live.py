@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import time
+import secrets
 
 from libs.attio.models import PersonInput
 from libs.attio.people import add_person
@@ -8,6 +8,8 @@ from libs.attio.people import add_person
 
 def test_attio_person_create_persists_email_addresses_wrapped_shape(
     attio_api_key: str,  # noqa: ARG001 — fixture handles credential skip
+    created_people_record_ids: list[str],
+    cleanup_people_records: None,  # noqa: ARG001 — autouse-style teardown
 ) -> None:
     # Regression guard for the 5ac70af disabling — the wrapped
     # `[{"email_address": "..."}]` shape must round-trip through Attio.
@@ -18,7 +20,10 @@ def test_attio_person_create_persists_email_addresses_wrapped_shape(
     # `An invalid value was passed to attribute with slug "email_addresses"`,
     # which is what fooled the 5ac70af author into thinking the shape was wrong.
     # See libs/attio/values.py::format_email_addresses_for_write for the same note.
-    email = f"probe+{int(time.time())}@example.com"
+    #
+    # token_hex (not time.time()) so same-second reruns don't collide on
+    # Attio's email-uniqueness constraint.
+    email = f"probe+{secrets.token_hex(8)}@example.com"
     envelope = add_person(
         PersonInput(
             email=email,
@@ -28,5 +33,6 @@ def test_attio_person_create_persists_email_addresses_wrapped_shape(
     )
     assert envelope.success, envelope
     assert envelope.record_id, envelope
+    created_people_record_ids.append(envelope.record_id)
     person = envelope.meta["person"]
     assert email in person["email_addresses"], person
