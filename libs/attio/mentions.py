@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
-
 from libs.attio.attributes import ensure_select_options
 from libs.attio.client import get_client
 from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
 from libs.attio.errors import classify_error
 from libs.attio.models import MentionInput
 from libs.attio.sdk_boundary import build_assert_record_request
-from libs.attio.values import (
-    build_create_mention_values,
-    build_update_mention_values,
-)
+from libs.attio.values import build_mention_values
 
 _MENTION_OBJECT = "social_mention"
 # Select attributes on social_mention whose option vocabularies are open-ended
@@ -29,12 +24,6 @@ _SINGLE_SELECT_FIELDS: tuple[str, ...] = (
 _MULTISELECT_FIELDS: tuple[str, ...] = ("keywords", "octolens_tags")
 
 
-def _build_values(input: MentionInput) -> dict[str, Any]:
-    if input.last_action == "mention_created":
-        return build_create_mention_values(input)
-    return build_update_mention_values(input)
-
-
 def upsert_mention(input: MentionInput) -> ReliabilityEnvelope:
     """Idempotent upsert against the ``social_mention`` custom object.
 
@@ -42,8 +31,11 @@ def upsert_mention(input: MentionInput) -> ReliabilityEnvelope:
     The endpoint creates the record if no match exists, or updates the
     single match in place. ``mention_url`` is declared ``is_unique`` in
     the object schema, so multi-match is impossible by construction.
+
+    The same value payload is used for create and update — see
+    `build_mention_values` for why source identity fields are always sent.
     """
-    values = _build_values(input)
+    values = build_mention_values(input)
     try:
         _ensure_option_vocabulary(input)
         with get_client() as client:
