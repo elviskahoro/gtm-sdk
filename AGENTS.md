@@ -52,6 +52,10 @@ The pitfalls below explain why `scripts/deploy_webhook.sh` is shaped the way it 
 - **Wrap the loop in a `trap … EXIT` that restores only the current handler file (and removes its `.bak` sidecar)** so the working tree restores even if the loop dies mid-way. Do *not* glob `tmp/webhook-deploy-bak/*.py webhooks/`: a stale backup from a previous run for a different handler would clobber an unrelated `webhooks/` file, and a `sed -i.bak` sidecar left behind by a signal between the `sed` and the `rm -f *.bak` would survive the restore and leave `webhooks/` dirty. `scripts/deploy_webhook.sh` scopes the restore to `${HANDLER}` and deletes the sidecar inside the same trap.
 - **Serialize concurrent invocations of the deploy helper.** Two terminals can both pass the clean-tree preflight and then race on the same handler file and shared `tmp/webhook-deploy-bak/` state — one process can delete the other's restore source, or one deploy can pick up the other's substitution. `scripts/deploy_webhook.sh` uses an atomic `mkdir tmp/webhook-deploy.lock` as a portable advisory lock and releases it from the EXIT trap.
 
+### Registry
+
+`gtm webhook sync` regenerates `webhooks/registry.yaml` (gitignored) by joining `modal app list` with the Hookdeck API. Run it after any deploy or Hookdeck wiring change. Use `gtm webhook list` to inspect the cached registry. The file is gitignored because it contains personal Modal URLs and Hookdeck IDs that don't belong in OSS — see `webhooks/README.md`.
+
 ## Telemetry
 
 OTEL via `libs/telemetry.py`. Activated only when one of these is set: `HYPERDX_API_KEY`, `HYPERDX_OTLP_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`. Otherwise the tracer is a no-op — don't add fallback logging "just in case."

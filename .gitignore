@@ -31,3 +31,7 @@ api/samples/**/evt_*.json
 .dolt/
 *.db
 .beads-credential-key
+
+# Webhook URL registry — generated locally from Modal + Hookdeck APIs.
+# Contains personal Modal URLs and Hookdeck IDs that don't belong in OSS.
+webhooks/registry.yaml
