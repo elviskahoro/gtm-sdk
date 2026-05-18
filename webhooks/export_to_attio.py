@@ -4,9 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import modal
-
-# trunk-ignore(pyrefly/missing-import)
-from fastapi import Response
 from modal import Image
 
 from src.attio.export import execute
@@ -23,7 +20,7 @@ from src.fathom.webhook.message import (
     Webhook as FathomMessageWebhook,
 )
 from src.octolens.webhook import (
-    Webhook as OctolensMentionWebhook,
+    Webhook as OctolensWebhook,
 )
 from src.rb2b.webhook.visit import (
     Webhook as Rb2bVisitWebhook,
@@ -57,7 +54,7 @@ image = image.add_local_python_source(
 app = modal.App(name=APP_NAME, image=image)
 
 
-def _export(webhook: WebhookModel) -> str | Response:
+def _export(webhook: WebhookModel) -> str:
     if not webhook.attio_is_valid_webhook():
         return webhook.attio_get_invalid_webhook_error_msg()
     plan = webhook.attio_get_operations()
@@ -74,7 +71,7 @@ def _export(webhook: WebhookModel) -> str | Response:
 )
 @modal.fastapi_endpoint(method="POST", docs=True)
 @modal.concurrent(max_inputs=1000)
-def web(webhook: WebhookModel) -> str | Response:
+def web(webhook: WebhookModel) -> str:
     return _export(webhook)
 
 
