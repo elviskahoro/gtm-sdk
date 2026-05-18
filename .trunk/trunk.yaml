@@ -157,6 +157,7 @@ lint:
   ignore:
     - linters: [ALL]
       paths:
+        - .beads/**
         - data/**
         - tmp/**
         - worktrees/**
@@ -242,3 +243,8 @@ actions:
 
   disabled:
     - trunk-fmt-pre-commit
+
+merge:
+  required_statuses:
+    - Trunk Check
+    - pytest (Dagger)

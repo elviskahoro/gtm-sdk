@@ -28,26 +28,33 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 ## Webhook deploys
 
-`webhooks/export_to_attio.py` and `webhooks/export_to_gcp_etl.py` ship one Modal app per webhook source, but the file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
+`webhooks/export_to_attio.py` and `webhooks/export_to_gcp_etl.py` ship one Modal app per webhook source, but each file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
 
-To deploy one source:
+Use `scripts/deploy_webhook.sh <handler> <source>` (or `<handler> --all`) to substitute the placeholder, deploy, and restore in one step. The script encodes every footgun in the "Scripted deploy pitfalls" section below.
 
-1. Substitute `WebhookModelToReplace` → the target class (e.g. `CaldotcomBookingWebhook`, `FathomCallWebhook`, `FathomMessageWebhook`, `OctolensMentionWebhook`, `Rb2bVisitWebhook`).
-2. `infisical run ... -- uv run modal deploy webhooks/<file>.py` (Modal app name comes from `WebhookModel.attio_get_app_name()` — e.g. `CaldotcomBookingWebhook` → `export-to-attio-from-calcom-bookings`).
-3. Restore the `WebhookModelToReplace` placeholder so the working tree matches `main`.
+```shell
+set -a && source .env.local && set +a   # once per shell
+scripts/deploy_webhook.sh export_to_attio CaldotcomBookingWebhook
+scripts/deploy_webhook.sh export_to_gcp_etl --all
+```
 
-Do not commit the substituted form. Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols.
+Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols. Do not commit the substituted form; the script's `trap` restores the placeholder even if `modal deploy` fails or the script is interrupted.
 
 ### Scripted deploy pitfalls
 
-When looping over webhook sources in a shell script:
+The pitfalls below explain why `scripts/deploy_webhook.sh` is shaped the way it is. The script encodes the answer to each one; keep them here as design rationale for anyone touching the script:
 
 - **`unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET` before `infisical run`.** Otherwise the parent shell's personal Modal tokens win over the dlthub-workspace tokens Infisical injects, and deploys land in the wrong workspace.
 - **Wrap with `uv run modal deploy`, not bare `modal deploy`.** Bare `modal` runs outside the project venv and can't import `src.*` packages registered in `pyproject.toml` → `ModuleNotFoundError: No module named 'src.fathom'`.
 - **Use `\cp -f` to bypass `cp -i` aliases.** A `cp` alias to interactive mode will silently answer "no" to the placeholder-restore step, leaving the previous iteration's substitution in place and deploying the wrong source on the next pass.
 - **Do not store `infisical run --token … --` in a shell variable** and then expand it inline (`$INF modal deploy …`). Zsh treats the whole variable as `argv[0]` (`command not found: infisical run …`) and the service token leaks to stderr and shell history. Use a function or a bash array.
 - **Preflight Modal secrets and GCS buckets before the loop.** A missing `modal.Secret.from_name(...)` aborts after the image build; a missing GCS bucket aborts at first write. Check with `infisical run … -- uv run modal secret list` and `gcloud storage ls --project=dlthub-sandbox`.
-- **Wrap the loop in `trap '\cp -f tmp/webhook-deploy-bak/*.py webhooks/' EXIT`** so the working tree restores even if the loop dies mid-way.
+- **Wrap the loop in a `trap … EXIT` that restores only the current handler file (and removes its `.bak` sidecar)** so the working tree restores even if the loop dies mid-way. Do *not* glob `tmp/webhook-deploy-bak/*.py webhooks/`: a stale backup from a previous run for a different handler would clobber an unrelated `webhooks/` file, and a `sed -i.bak` sidecar left behind by a signal between the `sed` and the `rm -f *.bak` would survive the restore and leave `webhooks/` dirty. `scripts/deploy_webhook.sh` scopes the restore to `${HANDLER}` and deletes the sidecar inside the same trap.
+- **Serialize concurrent invocations of the deploy helper.** Two terminals can both pass the clean-tree preflight and then race on the same handler file and shared `tmp/webhook-deploy-bak/` state — one process can delete the other's restore source, or one deploy can pick up the other's substitution. `scripts/deploy_webhook.sh` uses an atomic `mkdir tmp/webhook-deploy.lock` as a portable advisory lock and releases it from the EXIT trap.
+
+### Registry
+
+`gtm webhook sync` regenerates `webhooks/registry.yaml` (gitignored) by joining `modal app list` with the Hookdeck API. Run it after any deploy or Hookdeck wiring change. Use `gtm webhook list` to inspect the cached registry. The file is gitignored because it contains personal Modal URLs and Hookdeck IDs that don't belong in OSS — see `webhooks/README.md`.
 
 ## Telemetry
 
@@ -103,3 +110,51 @@ If you finish a task and want to summarize, output it as your final response. Do
 ## Testing
 
 `uv run pytest`. Importlib mode is already configured. Mirror the source layout when adding tests.
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

@@ -35,6 +35,8 @@ dependencies = [
   "resend>=2.30.0",
   "uuid7>=0.1.0",
   "dagger-io>=0.20.8",
+  "pyyaml>=6.0.3",
+  "types-pyyaml>=6.0.12.20260510",
 ]
 
 [project.optional-dependencies]
@@ -48,7 +50,10 @@ exclude = ["tests*"]
 gtm = "cli.main:run"
 
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not integration'"
+markers = [
+  "integration: tests that hit live external APIs (require credentials; run with `-m integration`)",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]

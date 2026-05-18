@@ -20,7 +20,7 @@ from src.fathom.webhook.message import (
     Webhook as FathomMessageWebhook,
 )
 from src.octolens.webhook import (
-    Webhook as OctolensMentionWebhook,
+    Webhook as OctolensWebhook,
 )
 from src.rb2b.webhook.visit import (
     Webhook as Rb2bVisitWebhook,
