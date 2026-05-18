@@ -103,19 +103,24 @@ in_array() {
   return 1
 }
 
-# Restore every backed-up handler from tmp/webhook-deploy-bak/ to webhooks/.
+# Restore the current handler's backup over webhooks/<handler>.py. Scoped
+# explicitly to the handler being deployed so a stale .py in BACKUP_DIR
+# (e.g. left behind by a future code change that skips the clear-at-start
+# step) cannot clobber an unrelated webhooks/ file. Belt-and-suspenders
+# alongside the rm -f in the backup setup block.
+#
+# Reads HANDLER from the global scope — the trap captures it by name, not
+# value, so this is safe before HANDLER is set: the trap simply does
+# nothing when no backup file exists.
+#
 # Uses \cp -f to bypass any cp -i alias the user might have set; without
 # the backslash, an interactive cp would silently answer "no" and leave
 # the substituted form in place — the classic pitfall this script exists
 # to prevent.
-restore_all() {
-  if [[ -d ${BACKUP_DIR} ]]; then
-    local backup
-    for backup in "${BACKUP_DIR}"/*.py; do
-      [[ -e ${backup} ]] || continue
-      \cp -f "${backup}" "webhooks/$(basename "${backup}")"
-    done
-  fi
+restore_current_handler() {
+  local backup="${BACKUP_DIR}/${HANDLER-}.py"
+  [[ -f ${backup} ]] || return 0
+  \cp -f "${backup}" "webhooks/${HANDLER}.py"
 }
 
 # --- argument parsing -------------------------------------------------------
@@ -283,7 +288,7 @@ mkdir -p "${BACKUP_DIR}"
 rm -f "${BACKUP_DIR}"/*.py
 \cp -f "${HANDLER_FILE}" "${BACKUP_DIR}/${HANDLER}.py"
 
-trap 'restore_all' EXIT
+trap 'restore_current_handler' EXIT
 
 # --- deploy loop -----------------------------------------------------------
 
