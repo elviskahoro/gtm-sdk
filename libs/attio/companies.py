@@ -22,7 +22,6 @@ from libs.attio.sdk_boundary import (
 )
 from libs.attio.values import (
     format_company_description,
-    format_company_domains,
     format_company_name,
 )
 
