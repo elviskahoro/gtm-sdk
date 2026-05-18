@@ -27,8 +27,10 @@ jobs:
       - name: Install Python deps
         run: uv sync --frozen --all-extras --group dev
 
+      - name: Expose venv to subsequent steps
+        run: |
+          echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> "$GITHUB_ENV"
+          echo "${{ github.workspace }}/.venv/bin" >> "$GITHUB_PATH"
+
       - name: Trunk Check
         uses: trunk-io/trunk-action@v1
-        env:
-          VIRTUAL_ENV: ${{ github.workspace }}/.venv
-          PATH: ${{ github.workspace }}/.venv/bin:${{ env.PATH }}
