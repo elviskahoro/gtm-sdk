@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 
-language: "en-US"
+language: en-US
 
 reviews:
-  profile: "assertive"
+  profile: assertive
   high_level_summary: true
   poem: false
   review_status: true
@@ -14,23 +14,23 @@ reviews:
       - main
 
   path_instructions:
-    - path: "libs/**"
+    - path: libs/**
       instructions: |
         Each libs/<service>/ wraps exactly one external SDK/API. Flag any
         cross-lib imports (libs/<x> importing from libs/<y>) — coordination
         belongs in src/, not in adapters. Adapters must be callable in
         isolation with no orchestration or side effects.
-    - path: "src/**"
+    - path: src/**
       instructions: |
         Orchestration layer. Multi-step flows, Modal @app.function /
         @modal.fastapi_endpoint decorators live here. New endpoints must be
         added to _ENDPOINT_MODULES in src/app.py or their decorators won't
         register. Free tier caps the app at 8 web endpoints.
-    - path: "cli/**"
+    - path: cli/**
       instructions: |
         Thin Typer subapps: parse → preflight → call src/ → render.
         No business logic in cli/.
-    - path: "webhooks/**"
+    - path: webhooks/**
       instructions: |
         Standalone Modal apps deployed individually. Files use a
         WebhookModelToReplace placeholder — flag commits that leave a

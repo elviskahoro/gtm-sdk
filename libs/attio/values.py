@@ -380,13 +380,15 @@ def build_mention_values(input: MentionInput) -> dict[str, Any]:
     return values
 
 
-def build_tracking_event_values(input: TrackingEventInput) -> dict[str, list[dict]]:
+def build_tracking_event_values(
+    input: TrackingEventInput,
+) -> dict[str, list[dict[str, Any]]]:
     """Build the Attio values dict for a tracking_events record write.
 
     Omits optional slugs that are None / empty so we don't accidentally
     clobber existing values with a write of an empty payload.
     """
-    values: dict[str, list[dict]] = {
+    values: dict[str, list[dict[str, Any]]] = {
         "name": _scalar_value(input.name),
         "event_type": _select_value(input.event_type),
         "external_id": _scalar_value(input.external_id),

@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
 
 
-def _valid_kwargs() -> dict[str, object]:
+def _valid_kwargs() -> dict[str, Any]:
     return dict(
         external_id="rb2b:abc123",
         name="https://example.test/pricing",
@@ -40,10 +42,7 @@ def test_tracking_event_input_forbids_extra() -> None:
     from libs.attio.models import TrackingEventInput
 
     with pytest.raises(ValidationError):
-        TrackingEventInput(**_valid_kwargs(), bogus="x")
-
-
-from unittest.mock import MagicMock, patch
+        TrackingEventInput(**_valid_kwargs(), bogus="x")  # pyright: ignore[reportCallIssue]  # pyrefly: ignore[unexpected-keyword]
 
 
 @patch("libs.attio.tracking_events.get_client")
@@ -69,7 +68,7 @@ def test_find_or_create_tracking_event_miss_then_create(mock_get_client) -> None
     assert env.record_id == "te_new"
 
     # Query was called with the external_id filter
-    args, kwargs = client.records.post_v2_objects_object_records_query.call_args
+    _args, kwargs = client.records.post_v2_objects_object_records_query.call_args
     assert kwargs.get("object") == "tracking_events"
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -126,7 +127,7 @@ def test_upsert_person_github_handle_construction() -> None:
     assert op.github_url == "https://github.com/elviskahoro"
 
 
-def _valid_tracking_event_kwargs() -> dict[str, object]:
+def _valid_tracking_event_kwargs() -> dict[str, Any]:
     return dict(
         external_id="rb2b:abc123",
         name="https://example.test/pricing",
@@ -155,6 +156,8 @@ def test_upsert_tracking_event_with_refs() -> None:
         subject_company=CompanyRef(domain="example.test"),
         tags=["pricing", "enterprise"],
     )
+    assert op.subject_person is not None
+    assert op.subject_company is not None
     assert op.subject_person.attribute == "email"
     assert op.subject_person.value == "alice@example.test"
     assert op.subject_company.domain == "example.test"
@@ -165,15 +168,16 @@ def test_upsert_tracking_event_forbids_extra_fields() -> None:
     from src.attio.ops import UpsertTrackingEvent
 
     with pytest.raises(ValidationError):
-        UpsertTrackingEvent(**_valid_tracking_event_kwargs(), bogus="x")
+        UpsertTrackingEvent(**_valid_tracking_event_kwargs(), bogus="x")  # pyright: ignore[reportCallIssue]  # pyrefly: ignore[unexpected-keyword]
 
 
 def test_attio_op_union_discriminates_tracking_event() -> None:
     from src.attio.ops import UpsertTrackingEvent
 
     adapter = TypeAdapter(AttioOp)
-    raw = {"op_type": "upsert_tracking_event", **_valid_tracking_event_kwargs()}
-    raw["event_timestamp"] = raw["event_timestamp"].isoformat()
+    kwargs = _valid_tracking_event_kwargs()
+    kwargs["event_timestamp"] = kwargs["event_timestamp"].isoformat()
+    raw: dict[str, Any] = {"op_type": "upsert_tracking_event", **kwargs}
     op = adapter.validate_python(raw)
     assert isinstance(op, UpsertTrackingEvent)
 
