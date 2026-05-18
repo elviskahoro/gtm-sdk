@@ -9,6 +9,7 @@ from src.attio.ops import UpsertMention, UpsertPerson
 from src.octolens.webhook.mention import (
     Webhook,
     _extract_github_handle,  # pyright: ignore[reportPrivateUsage]
+    _sentiment_or_none,  # pyright: ignore[reportPrivateUsage]
     normalize_linkedin_profile_url,
     split_author_name,
 )
@@ -456,3 +457,44 @@ def test_github_real_fixture_produces_upsert_person_and_mention() -> None:
     assert mention_op.related_person is not None
     assert mention_op.related_person.attribute == "github_handle"
     assert mention_op.related_person.value == "AxelEspinosa94"
+
+
+# --- Sentiment normalization tests (AI-292) ---
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Positive", "Positive"),
+        ("Neutral", "Neutral"),
+        ("Negative", "Negative"),
+        ("positive", "Positive"),
+        ("neutral", "Neutral"),
+        ("negative", "Negative"),
+        ("POSITIVE", "Positive"),
+        ("  Negative  ", "Negative"),
+        ("nEuTrAl", "Neutral"),
+        ("mixed", None),
+        ("", None),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_sentiment_or_none_normalizes_case_and_whitespace(
+    raw: str | None,
+    expected: str | None,
+) -> None:
+    assert _sentiment_or_none(raw) == expected
+
+
+def test_lowercase_sentiment_label_reaches_attio_mention() -> None:
+    """Lower-case sentiment labels (as sent by live Octolens payloads) must
+    survive normalization and land on the Attio UpsertMention op."""
+    payload = json.loads((SAMPLES_DIR / SAMPLE_FILES[0]).read_text())
+    payload["data"]["sentimentLabel"] = "neutral"
+
+    webhook = Webhook.model_validate(payload)
+    ops = webhook.attio_get_operations()
+
+    mention_op = next(op for op in ops if isinstance(op, UpsertMention))
+    assert mention_op.sentiment == "Neutral"
