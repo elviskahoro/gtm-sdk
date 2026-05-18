@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
+from libs.attio.values import normalize_linkedin_url
 from libs.dlt.bucket_naming import etl_bucket_name
 from libs.rb2b import Webhook as Rb2bWebhook
 from src.rb2b.utils import (
@@ -122,7 +123,7 @@ class Webhook(Rb2bWebhook):
         ops: list[Any] = []
         domain = self._attio_domain()
         email = self.payload.business_email
-        linkedin = self.payload.linkedin_url
+        linkedin = normalize_linkedin_url(self.payload.linkedin_url)
 
         if domain:
             ops.append(
