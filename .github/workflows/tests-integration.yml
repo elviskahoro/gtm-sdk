@@ -13,9 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+
       - run: uv sync --frozen
       - name: Load secrets via Infisical
         uses: Infisical/secrets-action@v1.1.17
@@ -23,10 +25,12 @@ jobs:
           infisical_token: ${{ secrets.INFISICAL_TOKEN }}
           project_id: ${{ secrets.INFISICAL_PROJECT_ID }}
           environment: dev
+
       - name: Run integration tests
         run: |
           uv run pytest -m integration --junit-xml=junit.xml -o junit_family=xunit1
         continue-on-error: true
+
       - name: Upload Test Results to Trunk.io
         if: ${{ always() }}
         continue-on-error: true
