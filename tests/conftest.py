@@ -32,9 +32,26 @@ def modal_credentials_available() -> bool:
     return bool(token_id and token_secret)
 
 
+@pytest.fixture(scope="session")
+def attio_auth_probe(attio_api_key: str) -> None:
+    # Cheap auth probe so a stale/invalid ATTIO_API_KEY skips integration tests
+    # rather than 401-ing through every one. Runs once per session.
+    sdk_client_class = get_attio_sdk_client_class()
+    probe_client = sdk_client_class(oauth2=attio_api_key)
+    try:
+        probe_client.records.post_v2_objects_object_records_query(
+            object="people",
+            filter_={},
+            limit=1,
+        )
+    except Exception as exc:  # SDK wraps HTTP errors in its own types
+        pytest.skip(f"Attio credentials present but auth probe failed: {exc}")
+
+
 @pytest.fixture
 def client(
     attio_api_key: str,
+    attio_auth_probe: None,
 ) -> Any:
     sdk_client_class = get_attio_sdk_client_class()
     return sdk_client_class(oauth2=attio_api_key)

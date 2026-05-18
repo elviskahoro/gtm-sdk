@@ -48,7 +48,10 @@ exclude = ["tests*"]
 gtm = "cli.main:run"
 
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not integration'"
+markers = [
+  "integration: tests that hit live external APIs (require credentials; run with `-m integration`)",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
