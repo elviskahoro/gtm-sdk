@@ -32,6 +32,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
 BACKUP_DIR="tmp/webhook-deploy-bak"
+LOCK_DIR="tmp/webhook-deploy.lock"
 
 # Discover valid handlers: any .py file in webhooks/ that uses the
 # WebhookModelToReplace placeholder pattern. New handlers (e.g. when
@@ -121,6 +122,16 @@ restore_current_handler() {
   local backup="${BACKUP_DIR}/${HANDLER-}.py"
   [[ -f ${backup} ]] || return 0
   \cp -f "${backup}" "webhooks/${HANDLER}.py"
+  # If a signal lands between the `sed -i.bak` and the matching `rm -f`,
+  # the .bak sidecar survives and leaves webhooks/ dirty on the exact
+  # Ctrl-C path this script exists to make safe. Clean it here too.
+  rm -f "webhooks/${HANDLER}.py.bak"
+}
+
+# Released from the EXIT trap. Best-effort: rmdir fails harmlessly if the
+# lock was never acquired (e.g. exit before the lock block).
+release_lock() {
+  rmdir "${LOCK_DIR}" 2>/dev/null || true
 }
 
 # --- argument parsing -------------------------------------------------------
@@ -162,6 +173,25 @@ fi
 # The parent shell's personal Modal tokens silently override infisical-injected
 # workspace tokens — deploys land in the wrong workspace. Always unset.
 unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET
+
+# --- preflight: serialize invocations --------------------------------------
+
+# Two terminals can both pass the clean-tree preflight below and then race
+# on the same handler file and shared BACKUP_DIR state — one process can
+# delete the other's restore source, or one deploy can observe the other's
+# substitution. Use `mkdir` as a portable advisory lock: it is atomic on
+# every POSIX filesystem and avoids the dependencies of `flock(1)`, which
+# isn't installed on macOS by default.
+#
+# The lock is acquired *before* the working-tree preflight so the snapshot
+# below cannot become stale between check and mutation. It is released by
+# release_lock() in the EXIT trap, which is registered together with the
+# restore handler below.
+mkdir -p tmp
+if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+  fail "Another scripts/deploy_webhook.sh invocation appears to be running (lock dir ${LOCK_DIR} exists). If you are sure it is not, rmdir ${LOCK_DIR} and retry."
+fi
+trap 'restore_current_handler; release_lock' EXIT
 
 # --- preflight: working tree -----------------------------------------------
 
@@ -269,7 +299,7 @@ if [[ -n ${BUCKET_METHOD} ]]; then
   done
 fi
 
-# --- backup + trap (in that order, so trap never sees stale state) ---------
+# --- backup ----------------------------------------------------------------
 
 # Clear any stale backups from prior runs *before* taking the fresh one.
 # Otherwise a leftover backup from an earlier session — possibly for a
@@ -280,15 +310,13 @@ fi
 # Safe because the working-tree preflight above guarantees webhooks/ matches
 # HEAD; the new backup we're about to write is the committed form.
 #
-# The trap is registered *after* the fresh backup is in place, so even if a
-# later step fails before the first sed, the restore is a no-op against an
-# already-clean tree. Before this point, any failure leaves webhooks/
-# untouched, so no restore is needed.
+# The trap was already installed up at the lock-acquisition block so the
+# lock is always released. restore_current_handler is a no-op until this
+# backup exists (it returns early when ${BACKUP_DIR}/${HANDLER}.py is
+# missing), so installing the trap early is safe.
 mkdir -p "${BACKUP_DIR}"
 rm -f "${BACKUP_DIR}"/*.py
 \cp -f "${HANDLER_FILE}" "${BACKUP_DIR}/${HANDLER}.py"
-
-trap 'restore_current_handler' EXIT
 
 # --- deploy loop -----------------------------------------------------------
 
