@@ -46,7 +46,8 @@ def test_build_core_person_values_combines_primary_and_additional_emails() -> No
         additional_emails=["b@example.com", "a@example.com"],
     )
     values = build_core_person_values(inp)
-    assert sorted(values["email_addresses"]) == ["a@example.com", "b@example.com"]
+    emails = [ev["email_address"] for ev in values["email_addresses"]]
+    assert sorted(emails) == ["a@example.com", "b@example.com"]
 
 
 def test_build_core_person_values_partial_omits_emails_when_not_explicit() -> None:

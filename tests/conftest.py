@@ -17,12 +17,24 @@ from attio.errors import SDKError  # noqa: E402  # pyrefly: ignore[missing-impor
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
+# Attio API keys are 64 chars per the API's own validation
+# ("API Keys should be 64 characters long" — surfaced in the 401 body).
+# Skip rather than 401 when ATTIO_API_KEY is set to a shorter stub value, so
+# a dev shell that exports a placeholder doesn't masquerade as an auth failure.
+_ATTIO_KEY_MIN_LEN = 64
+
+
 @pytest.fixture(scope="session")
 def attio_api_key() -> str:
     key = os.environ.get("ATTIO_API_KEY", "").strip()
     if not key:
         pytest.skip(
-            "Attio integration tests gated by credentials preflight failure in tests/test_validation_type_error.py",
+            "Attio integration tests gated on ATTIO_API_KEY",
+        )
+    if len(key) < _ATTIO_KEY_MIN_LEN:
+        pytest.skip(
+            f"ATTIO_API_KEY looks like a stub ({len(key)} chars; "
+            f"expected >= {_ATTIO_KEY_MIN_LEN})",
         )
     return key
 
