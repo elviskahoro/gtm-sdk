@@ -19,6 +19,19 @@ if TYPE_CHECKING:
     import polars as pl  # pyrefly: ignore[missing-import] — optional extra (uv sync --extra marketplace)
 
 
+def _import_polars() -> Any:
+    """Import polars, raising a clearer error if the marketplace extra is missing."""
+    try:
+        import polars as pl  # pyrefly: ignore[missing-import] — optional extra
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "polars is required for marketplace DataFrame helpers. "
+            "Install it with: uv sync --extra marketplace",
+        ) from exc
+
+    return pl
+
+
 class MarketplaceProduct(BaseModel):
     """Pydantic model representing a marketplace product."""
 
@@ -66,7 +79,7 @@ def df_load_products(
     Returns:
         Polars DataFrame containing all products
     """
-    import polars as pl  # pyrefly: ignore[missing-import] — optional extra (uv sync --extra marketplace)
+    pl = _import_polars()
 
     df = pl.read_csv(
         source=csv_path,
@@ -191,7 +204,7 @@ def get_products_by_category(
     Returns:
         List of MarketplaceProduct instances matching the category
     """
-    import polars as pl  # pyrefly: ignore[missing-import] — optional extra (uv sync --extra marketplace)
+    pl = _import_polars()
 
     df = df_load_products(
         csv_path=csv_path,

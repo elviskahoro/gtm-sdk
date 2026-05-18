@@ -71,7 +71,7 @@ def df_clean_names(
         backend=nw.get_native_namespace(df),
     )
 
-    return df.drop(first_name_col, last_name_col).with_columns(
+    return df.with_columns(
         patch.get_column(first_name_col).cast(nw.String),
         patch.get_column(last_name_col).cast(nw.String),
     )
