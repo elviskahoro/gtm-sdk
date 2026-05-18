@@ -97,6 +97,7 @@ class Webhook(BaseModel):
 
     recorded_by: RecordedBy
     default_summary: DefaultSummary | None = None
+    # Parsed but intentionally unused: Fathom's CRM matches target a non-Attio CRM today. Wire ops once Fathom supports Attio.
     crm_matches: CrmMatches | None = None
 
     calendar_invitees: list[CalendarInvitee] = []
