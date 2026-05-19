@@ -37,7 +37,8 @@ def _caldotcom_status_to_attio(
         return "declined"
     if booking_status is None:
         return "accepted"
-    return _CALCOM_BOOKING_STATUS_TO_ATTIO.get(booking_status, "accepted")
+    normalized = booking_status.lower()
+    return _CALCOM_BOOKING_STATUS_TO_ATTIO.get(normalized, "accepted")
 
 
 def _first_host_email(payload: dict[str, Any]) -> str | None:
@@ -45,6 +46,15 @@ def _first_host_email(payload: dict[str, Any]) -> str | None:
         email = h.get("email")
         if email:
             return str(email)
+    organizer = payload.get("organizer") or {}
+    if organizer.get("email"):
+        return str(organizer["email"])
+    user = payload.get("user") or {}
+    if user.get("email"):
+        return str(user["email"])
+    primary = payload.get("userPrimaryEmail")
+    if primary:
+        return str(primary)
     return None
 
 
@@ -52,8 +62,20 @@ def _parse_start(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value
     if isinstance(value, str) and value:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     return None
+
+
+def _start_value(payload: dict[str, Any]) -> Any:
+    """Raw start value preserving original type (str or datetime) for downstream consumers."""
+    return payload.get("start") or payload.get("startTime")
+
+
+def _end_value(payload: dict[str, Any]) -> Any:
+    return payload.get("end") or payload.get("endTime")
 
 
 class Webhook(CalcomWebhook):
@@ -139,11 +161,18 @@ class Webhook(CalcomWebhook):
         uid = payload.get("uid") or payload.get("bookingUid")
         attendees = payload.get("attendees") or []
         host_email = _first_host_email(payload)
-        start = payload.get("start")
-        return bool(uid) and bool(attendees) and bool(host_email) and bool(start)
+        start_dt = _parse_start(_start_value(payload))
+        end_dt = _parse_start(_end_value(payload))
+        return (
+            bool(uid)
+            and bool(attendees)
+            and bool(host_email)
+            and isinstance(start_dt, datetime)
+            and isinstance(end_dt, datetime)
+        )
 
     def attio_get_invalid_webhook_error_msg(self) -> str:
-        return "Cal.com booking missing uid, attendees, host email, or start"
+        return "Cal.com booking missing one of: uid/bookingUid, attendees, host email (hosts/organizer/user/userPrimaryEmail), start/startTime, or end/endTime (or invalid timestamp format)"
 
     def attio_get_operations(self) -> list[Any]:
         from src.attio.ops import (
@@ -155,7 +184,9 @@ class Webhook(CalcomWebhook):
         payload = self.payload or {}
         uid = str(payload.get("uid") or payload.get("bookingUid") or "")
         host_email = _first_host_email(payload)
-        start_dt = _parse_start(payload.get("start"))
+        # Gate ensures start/end values exist; _parse_start normalizes them to datetime
+        start_dt: datetime | None = _parse_start(_start_value(payload))
+        end_dt: datetime | None = _parse_start(_end_value(payload))
         # Shared synthetic ical_uid lets Fathom's webhook write to the same Attio
         # record for the same meeting. Cal.com's icsUid is ignored on purpose:
         # Fathom does not see it, so using it would re-introduce duplicates.
@@ -198,6 +229,35 @@ class Webhook(CalcomWebhook):
                 ),
             )
 
+        if not (payload.get("hosts") or []):
+            fallback_email: str | None = None
+            for source_key in ("organizer", "user"):
+                candidate = payload.get(source_key) or {}
+                email = candidate.get("email")
+                if email:
+                    fallback_email = str(email)
+                    break
+            if fallback_email is None:
+                primary = payload.get("userPrimaryEmail")
+                if primary:
+                    fallback_email = str(primary)
+            if fallback_email is not None:
+                attendees.append(
+                    MeetingParticipant(
+                        email_address=fallback_email,
+                        is_organizer=True,
+                        status=_caldotcom_status_to_attio(booking_status),
+                    ),
+                )
+
+        # Gate check ensures start_dt/end_dt are datetime; assert for type checker
+        assert isinstance(start_dt, datetime), (
+            "start must be datetime after gate validation"
+        )
+        assert isinstance(end_dt, datetime), (
+            "end must be datetime after gate validation"
+        )
+
         return [
             UpsertMeeting(
                 external_ref=MeetingExternalRef(
@@ -207,8 +267,8 @@ class Webhook(CalcomWebhook):
                 ),
                 title=title,
                 description=description,
-                start=payload["start"],
-                end=payload["end"],
+                start=start_dt,
+                end=end_dt,
                 is_all_day=False,
                 participants=attendees,
             ),
