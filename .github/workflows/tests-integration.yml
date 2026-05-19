@@ -20,7 +20,7 @@ jobs:
 
       - run: uv sync --frozen
       - name: Load secrets via Infisical
-        uses: Infisical/secrets-action@v1.1.17
+        uses: Infisical/secrets-action@v1.0.16
         with:
           infisical_token: ${{ secrets.INFISICAL_TOKEN }}
           project_id: ${{ secrets.INFISICAL_PROJECT_ID }}
