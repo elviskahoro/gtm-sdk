@@ -127,6 +127,27 @@ def test_attio_creator_email_falls_back_to_organizer() -> None:
     )
 
 
+def test_hostless_created_still_adds_organizer_participant() -> None:
+    """Host-less BOOKING_CREATED must still emit an organizer participant.
+
+    Previously, when ``hosts[]`` was empty we walked the fallback chain for
+    ``ical_uid`` but emitted no organizer participant — so the Attio Meeting
+    record was missing the host. Re-add the organizer using the same fallback
+    chain ``creator_email`` uses.
+    """
+    w = _mutated_created_webhook(
+        hosts=[],
+        organizer={"email": "organizer@example.com"},
+    )
+    ops = w.attio_get_operations()
+    assert len(ops) == 1
+    op = ops[0]
+    assert isinstance(op, UpsertMeeting)
+    organizers = [p for p in op.participants if p.is_organizer]
+    assert len(organizers) == 1
+    assert organizers[0].email_address == "organizer@example.com"
+
+
 def test_attio_creator_email_falls_back_to_user_then_userPrimaryEmail() -> None:
     """``user.email`` outranks ``userPrimaryEmail``; both outranked by ``organizer``."""
     w_user = _mutated_created_webhook(

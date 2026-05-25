@@ -155,10 +155,22 @@ def _ops_for_created(
                 ),
             ),
         )
-    for h in payload.hosts:
+    if payload.hosts:
+        for h in payload.hosts:
+            participants.append(
+                MeetingParticipant(
+                    email_address=h.email,
+                    is_organizer=True,
+                    status="accepted",
+                ),
+            )
+    else:
+        # Host-less BOOKING_CREATED (older webhook versions, certain team
+        # configs): fall back to the same chain ``creator_email`` walked so the
+        # Attio Meeting still has a single organizer participant.
         participants.append(
             MeetingParticipant(
-                email_address=h.email,
+                email_address=host_email,
                 is_organizer=True,
                 status="accepted",
             ),
@@ -315,7 +327,10 @@ def _ops_for_no_show(
 
     if booking is not None:
         ical_uid = _ical_uid_for_old_state(booking)
-        organizer_email = next((h.email for h in booking.hosts if h.email), None)
+        # Use the same fallback chain as BOOKING_CREATED so meetings booked
+        # without ``hosts[]`` still resolve to the organizer's email in the
+        # audit row body.
+        organizer_email = booking.creator_email()
         start_iso = booking.start.isoformat()
     else:
         ical_uid = None
