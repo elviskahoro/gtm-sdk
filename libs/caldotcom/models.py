@@ -139,7 +139,10 @@ class BookingCreatedPayload(BaseModel):
     title: str | None = None
     description: str | None = None
     additionalNotes: str | None = None
-    status: Literal["accepted", "pending", "cancelled", "rejected"] | None = None
+    # Permissive: ``_caldotcom_status_to_attio`` normalizes unknown values
+    # safely. Locking this to a Literal would reject any future Cal.com
+    # status string and silently drop otherwise-valid bookings.
+    status: str | None = None
     hosts: list[BookingHost] = Field(default_factory=list)
     attendees: list[BookingAttendee] = Field(default_factory=list)
     bookingFieldsResponses: dict[str, Any] = Field(default_factory=dict)

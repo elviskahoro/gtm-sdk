@@ -11,6 +11,7 @@ from pathlib import Path
 
 import orjson
 import pytest
+from pydantic import ValidationError
 
 from libs.caldotcom import (
     BookingCancelledPayload,
@@ -145,7 +146,7 @@ def test_hookdeck_wrapped_body_unwraps() -> None:
 
 def test_discriminator_rejects_unknown_trigger() -> None:
     """Unknown triggerEvent should fail the union; safety net for new Cal.com triggers."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValidationError):
         Webhook.model_validate(
             {
                 "triggerEvent": "BOOKING_PAYMENT_INITIATED",

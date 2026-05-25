@@ -167,12 +167,15 @@ def _ops_for_created(
     else:
         # Host-less BOOKING_CREATED (older webhook versions, certain team
         # configs): fall back to the same chain ``creator_email`` walked so the
-        # Attio Meeting still has a single organizer participant.
+        # Attio Meeting still has a single organizer participant. Use the
+        # mapped booking status here (not hard-coded ``accepted``) so a
+        # cancelled/rejected booking with no ``hosts[]`` doesn't show the
+        # organizer as accepted in Attio.
         participants.append(
             MeetingParticipant(
                 email_address=host_email,
                 is_organizer=True,
-                status="accepted",
+                status=_caldotcom_status_to_attio(booking_status),
             ),
         )
 

@@ -127,6 +127,34 @@ def test_attio_creator_email_falls_back_to_organizer() -> None:
     )
 
 
+def test_unknown_booking_status_does_not_drop_payload() -> None:
+    """Cal.com may add new status strings; permissive ``status: str | None``
+    plus ``_caldotcom_status_to_attio`` keeps unknowns mapping to ``accepted``
+    instead of failing the discriminator and silently dropping the event."""
+    w = _mutated_created_webhook(status="rescheduled_pending_review")
+    assert w.attio_is_valid_webhook() is True
+    op = w.attio_get_operations()[0]
+    assert isinstance(op, UpsertMeeting)
+    # Attendee statuses fall back to ``accepted`` for unknown values.
+    assert all(p.status == "accepted" for p in op.participants if not p.is_organizer)
+
+
+def test_hostless_cancelled_organizer_mirrors_booking_status() -> None:
+    """Hostless CREATED with status=cancelled should map the organizer
+    participant to ``declined`` (matching the prior behavior), not the
+    hard-coded ``accepted`` that the first fix shipped with."""
+    w = _mutated_created_webhook(
+        hosts=[],
+        organizer={"email": "organizer@example.com"},
+        status="cancelled",
+    )
+    op = w.attio_get_operations()[0]
+    assert isinstance(op, UpsertMeeting)
+    organizers = [p for p in op.participants if p.is_organizer]
+    assert len(organizers) == 1
+    assert organizers[0].status == "declined"
+
+
 def test_hostless_created_still_adds_organizer_participant() -> None:
     """Host-less BOOKING_CREATED must still emit an organizer participant.
 
