@@ -125,8 +125,32 @@ def test_extract_exception_body_text_handles_text_bytes_and_object() -> None:
     assert sdk_boundary.extract_exception_body_text(Exception("fallback")) == "fallback"
 
 
-def test_uniqueness_conflict_detection_uses_body_text() -> None:
-    err = _ErrWithBody('{"type": "uniqueness_conflict"}')
+def test_uniqueness_conflict_detection_matches_real_attio_error_shape() -> None:
+    err = _ErrWithBody(
+        '{"status_code": 400, "type": "invalid_request_error",'
+        ' "code": "uniqueness_conflict", "message": "duplicate"}',
+    )
+    assert sdk_boundary.is_uniqueness_conflict(err) is True
+
+
+def test_uniqueness_conflict_detection_ignores_type_field() -> None:
+    # `type` is "invalid_request_error" in real Attio responses — only `code`
+    # distinguishes uniqueness conflicts. Matching on `type` would be a
+    # false-positive vector.
+    err = _ErrWithBody('{"type": "uniqueness_conflict", "code": "validation_type"}')
+    assert sdk_boundary.is_uniqueness_conflict(err) is False
+
+
+def test_uniqueness_conflict_detection_ignores_unrelated_substring_in_json() -> None:
+    err = _ErrWithBody(
+        '{"code": "validation_type",'
+        ' "message": "see docs about uniqueness_conflict for details"}',
+    )
+    assert sdk_boundary.is_uniqueness_conflict(err) is False
+
+
+def test_uniqueness_conflict_detection_falls_back_to_substring_for_non_json() -> None:
+    err = _ErrWithBody("plain text mentioning uniqueness_conflict somewhere")
     assert sdk_boundary.is_uniqueness_conflict(err) is True
 
 
