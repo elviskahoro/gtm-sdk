@@ -544,14 +544,24 @@ def update_person(
                 data=build_patch_record_request(values),
             )
 
-        response, warnings, skipped_fields = (
-            _attempt_person_write_with_optional_fallback(
-                write_func=_update_person,
-                core_values=core_values,
-                optional_values=optional_values,
-                strict=input.strict,
+        try:
+            response, warnings, skipped_fields = (
+                _attempt_person_write_with_optional_fallback(
+                    write_func=_update_person,
+                    core_values=core_values,
+                    optional_values=optional_values,
+                    strict=input.strict,
+                )
             )
-        )
+        except Exception as e:
+            # PATCH can hit a uniqueness conflict when a unique attribute
+            # (e.g. email_addresses) is updated to a value already held by
+            # another record. Suppress the SDK pydantic chain — see add_person.
+            if is_uniqueness_conflict(e):
+                raise AttioConflictError(
+                    "Person update conflicts with an existing record.",
+                ) from None
+            raise
         warnings = [*merge_warnings, *warnings]
 
         person = _extract_result(response.data)

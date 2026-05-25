@@ -14,11 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from libs.attio.companies import add_company
+from libs.attio.companies import add_company, update_company
 from libs.attio.errors import AttioConflictError
-from libs.attio.models import CompanyInput
-from libs.attio.people import add_person
-from libs.attio.models import PersonInput
+from libs.attio.models import CompanyInput, PersonInput
+from libs.attio.people import add_person, update_person
 
 
 class _FakeResponseValidationError(Exception):
@@ -72,3 +71,54 @@ def test_add_person_translates_uniqueness_conflict_without_cause_chain() -> None
 
     assert excinfo.value.__cause__ is None
     assert "Person already exists" in str(excinfo.value)
+
+
+def test_update_company_translates_uniqueness_conflict_without_cause_chain() -> None:
+    pydantic_like = ValueError("pydantic.ValidationError noise")
+    sdk_err = _FakeResponseValidationError(_UNIQUENESS_BODY)
+    sdk_err.__cause__ = pydantic_like
+
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.__exit__.return_value = False
+    client.records.patch_v2_objects_object_records_record_id_.side_effect = sdk_err
+
+    with patch("libs.attio.companies.get_client", return_value=client):
+        with pytest.raises(AttioConflictError) as excinfo:
+            update_company(
+                record_id="co_existing",
+                domain=None,
+                input=CompanyInput(name="Example", domain="other.com"),
+            )
+
+    assert excinfo.value.__cause__ is None
+    assert excinfo.value.existing_record_id == "rec_existing"
+    assert "Company update conflicts" in str(excinfo.value)
+
+
+def test_update_person_translates_uniqueness_conflict_without_cause_chain() -> None:
+    pydantic_like = ValueError("pydantic.ValidationError noise")
+    sdk_err = _FakeResponseValidationError(_UNIQUENESS_BODY)
+    sdk_err.__cause__ = pydantic_like
+
+    # update_person first GETs the existing record to read emails, then PATCHes.
+    # Only the PATCH should raise; GET returns a minimal record stub.
+    get_response = MagicMock()
+    get_response.data.values = {}
+
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.__exit__.return_value = False
+    client.records.get_v2_objects_object_records_record_id_.return_value = get_response
+    client.records.patch_v2_objects_object_records_record_id_.side_effect = sdk_err
+
+    with patch("libs.attio.people.get_client", return_value=client):
+        with pytest.raises(AttioConflictError) as excinfo:
+            update_person(
+                record_id="prs_existing",
+                email=None,
+                input=PersonInput(email="taken@example.com"),
+            )
+
+    assert excinfo.value.__cause__ is None
+    assert "Person update conflicts" in str(excinfo.value)

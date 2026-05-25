@@ -282,10 +282,23 @@ def update_company(
             record_id = query_response.data[0].id.record_id
 
         values = _build_values(input, partial=True)
-        response = client.records.patch_v2_objects_object_records_record_id_(
-            object="companies",
-            record_id=record_id,
-            data=build_patch_record_request(values),
-        )
+        try:
+            response = client.records.patch_v2_objects_object_records_record_id_(
+                object="companies",
+                record_id=record_id,
+                data=build_patch_record_request(values),
+            )
+        except Exception as e:
+            # PATCH can hit a uniqueness conflict when a unique attribute
+            # (e.g. domain) is updated to a value already held by another
+            # record. Suppress the SDK pydantic chain — see add_company.
+            if is_uniqueness_conflict(e):
+                existing_id = extract_existing_record_id(e)
+                raise AttioConflictError(
+                    "Company update conflicts with an existing record."
+                    + (f" Existing record ID: {existing_id}" if existing_id else ""),
+                    existing_record_id=existing_id,
+                ) from None
+            raise
 
         return _extract_result(response.data, created=False)

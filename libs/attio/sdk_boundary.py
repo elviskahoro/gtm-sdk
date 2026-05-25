@@ -146,11 +146,7 @@ def is_uniqueness_conflict(exc: BaseException) -> bool:
         # "code": "uniqueness_conflict", ...}. The SDK's pydantic models don't list
         # "uniqueness_conflict" in the Code Literal, so the SDK raises ResponseValidationError
         # before we ever see the parsed body — we re-parse here to avoid substring false positives.
-        if payload.get("code") == "uniqueness_conflict":
-            return True
-        if payload.get("type") == "uniqueness_conflict":
-            return True
-        return False
+        return payload.get("code") == "uniqueness_conflict"
     return "uniqueness_conflict" in body_text
 
 
