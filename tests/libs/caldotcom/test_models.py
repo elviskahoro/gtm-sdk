@@ -71,6 +71,7 @@ def test_cancelled_payload_carries_organizer_and_reason() -> None:
     p = w.payload
     assert isinstance(p, BookingCancelledPayload)
     assert p.uid == "7NTwtb1h8SnDMGJbGWNVXg"
+    assert p.organizer is not None
     assert p.organizer.email == "alex@example.com"
     assert p.cancellationReason == "redacted"
     assert p.cancelledBy == "alex@example.com"
@@ -88,6 +89,7 @@ def test_rescheduled_payload_has_both_old_and_new_times() -> None:
     # rescheduleStartTime is the NEW post-reschedule time (2026-05-14T11:00:00Z).
     assert p.rescheduleStartTime is not None
     assert p.rescheduleStartTime.isoformat().startswith("2026-05-14T11:00:00")
+    assert p.organizer is not None
     assert p.organizer.email == "alex@example.com"
     assert p.rescheduledBy == "sam@example.com"
 
