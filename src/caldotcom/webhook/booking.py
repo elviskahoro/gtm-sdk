@@ -107,7 +107,7 @@ def _ical_uid_for_old_state(
     existing record.
     """
     if isinstance(payload, BookingCreatedPayload):
-        host_email = next((h.email for h in payload.hosts if h.email), None)
+        host_email = payload.creator_email()
         if host_email is None:
             return None
         return canonical_meeting_uid(host_email=host_email, start=payload.start)
@@ -133,7 +133,7 @@ def _ops_for_created(
     _created_at: datetime,
 ) -> list[AttioOp]:
     """Find-or-create the Attio Meeting record. Unchanged semantics."""
-    host_email = next((h.email for h in payload.hosts if h.email), None)
+    host_email = payload.creator_email()
     if host_email is None:
         # Gate should have caught this; defensive fallback to avoid silent failure.
         return []
@@ -384,9 +384,14 @@ def _validation_result(payload: Any) -> tuple[bool, str]:
         ok = (
             bool(payload.uid)
             and bool(payload.attendees)
-            and any(h.email for h in payload.hosts)
+            and bool(payload.creator_email())
         )
-        return ok, ("" if ok else "BOOKING_CREATED missing uid/attendees/hosts[].email")
+        return ok, (
+            ""
+            if ok
+            else "BOOKING_CREATED missing uid/attendees or no host email "
+            "(hosts/organizer/user/userPrimaryEmail)"
+        )
     if isinstance(payload, (BookingCancelledPayload, BookingRescheduledPayload)):
         ok = (
             bool(payload.uid)

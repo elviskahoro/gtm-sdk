@@ -120,6 +120,16 @@ class Transcript(BaseModel):
 
 
 class BookingCreatedPayload(BaseModel):
+    """BOOKING_CREATED payload.
+
+    ``hosts`` is the canonical place to look for the meeting host email, but
+    real-world Cal.com bookings sometimes ship without it (e.g. older webhook
+    versions, team bookings configured a specific way). ``ai-4u6`` broadened
+    the extractor to fall back to ``organizer.email``, ``user.email``, and
+    ``userPrimaryEmail`` in that order. The helper ``creator_email`` below
+    walks the same chain so the gate doesn't silently drop valid payloads.
+    """
+
     model_config = ConfigDict(extra="allow")
 
     triggerEvent: Literal["BOOKING_CREATED"]
@@ -134,6 +144,26 @@ class BookingCreatedPayload(BaseModel):
     attendees: list[BookingAttendee] = Field(default_factory=list)
     bookingFieldsResponses: dict[str, Any] = Field(default_factory=dict)
     icsUid: str | None = None
+    # Fallback host-email sources for variants that omit ``hosts``. Kept as
+    # optional fields so the discriminator and ``extra="allow"`` work together.
+    organizer: Organizer | None = None
+    user: dict[str, Any] | None = None
+    userPrimaryEmail: str | None = None
+
+    def creator_email(self) -> str | None:
+        """Resolve the meeting creator's email across known Cal.com variants."""
+        for host in self.hosts:
+            if host.email:
+                return host.email
+        if self.organizer and self.organizer.email:
+            return self.organizer.email
+        if isinstance(self.user, dict):
+            user_email = self.user.get("email")
+            if isinstance(user_email, str) and user_email:
+                return user_email
+        if self.userPrimaryEmail:
+            return self.userPrimaryEmail
+        return None
 
 
 class BookingCancelledPayload(BaseModel):

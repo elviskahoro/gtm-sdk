@@ -98,9 +98,51 @@ def test_attio_get_operations_ignores_icsUid_in_favor_of_canonical_uid() -> None
 
 
 def test_attio_is_valid_webhook_false_when_host_email_missing() -> None:
-    """If hosts[] is empty, validation fails for CREATED."""
-    w = _mutated_created_webhook(hosts=[])
+    """All host-email fallback sources must be empty for CREATED to fail.
+
+    Regression guard for the broaden-the-gate work (ai-4u6): the previous
+    handler had a four-way fallback chain ``hosts → organizer → user →
+    userPrimaryEmail`` and real-world Cal.com payloads sometimes omit ``hosts``.
+    """
+    w = _mutated_created_webhook(
+        hosts=[],
+        organizer=None,
+        user=None,
+        userPrimaryEmail=None,
+    )
     assert w.attio_is_valid_webhook() is False
+
+
+def test_attio_creator_email_falls_back_to_organizer() -> None:
+    w = _mutated_created_webhook(
+        hosts=[],
+        organizer={"email": "organizer@example.com"},
+    )
+    assert w.attio_is_valid_webhook() is True
+    op = w.attio_get_operations()[0]
+    assert isinstance(op, UpsertMeeting)
+    assert op.external_ref.ical_uid == canonical_meeting_uid(
+        host_email="organizer@example.com",
+        start=datetime.fromisoformat("2026-05-20T15:00:00+00:00"),
+    )
+
+
+def test_attio_creator_email_falls_back_to_user_then_userPrimaryEmail() -> None:
+    """``user.email`` outranks ``userPrimaryEmail``; both outranked by ``organizer``."""
+    w_user = _mutated_created_webhook(
+        hosts=[],
+        organizer=None,
+        user={"email": "user@example.com"},
+    )
+    assert w_user.attio_is_valid_webhook() is True
+
+    w_primary = _mutated_created_webhook(
+        hosts=[],
+        organizer=None,
+        user=None,
+        userPrimaryEmail="primary@example.com",
+    )
+    assert w_primary.attio_is_valid_webhook() is True
 
 
 def test_attio_is_valid_webhook_false_when_start_missing() -> None:
