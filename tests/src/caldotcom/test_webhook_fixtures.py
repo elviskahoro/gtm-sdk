@@ -169,6 +169,33 @@ class TestOperationDispatch:
         assert body["new_start"].startswith("2026-05-14T11:00:00")
         assert body["rescheduled_by"] == "sam@example.com"
 
+    def test_cancelled_resolves_organizerless_payload_via_user_email(self) -> None:
+        """Hostless CANCELLED (no organizer) falls back through user/userPrimaryEmail.
+
+        Regression guard from roborev job 144 medium #2: requiring
+        ``payload.organizer.email`` rejects otherwise-valid CANCELLED events
+        from older Cal.com versions or specific webhook configs.
+        """
+        envelope = orjson.loads(
+            (
+                _REPO_ROOT / "api/samples/caldotcom.booking.cancelled.redacted.json"
+            ).read_bytes(),
+        )
+        envelope["payload"].pop("organizer", None)
+        envelope["payload"]["userPrimaryEmail"] = "alex@example.com"
+        w = Webhook.model_validate(envelope)
+        assert w.attio_is_valid_webhook() is True
+        ops = w.attio_get_operations()
+        assert len(ops) == 1
+        op = ops[0]
+        assert isinstance(op, EmitMeetingLifecycleEvent)
+        # ical_uid still resolves via the fallback chain.
+        expected = canonical_meeting_uid(
+            host_email="alex@example.com",
+            start=datetime(2026, 5, 6, 10, 30, 0, tzinfo=UTC),
+        )
+        assert op.meeting_ical_uid == expected
+
     def test_rescheduled_does_not_emit_upsert_meeting(self) -> None:
         """Critical: reschedule must NOT create a duplicate at the new ical_uid."""
         w = _load("api/samples/caldotcom.booking.rescheduled.redacted.json")
@@ -202,11 +229,13 @@ class TestOperationDispatch:
         body = json.loads(op.body_json)
         assert body["booking_lookup_succeeded"] is True
 
-    def test_no_show_with_api_failure_still_emits_with_null_ical(
+    def test_no_show_with_transient_api_failure_propagates(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """If Cal.com API errors, emit events anyway (audit > silent drop)."""
+        """Transient Cal.com failures (network/5xx) must propagate so Hookdeck
+        retries the webhook. Writing a partial audit row would mask the
+        failure and orphan the lifecycle event from its meeting."""
 
         class _FailingClient:
             def get_booking(self, _uid: str) -> BookingCreatedPayload | None:
@@ -222,6 +251,33 @@ class TestOperationDispatch:
             Webhook,
             "_calcom_client",
             lambda self: _FailingClient(),  # noqa: ARG005  # pyright: ignore[reportUnknownLambdaType]
+        )
+        w = _load("api/samples/caldotcom.booking.no_show_updated.redacted.json")
+        with pytest.raises(RuntimeError, match="calcom unreachable"):
+            w.attio_get_operations()
+
+    def test_no_show_with_deleted_booking_emits_partial_row(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """404 (booking deleted) is a terminal outcome — retrying won't bring
+        the booking back. Emit a partial audit row so the no-show signal
+        isn't lost."""
+
+        class _NotFoundClient:
+            def get_booking(self, _uid: str) -> BookingCreatedPayload | None:
+                return None  # 404 path in CalcomClient
+
+            def __enter__(self) -> _NotFoundClient:
+                return self
+
+            def __exit__(self, *_: Any) -> None:
+                return None
+
+        monkeypatch.setattr(
+            Webhook,
+            "_calcom_client",
+            lambda self: _NotFoundClient(),  # noqa: ARG005  # pyright: ignore[reportUnknownLambdaType]
         )
         w = _load("api/samples/caldotcom.booking.no_show_updated.redacted.json")
         ops = w.attio_get_operations()
