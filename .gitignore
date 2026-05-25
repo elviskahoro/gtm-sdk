@@ -27,12 +27,16 @@ api/samples/**/evt_*.json
 .env.*
 !.env.example
 
+# External tools
 # Beads / Dolt files (added by bd init)
 # .beads is a symlink to ../.beads so this repo shares the parent ai/ beads DB
-.beads
+.beads 
 .dolt/
 *.db
 .beads-credential-key
+
+# Braintrust
+.bt/*
 
 # Webhook URL registry — generated locally from Modal + Hookdeck APIs.
 # Contains personal Modal URLs and Hookdeck IDs that don't belong in OSS.
