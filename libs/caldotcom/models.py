@@ -170,6 +170,14 @@ class BookingCreatedPayload(BaseModel):
 
 
 class BookingCancelledPayload(BaseModel):
+    """CANCELLED payload.
+
+    Most Cal.com cancellations carry ``organizer.email`` but real-world
+    payloads occasionally omit ``organizer`` (e.g. older webhook versions).
+    The previous handler walked the same fallback chain as CREATED, so we
+    keep it permissive here and resolve via ``creator_email()``.
+    """
+
     model_config = ConfigDict(extra="allow")
 
     triggerEvent: Literal["BOOKING_CANCELLED"]
@@ -178,11 +186,24 @@ class BookingCancelledPayload(BaseModel):
     endTime: datetime
     title: str | None = None
     additionalNotes: str | None = None
-    organizer: Organizer
+    organizer: Organizer | None = None
     attendees: list[MutationAttendee] = Field(default_factory=list)
     iCalUID: str | None = None
     cancellationReason: str | None = None
     cancelledBy: str | None = None
+    user: dict[str, Any] | None = None
+    userPrimaryEmail: str | None = None
+
+    def creator_email(self) -> str | None:
+        if self.organizer and self.organizer.email:
+            return self.organizer.email
+        if isinstance(self.user, dict):
+            email = self.user.get("email")
+            if isinstance(email, str) and email:
+                return email
+        if self.userPrimaryEmail:
+            return self.userPrimaryEmail
+        return None
 
 
 class BookingRescheduledPayload(BaseModel):
@@ -192,7 +213,8 @@ class BookingRescheduledPayload(BaseModel):
         ``startTime`` = OLD pre-reschedule start time.
         ``rescheduleStartTime`` = NEW post-reschedule start time.
 
-    Counterintuitive; document this everywhere it's relied on.
+    Counterintuitive; document this everywhere it's relied on. Same
+    organizer-fallback rationale as ``BookingCancelledPayload``.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -207,10 +229,23 @@ class BookingRescheduledPayload(BaseModel):
     rescheduledBy: str | None = None
     title: str | None = None
     additionalNotes: str | None = None
-    organizer: Organizer
+    organizer: Organizer | None = None
     attendees: list[MutationAttendee] = Field(default_factory=list)
     iCalUID: str | None = None
     cancellationReason: str | None = None
+    user: dict[str, Any] | None = None
+    userPrimaryEmail: str | None = None
+
+    def creator_email(self) -> str | None:
+        if self.organizer and self.organizer.email:
+            return self.organizer.email
+        if isinstance(self.user, dict):
+            email = self.user.get("email")
+            if isinstance(email, str) and email:
+                return email
+        if self.userPrimaryEmail:
+            return self.userPrimaryEmail
+        return None
 
 
 class BookingNoShowPayload(BaseModel):

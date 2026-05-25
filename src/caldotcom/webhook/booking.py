@@ -15,7 +15,6 @@ attendee's Person record.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime
 from typing import Any, Literal
 
@@ -52,8 +51,6 @@ from src.caldotcom.utils import (
     generate_gcs_filename,
     webhook_to_jsonl,
 )
-
-logger = logging.getLogger(__name__)
 
 # Cal.com Booking has a single top-level RSVP status that applies to the
 # booking as a whole, plus a per-attendee `absent` boolean. Map to Attio's
@@ -113,8 +110,11 @@ def _ical_uid_for_old_state(
         return canonical_meeting_uid(host_email=host_email, start=payload.start)
 
     if isinstance(payload, (BookingCancelledPayload, BookingRescheduledPayload)):
+        host_email = payload.creator_email()
+        if host_email is None:
+            return None
         return canonical_meeting_uid(
-            host_email=payload.organizer.email,
+            host_email=host_email,
             start=payload.startTime,
         )
 
@@ -243,7 +243,7 @@ def _ops_for_cancelled(
         "original_start": payload.startTime.isoformat(),
         "original_end": payload.endTime.isoformat(),
         "calcom_ical_uid": payload.iCalUID,
-        "organizer_email": payload.organizer.email,
+        "organizer_email": payload.creator_email(),
     }
     return [
         _lifecycle_event(
@@ -287,7 +287,7 @@ def _ops_for_rescheduled(
         "rescheduled_by": payload.rescheduledBy,
         "reschedule_uid": payload.rescheduleUid,
         "calcom_ical_uid": payload.iCalUID,
-        "organizer_email": payload.organizer.email,
+        "organizer_email": payload.creator_email(),
     }
     return [
         _lifecycle_event(
@@ -311,22 +311,25 @@ def _ops_for_no_show(
     """Fetch the underlying booking to learn host email + start, then emit.
 
     The webhook payload only carries ``bookingUid`` + ``attendees[email,
-    noShow]``; insufficient for canonical_meeting_uid. Cal.com API call
-    failures propagate (handler returns ``[]`` rather than raising — the
-    dispatcher will see an empty plan, not a partial one).
+    noShow]``; insufficient for canonical_meeting_uid.
+
+    Failure modes:
+      * 404 (booking deleted) → ``get_booking`` returns ``None``. Emit a
+        partial lifecycle row anyway — there's no way to "retry to success"
+        for a deleted booking, and the audit value (someone marked an
+        attendee no-show) is what we care about.
+      * 5xx / network / parse error → let the exception propagate so the
+        webhook returns a failure and Hookdeck retries. Better to retry a
+        transient outage than to write a partial row that can never be
+        re-linked to its meeting.
     """
     no_show_emails = [a.email for a in payload.attendees if a.noShow]
     if not no_show_emails:
         return []
 
-    try:
-        booking = client.get_booking(payload.bookingUid)
-    except Exception:  # noqa: BLE001 — turn API failure into a structured warning
-        logger.exception(
-            "calcom get_booking failed for bookingUid=%s; emitting no-show events without ical_uid",
-            payload.bookingUid,
-        )
-        booking = None
+    # Errors propagate by design — see docstring. The only non-error "miss" is
+    # a 404, which ``get_booking`` returns as ``None``.
+    booking = client.get_booking(payload.bookingUid)
 
     if booking is not None:
         ical_uid = _ical_uid_for_old_state(booking)
@@ -413,13 +416,14 @@ def _validation_result(payload: Any) -> tuple[bool, str]:
     if isinstance(payload, (BookingCancelledPayload, BookingRescheduledPayload)):
         ok = (
             bool(payload.uid)
-            and bool(payload.organizer.email)
             and bool(payload.attendees)
+            and bool(payload.creator_email())
         )
         return ok, (
             ""
             if ok
-            else f"{type(payload).__name__} missing uid/organizer.email/attendees"
+            else f"{type(payload).__name__} missing uid/attendees or no host "
+            "email (organizer/user/userPrimaryEmail)"
         )
     if isinstance(payload, BookingNoShowPayload):
         ok = bool(payload.bookingUid) and any(a.noShow for a in payload.attendees)
