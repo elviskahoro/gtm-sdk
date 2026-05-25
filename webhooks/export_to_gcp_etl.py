@@ -1,15 +1,23 @@
 # trunk-ignore-all(ruff/PGH003,trunk/ignore-does-nothing)
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import modal
+import orjson
+from fastapi import Request
 from modal import Image
 
 from libs.dlt.destination_type import DestinationType
 from libs.dlt.filesystem_gcp import CloudGoogle
 from libs.filesystem.files import DestinationFileData, SourceFileData
+from libs.logging.structured import (
+    log,
+    set_source,
+    webhook_request_context,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -45,6 +53,10 @@ class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F
 WebhookModel.model_rebuild()
 
 BUCKET_NAME: str = WebhookModel.etl_get_bucket_name()
+
+# Use the bucket name as the `source` so log lines can be filtered by the
+# same identifier that names the Modal app.
+set_source(BUCKET_NAME)
 
 image: Image = modal.Image.debian_slim().uv_pip_install(
     "fastapi[standard]",
@@ -107,28 +119,14 @@ def _get_storage_source_file_data(
     )
 
 
-@app.function(
-    secrets=[
-        modal.Secret.from_name(
-            name=name,
-        )
-        for name in WebhookModel.modal_get_secret_collection_names()
-    ],
-    region="us-east-1",
-    enable_memory_snapshot=False,
-)
-@modal.fastapi_endpoint(
-    method="POST",
-    docs=True,
-)
-@modal.concurrent(
-    max_inputs=1000,
-)
-def web(  # no return annotation: see webhooks/export_to_attio.py for rationale (FastAPI + modal.fastapi_endpoint incompatibility)
-    webhook: WebhookModel,
-):
+def _export(webhook: WebhookModel) -> str:
+    payload_bytes = len(orjson.dumps(webhook.model_dump()))
+    log("webhook.received", payload_bytes=payload_bytes)
     if not webhook.etl_is_valid_webhook():
-        return webhook.etl_get_invalid_webhook_error_msg()
+        reason = webhook.etl_get_invalid_webhook_error_msg()
+        log("webhook.validation_failed", reason=reason)
+        return reason
+    log("webhook.validated", bucket_name=BUCKET_NAME)
 
     file_data: Iterator[SourceFileData] = iter(
         [
@@ -153,6 +151,55 @@ def web(  # no return annotation: see webhooks/export_to_attio.py for rationale 
         destination_file_data=data,
         bucket_url=bucket_url,
     )
+
+
+def _handle(webhook: WebhookModel, request: Request) -> str:
+    """Webhook request lifecycle. See `webhooks/export_to_attio.py:_handle`."""
+    with webhook_request_context(request):
+        started = time.perf_counter()
+        try:
+            body = _export(webhook)
+        except Exception as exc:
+            log(
+                "webhook.completed",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                status="error",
+                bucket_name=BUCKET_NAME,
+                error_type=type(exc).__name__,
+                error_msg=str(exc),
+            )
+            raise
+        log(
+            "webhook.completed",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            status="ok",
+            bucket_name=BUCKET_NAME,
+        )
+        return body
+
+
+@app.function(
+    secrets=[
+        modal.Secret.from_name(
+            name=name,
+        )
+        for name in WebhookModel.modal_get_secret_collection_names()
+    ],
+    region="us-east-1",
+    enable_memory_snapshot=False,
+)
+@modal.fastapi_endpoint(
+    method="POST",
+    docs=True,
+)
+@modal.concurrent(
+    max_inputs=1000,
+)
+def web(  # no return annotation: see webhooks/export_to_attio.py for rationale (FastAPI + modal.fastapi_endpoint incompatibility)
+    webhook: WebhookModel,
+    request: Request,
+):
+    return _handle(webhook, request)
 
 
 @app.local_entrypoint()
