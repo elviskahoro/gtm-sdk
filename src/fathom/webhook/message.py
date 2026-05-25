@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from libs.dlt.bucket_naming import etl_bucket_name
+from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.fathom import Webhook as FathomWebhook
 
 
@@ -24,6 +24,23 @@ class Webhook(FathomWebhook):
     @staticmethod
     def etl_get_bucket_name() -> str:
         return etl_bucket_name(source="fathom", entity_plural="messages")
+
+    @staticmethod
+    def raw_get_bucket_name() -> str:
+        return raw_bucket_name(source="fathom", entity_plural="messages")
+
+    @staticmethod
+    def raw_get_app_name() -> str:
+        from libs.dlt.filesystem_gcp import CloudGoogle
+
+        return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
+
+    # Raw passthrough has no per-source invariants — see caldotcom/booking.py.
+    def raw_is_valid_webhook(self) -> bool:
+        return True
+
+    def raw_get_invalid_webhook_error_msg(self) -> str:
+        return "raw passthrough accepts any payload; should not be reachable"
 
     @staticmethod
     def storage_get_app_name() -> str:
