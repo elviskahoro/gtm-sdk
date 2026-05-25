@@ -4,6 +4,43 @@ Standalone Modal apps. Each `export_to_*.py` deploys one Modal app per source
 via the `WebhookModelToReplace` placeholder pattern documented in
 [`CLAUDE.md` → Webhook deploys](../CLAUDE.md).
 
+## Structured logs
+
+Each handler emits one JSON line per event via `libs/logging/structured.py`.
+Modal captures stdout into its dashboard, so the lines are filterable by
+`source` (per-app) and joinable per request via `request_id`. The logger is
+always on — no env-var gate — and it never raises.
+
+### Standard fields (always present)
+
+| Field        | Source                                              |
+| ------------ | --------------------------------------------------- |
+| `ts`         | `datetime.now(UTC).isoformat()` at call time        |
+| `event`      | First positional argument to `log(...)`             |
+| `source`     | `set_source(APP_NAME)` / `set_source(BUCKET_NAME)`  |
+| `request_id` | `X-Request-Id` inbound header; uuid7 fallback       |
+
+### Event schema
+
+| Event                       | Extra fields                                                          | Emitted from                                            |
+| --------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
+| `webhook.received`          | `payload_bytes`                                                       | Handler entry, after the FastAPI body parses            |
+| `webhook.validated`         | `op_count` (Attio) / `bucket_name` (GCS ETL)                          | After `*_is_valid_webhook()` returns true               |
+| `webhook.validation_failed` | `reason`                                                              | After `*_is_valid_webhook()` returns false              |
+| `webhook.completed`         | `duration_ms`, `status` (`ok`/`error`), `error_type?`, `error_msg?`   | Handler exit, in `finally`-style branch                 |
+| `webhook.error`             | `reason` (`validation_error`/`processing_error`), `path?`, `file?`    | File-iteration paths in `webhooks/export_to_gcp_raw.py` |
+
+### Following a single request
+
+```text
+1. In Modal dashboard, filter logs by `"source":"rb2b"`.
+2. Pick any `request_id` in the result set.
+3. Filter additionally by that `request_id` — you get the full
+   received → validated → completed trace for that single delivery.
+```
+
+Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
+
 ## Files
 
 - `export_to_attio.py` — per-source app, writes to Attio.

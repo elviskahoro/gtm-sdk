@@ -28,17 +28,20 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 ## Webhook deploys
 
-`webhooks/export_to_attio.py` and `webhooks/export_to_gcp_etl.py` ship one Modal app per webhook source, but each file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
+`webhooks/export_to_attio.py`, `webhooks/export_to_gcp_etl.py`, and `webhooks/export_to_gcp_raw.py` ship one Modal app per webhook source, but each file uses a `WebhookModelToReplace` placeholder so the working tree stays source-agnostic. **`modal deploy` on the file as-is fails with `NameError: WebhookModelToReplace is not defined`.**
 
-Use `scripts/deploy-webhook.sh <handler> <source>` (or `<handler> --all`) to substitute the placeholder, deploy, and restore in one step. The script encodes every footgun in the "Scripted deploy pitfalls" section below.
+Use `scripts/deploy-webhook.sh <handler> <source>` (or `<handler> --all`) to substitute the placeholder, deploy, and restore in one step. The script auto-discovers valid handlers (any `webhooks/*.py` containing the placeholder) and sources (the `Webhook as <Alias>` imports inside the handler), and preflights per-source GCS buckets when the handler routes to `gs://` (etl, raw). It encodes every footgun in the "Scripted deploy pitfalls" section below.
 
 ```shell
 set -a && source .env.local && set +a   # once per shell
 scripts/deploy-webhook.sh export_to_attio CaldotcomBookingWebhook
 scripts/deploy-webhook.sh export_to_gcp_etl --all
+scripts/deploy-webhook.sh export_to_gcp_raw --all
 ```
 
 Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols. Do not commit the substituted form; the script's `trap` restores the placeholder even if `modal deploy` fails or the script is interrupted.
+
+The contract every concrete `src/<source>/webhook/*.py` `Webhook` class must satisfy lives at `libs/webhook/protocol.py` as `WebhookModelProtocol` (a `typing.Protocol`), and `tests/libs/webhook/test_protocol_conformance.py` enforces it across all five sources. Each handler's `TYPE_CHECKING` block aliases `WebhookModelTypeCheckShim` (a concrete `BaseModel` stand-in defined alongside the Protocol) as `WebhookModelToReplace` so pyright sees the full surface — Pydantic methods (`model_rebuild`/`model_validate`) and the contract methods — in the unsubstituted source tree. New sources: extend `protocol.py` only if you add a contract method; otherwise just implement the existing surface on the new `Webhook` class and add a parametrize entry to the conformance test.
 
 ### Scripted deploy pitfalls
 
@@ -148,7 +151,8 @@ bd close <id>         # Complete work
 3. **Update issue status** - Close finished work, update in-progress items
 4. **Commit** locally with a clear message
 5. **Push policy (branch-aware):**
-   - On `agent/*` or `feature/*` branches: you MAY `git pull --rebase && git push` without asking — these are scratch branches owned by the current task.
+   - **Roborev gate (applies to ALL branches):** Never `git push` to origin without running `git roborev review --wait` against HEAD first and confirming a clean review. If roborev is unavailable or fails to run, say so and ask before pushing.
+   - On `agent/*` or `feature/*` branches: after the roborev gate passes, you MAY `git pull --rebase && git push` without asking — these are scratch branches owned by the current task.
    - On `main`, `master`, or any release/protected branch: **DO NOT push without explicit user confirmation.** Stop after the commit, say what would be pushed, and ask. The user pushing themselves is the default.
    - If unsure which category the branch falls into, treat it as protected and ask.
 6. **Clean up** - Clear stashes, prune remote branches (only after push is authorized)

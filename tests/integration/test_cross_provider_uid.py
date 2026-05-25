@@ -3,10 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import orjson
+import pytest
 
 from src.attio.ops import UpsertMeeting
 from src.caldotcom.webhook.booking import Webhook as CalcomBookingWebhook
 from src.fathom.webhook.call import Webhook as FathomCallWebhook
+
+pytestmark = pytest.mark.integration
 
 CALCOM_FIXTURE = Path("api/samples/caldotcom.booking.created.redacted.json")
 FATHOM_FIXTURE = Path("api/samples/fathom.recording.redacted.json")
@@ -55,6 +58,8 @@ def test_different_start_times_diverge() -> None:
     fathom.scheduled_start_time = fathom.scheduled_start_time.replace(minute=30)
     calcom_op = calcom.attio_get_operations()[0]
     fathom_op = fathom.attio_get_operations()[0]
+    assert isinstance(calcom_op, UpsertMeeting)
+    assert isinstance(fathom_op, UpsertMeeting)
     assert calcom_op.external_ref.ical_uid != fathom_op.external_ref.ical_uid
 
 
@@ -64,4 +69,6 @@ def test_host_email_case_does_not_diverge() -> None:
     fathom.recorded_by.email = HOST_EMAIL.upper()
     calcom_op = calcom.attio_get_operations()[0]
     fathom_op = fathom.attio_get_operations()[0]
+    assert isinstance(calcom_op, UpsertMeeting)
+    assert isinstance(fathom_op, UpsertMeeting)
     assert calcom_op.external_ref.ical_uid == fathom_op.external_ref.ical_uid
