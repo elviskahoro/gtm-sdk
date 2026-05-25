@@ -139,7 +139,19 @@ def extract_existing_record_id(exc: BaseException) -> str | None:
 
 
 def is_uniqueness_conflict(exc: BaseException) -> bool:
-    return "uniqueness_conflict" in extract_exception_body_text(exc)
+    body_text = extract_exception_body_text(exc)
+    payload = _parse_json_object(body_text)
+    if payload is not None:
+        # Attio's documented error shape: {"status_code": 400, "type": "invalid_request_error",
+        # "code": "uniqueness_conflict", ...}. The SDK's pydantic models don't list
+        # "uniqueness_conflict" in the Code Literal, so the SDK raises ResponseValidationError
+        # before we ever see the parsed body — we re-parse here to avoid substring false positives.
+        if payload.get("code") == "uniqueness_conflict":
+            return True
+        if payload.get("type") == "uniqueness_conflict":
+            return True
+        return False
+    return "uniqueness_conflict" in body_text
 
 
 def model_dump_or_empty(value: object) -> dict[str, Any]:

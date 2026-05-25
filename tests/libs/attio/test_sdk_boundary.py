@@ -130,6 +130,27 @@ def test_uniqueness_conflict_detection_uses_body_text() -> None:
     assert sdk_boundary.is_uniqueness_conflict(err) is True
 
 
+def test_uniqueness_conflict_detection_matches_real_attio_error_shape() -> None:
+    err = _ErrWithBody(
+        '{"status_code": 400, "type": "invalid_request_error",'
+        ' "code": "uniqueness_conflict", "message": "duplicate"}',
+    )
+    assert sdk_boundary.is_uniqueness_conflict(err) is True
+
+
+def test_uniqueness_conflict_detection_ignores_unrelated_substring_in_json() -> None:
+    err = _ErrWithBody(
+        '{"code": "validation_type",'
+        ' "message": "see docs about uniqueness_conflict for details"}',
+    )
+    assert sdk_boundary.is_uniqueness_conflict(err) is False
+
+
+def test_uniqueness_conflict_detection_falls_back_to_substring_for_non_json() -> None:
+    err = _ErrWithBody("plain text mentioning uniqueness_conflict somewhere")
+    assert sdk_boundary.is_uniqueness_conflict(err) is True
+
+
 def test_extract_existing_record_id_from_json_body() -> None:
     body = '{"data": {"existing_record": {"id": {"record_id": "rec_existing"}}}}'
     err = _ErrWithBody(body)

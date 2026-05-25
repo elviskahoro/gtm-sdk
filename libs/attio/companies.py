@@ -139,11 +139,15 @@ def add_company(input: CompanyInput) -> CompanyResult:
         except Exception as e:
             if is_uniqueness_conflict(e):
                 existing_id = extract_existing_record_id(e)
+                # `from None` suppresses the SDK's ResponseValidationError chain — its
+                # __cause__ is a pydantic ValidationError firing because the SDK's Code
+                # Literal omits "uniqueness_conflict". The conflict itself is expected,
+                # so we don't want Modal logging the pydantic traceback for every dupe.
                 raise AttioConflictError(
                     "Company already exists. Use 'update' instead."
                     + (f" Existing record ID: {existing_id}" if existing_id else ""),
                     existing_record_id=existing_id,
-                ) from e
+                ) from None
             raise
 
         return _extract_result(response.data, created=True)

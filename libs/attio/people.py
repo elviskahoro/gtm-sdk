@@ -435,9 +435,11 @@ def add_person(input: PersonInput) -> ReliabilityEnvelope:
             )
         except Exception as e:
             if is_uniqueness_conflict(e):
+                # `from None` suppresses the SDK's ResponseValidationError chain — see
+                # libs/attio/companies.py::add_company for the full explanation.
                 raise AttioConflictError(
                     "Person already exists. Use 'update' instead.",
-                ) from e
+                ) from None
             raise
 
         person = _extract_result(response.data)
