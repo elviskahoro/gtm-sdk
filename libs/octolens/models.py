@@ -34,7 +34,6 @@ Source = Literal[
     "podcasts",
     "reddit",
     "twitter",
-    "website",
 ]
 
 RelevanceScore = Literal["low", "medium", "high"]
