@@ -1,13 +1,13 @@
 """Webhook ETL contract for Octolens mention ingestion."""
 
 import re
-from typing import Any, ClassVar, Literal, cast
+from typing import Annotated, Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, RootModel
 
 from libs.attio.values import normalize_linkedin_url
 from libs.dlt.bucket_naming import etl_bucket_name
-from libs.octolens import Webhook as OctolensMentionWebhook
+from libs.octolens import RelevanceScore, Webhook as OctolensMentionWebhook
 from src.octolens.utils import generate_gcs_filename
 
 
@@ -78,8 +78,57 @@ def split_author_name(full: str | None) -> tuple[str | None, str | None]:
     return parts[0], parts[1]
 
 
+class WebhookFilter(BaseModel):
+    """Base class for composable webhook drop-filters.
+
+    A filter returns True from ``should_exclude`` to drop the webhook from
+    downstream processing. Subclasses declare a unique ``type`` literal so
+    ``WebhookFilters`` can serialize/deserialize a heterogeneous list.
+    """
+
+    name: str
+
+    def should_exclude(self, webhook: "Webhook") -> bool:
+        raise NotImplementedError
+
+
+class RelevanceScoreFilter(WebhookFilter):
+    """Drop mentions whose relevance_score is in ``excluded_scores``."""
+
+    type: Literal["relevance_score"] = "relevance_score"
+    excluded_scores: list[RelevanceScore] = Field(default_factory=list)
+
+    def should_exclude(self, webhook: "Webhook") -> bool:
+        return webhook.data.relevance_score in self.excluded_scores
+
+
+AnyWebhookFilter = Annotated[RelevanceScoreFilter, Field(discriminator="type")]
+
+
+class WebhookFilters(RootModel[list[AnyWebhookFilter]]):
+    """Ordered list of filters; serializes to a JSON array."""
+
+    def should_exclude(self, webhook: "Webhook") -> WebhookFilter | None:
+        for f in self.root:
+            if f.should_exclude(webhook):
+                return f
+        return None
+
+
+DEFAULT_FILTERS: WebhookFilters = WebhookFilters(
+    root=[
+        RelevanceScoreFilter(
+            name="drop-low-relevance",
+            excluded_scores=["low"],
+        ),
+    ],
+)
+
+
 class Webhook(OctolensMentionWebhook):
     """Webhook subclass implementing ETL contract for Octolens mentions."""
+
+    FILTERS: ClassVar[WebhookFilters] = DEFAULT_FILTERS
 
     @staticmethod
     def modal_get_secret_collection_names() -> list[str]:
@@ -109,10 +158,18 @@ class Webhook(OctolensMentionWebhook):
         {"mention_created", "mention_updated"},
     )
 
+    def _excluded_by_filter(self) -> WebhookFilter | None:
+        return self.FILTERS.should_exclude(self)
+
     def etl_is_valid_webhook(self) -> bool:
-        return self.action in self.VALID_ACTIONS
+        if self.action not in self.VALID_ACTIONS:
+            return False
+        return self._excluded_by_filter() is None
 
     def etl_get_invalid_webhook_error_msg(self) -> str:
+        excluded_by = self._excluded_by_filter()
+        if excluded_by is not None:
+            return f"Webhook dropped by filter: {excluded_by.name}"
         return f"Invalid webhook: {self.action}"
 
     def etl_get_json(self, storage: Any = None) -> str:
@@ -143,9 +200,14 @@ class Webhook(OctolensMentionWebhook):
         return "export-to-attio-from-octolens-mentions"
 
     def attio_is_valid_webhook(self) -> bool:
-        return self.action in self.VALID_ACTIONS
+        if self.action not in self.VALID_ACTIONS:
+            return False
+        return self._excluded_by_filter() is None
 
     def attio_get_invalid_webhook_error_msg(self) -> str:
+        excluded_by = self._excluded_by_filter()
+        if excluded_by is not None:
+            return f"Octolens mention dropped by filter: {excluded_by.name}"
         return f"Octolens action not eligible for Attio export: {self.action}"
 
     def attio_get_operations(self) -> list[Any]:

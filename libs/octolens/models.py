@@ -9,7 +9,7 @@ source dict; otherwise the dict is validated directly.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import orjson
 from pydantic import (
@@ -20,6 +20,24 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+# Known Octolens source platforms. If Octolens ships a new integration,
+# webhook validation will reject the payload — we want to hear about it
+# (loudly) rather than silently route mentions from an unknown platform.
+# Update this list deliberately after confirming the new platform's shape.
+Source = Literal[
+    "bluesky",
+    "dev",
+    "github",
+    "hackernews",
+    "linkedin",
+    "podcasts",
+    "reddit",
+    "twitter",
+    "website",
+]
+
+RelevanceScore = Literal["low", "medium", "high"]
 
 
 class Mention(BaseModel):
@@ -36,7 +54,7 @@ class Mention(BaseModel):
         default=None,
         validation_alias=AliasChoices("image_url", "Image URL", "imageUrl"),
     )
-    source: str = Field(validation_alias=AliasChoices("source", "Source"))
+    source: Source = Field(validation_alias=AliasChoices("source", "Source"))
     source_id: str = Field(
         validation_alias=AliasChoices("source_id", "Source ID", "sourceId"),
     )
@@ -57,7 +75,7 @@ class Mention(BaseModel):
             "authorProfileLink",
         ),
     )
-    relevance_score: str = Field(
+    relevance_score: RelevanceScore = Field(
         validation_alias=AliasChoices(
             "relevance_score",
             "Relevance Score",

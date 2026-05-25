@@ -35,6 +35,9 @@ GITHUB_SAMPLE_FILE = "octolens.mention.created.github.redacted.json"
 @pytest.mark.parametrize("filename", SAMPLE_FILES)
 def test_sample_produces_single_upsert_mention_op(filename: str) -> None:
     payload = json.loads((SAMPLES_DIR / filename).read_text())
+    # Neutralize the low-relevance default filter — this test asserts op
+    # generation, not filter behavior. Filter behavior has its own tests.
+    payload["data"]["relevanceScore"] = "high"
     webhook = Webhook.model_validate(payload)
 
     assert webhook.attio_is_valid_webhook() is True
@@ -89,6 +92,7 @@ def test_linkedin_sample_produces_upsert_person_and_mention() -> None:
 @pytest.mark.parametrize("filename", NON_LINKEDIN_SAMPLE_FILES)
 def test_non_linkedin_sample_produces_only_mention(filename: str) -> None:
     payload = json.loads((SAMPLES_DIR / filename).read_text())
+    payload["data"]["relevanceScore"] = "high"
     webhook = Webhook.model_validate(payload)
 
     ops = webhook.attio_get_operations()
@@ -492,6 +496,7 @@ def test_lowercase_sentiment_label_reaches_attio_mention() -> None:
     survive normalization and land on the Attio UpsertMention op."""
     payload = json.loads((SAMPLES_DIR / SAMPLE_FILES[0]).read_text())
     payload["data"]["sentimentLabel"] = "neutral"
+    payload["data"]["relevanceScore"] = "high"
 
     webhook = Webhook.model_validate(payload)
     ops = webhook.attio_get_operations()
