@@ -1,13 +1,14 @@
 """Webhook ETL contract for rb2b visit ingestion."""
 
-from typing import Any
+from typing import Annotated, Any, ClassVar, Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, RootModel
 
 from libs.attio.values import normalize_linkedin_url
 from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.rb2b import Webhook as Rb2bWebhook
+from libs.webhook.filter import WebhookFilter
 from src.rb2b.utils import (
     event_to_jsonl,
     generate_gcs_filename,
@@ -35,8 +36,47 @@ def extract_domain(website: str | None) -> str | None:
     return host.removeprefix("www.")
 
 
+class NoResolvablePersonFilter(WebhookFilter):
+    """Drop rb2b visits with no identifiable Person.
+
+    The Attio ``tracking_events`` schema only has a Person ref (``contact``)
+    and no Company ref, so a visit with no ``business_email`` lands as a
+    contact-less row that is invisible on any timeline and findable only by
+    ``external_id``. Cheapest fix: drop the whole webhook from the Attio
+    path when the Person cannot be resolved. The audit trail still lives in
+    GCS raw + ETL landings, so nothing is permanently lost.
+    """
+
+    type: Literal["no_resolvable_person"] = "no_resolvable_person"
+
+    def should_exclude(self, webhook: "Webhook") -> bool:
+        return not webhook.payload.business_email
+
+
+AnyWebhookFilter = Annotated[NoResolvablePersonFilter, Field(discriminator="type")]
+
+
+class WebhookFilters(RootModel[list[AnyWebhookFilter]]):
+    """Ordered list of filters; serializes to a JSON array."""
+
+    def should_exclude(self, webhook: "Webhook") -> WebhookFilter | None:
+        for f in self.root:
+            if f.should_exclude(webhook):
+                return f
+        return None
+
+
+DEFAULT_FILTERS: WebhookFilters = WebhookFilters(
+    root=[
+        NoResolvablePersonFilter(name="drop-no-resolvable-person"),
+    ],
+)
+
+
 class Webhook(Rb2bWebhook):
     """Webhook subclass implementing ETL contract for rb2b visits."""
+
+    FILTERS: ClassVar[WebhookFilters] = DEFAULT_FILTERS
 
     @staticmethod
     def modal_get_secret_collection_names() -> list[str]:
@@ -114,10 +154,17 @@ class Webhook(Rb2bWebhook):
     def _attio_domain(self) -> str | None:
         return extract_domain(self.payload.website)
 
+    def _excluded_by_filter(self) -> WebhookFilter | None:
+        return self.FILTERS.should_exclude(self)
+
     def attio_is_valid_webhook(self) -> bool:
-        # An rb2b visit is exportable if we have something to land in Attio —
-        # either an identified person (business_email) or an identified company
-        # (resolvable domain). Anonymous visits with neither are skipped.
+        # An rb2b visit is exportable to Attio if we have something to land —
+        # either an identified Person (business_email) or an identified
+        # Company (resolvable domain). Anonymous visits with neither are
+        # skipped. The Person-only filter is a finer-grained gate applied
+        # inside ``attio_get_operations`` to suppress just the
+        # ``UpsertTrackingEvent`` op (the tracking_events schema is
+        # Person-only — see ``FILTERS``).
         has_person = bool(self.payload.business_email)
         has_company = bool(self._attio_domain())
         return has_person or has_company
@@ -126,6 +173,9 @@ class Webhook(Rb2bWebhook):
         return "rb2b visit has neither business_email nor a resolvable company domain"
 
     def attio_get_operations(self) -> list[Any]:
+        if not self.attio_is_valid_webhook():
+            return []
+
         import json
         from datetime import datetime, timezone
 
@@ -175,7 +225,15 @@ class Webhook(Rb2bWebhook):
                 ),
             )
 
-        # tracking_events always emitted if validity gate passed (anonymous already rejected).
+        # tracking_events is Person-only in Attio (no Company ref), so skip
+        # the row when no Person can be resolved — otherwise it lands as a
+        # contact-less row invisible on any timeline and findable only by
+        # external_id. UpsertCompany above still runs so company-only
+        # visits enrich the Company record. The audit trail for the
+        # suppressed tracking event still lives in GCS raw + ETL.
+        if self._excluded_by_filter() is not None:
+            return ops
+
         subject_person = PersonRef(attribute="email", value=email) if email else None
         subject_company = CompanyRef(domain=domain) if domain else None
 
