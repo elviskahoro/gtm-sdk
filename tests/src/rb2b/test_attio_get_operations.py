@@ -52,13 +52,17 @@ def test_attio_get_operations_anonymous_visit_is_rejected() -> None:
     assert w.attio_is_valid_webhook() is False
 
 
-def test_attio_get_operations_company_only_emits_two_ops() -> None:
+def test_attio_get_operations_company_only_emits_company_but_skips_tracking_event() -> (
+    None
+):
+    # Company-only visit still enriches the Company record in Attio, but the
+    # tracking_events row is suppressed because that schema is Person-only
+    # (no Company ref) — a contact-less row would be invisible on any
+    # timeline. The audit trail still lives in GCS raw + ETL.
     w = _load("rb2b.visit.company_only.redacted.json")
+    assert w.attio_is_valid_webhook() is True
     ops = w.attio_get_operations()
-    assert [type(o).__name__ for o in ops] == ["UpsertCompany", "UpsertTrackingEvent"]
-    te = ops[1]
-    assert te.subject_company is not None
-    assert te.subject_person is None
+    assert [type(o).__name__ for o in ops] == ["UpsertCompany"]
 
 
 def test_attio_get_operations_person_only_emits_two_ops() -> None:

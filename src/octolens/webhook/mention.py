@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, RootModel
 from libs.attio.values import normalize_linkedin_url
 from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.octolens import RelevanceScore, Webhook as OctolensMentionWebhook
+from libs.webhook.filter import WebhookFilter
 from src.octolens.utils import generate_gcs_filename
 
 
@@ -76,20 +77,6 @@ def split_author_name(full: str | None) -> tuple[str | None, str | None]:
     if len(parts) == 1:
         return parts[0], None
     return parts[0], parts[1]
-
-
-class WebhookFilter(BaseModel):
-    """Base class for composable webhook drop-filters.
-
-    A filter returns True from ``should_exclude`` to drop the webhook from
-    downstream processing. Subclasses declare a unique ``type`` literal so
-    ``WebhookFilters`` can serialize/deserialize a heterogeneous list.
-    """
-
-    name: str
-
-    def should_exclude(self, webhook: "Webhook") -> bool:
-        raise NotImplementedError
 
 
 class RelevanceScoreFilter(WebhookFilter):
