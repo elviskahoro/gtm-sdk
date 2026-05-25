@@ -104,7 +104,7 @@ def find_or_create_meeting_lifecycle_event(
 
         values: dict[str, Any] = {
             "name": [{"value": input.name}],
-            "event_type": [{"option": {"title": input.event_type}}],
+            "event_type": [{"option": input.event_type}],
             "external_id": [{"value": input.external_id}],
             "body": [{"value": input.body_json}],
             "timestamp": [{"value": input.timestamp.isoformat()}],
