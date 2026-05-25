@@ -77,6 +77,34 @@ def client(
     return sdk_client_class(oauth2=attio_api_key)
 
 
+@pytest.fixture(scope="session")  # pyright: ignore[reportUntypedFunctionDecorator]
+def social_mention_bootstrapped(
+    attio_api_key: str,
+    attio_auth_probe: None,  # noqa: ARG001 — chains auth probe
+) -> None:
+    # social_mention is a custom Attio object that must be bootstrapped via
+    # scripts/social-mention-bootstrap.py --apply before any mention upsert
+    # works. If a workspace was created without running bootstrap (e.g. a
+    # fresh dev workspace), skip mention-writer integration tests with a
+    # clear pointer rather than erroring deep inside _ensure_select_options.
+    sdk_client_class = get_attio_sdk_client_class()
+    probe_client = sdk_client_class(oauth2=attio_api_key)
+    try:
+        probe_client.records.post_v2_objects_object_records_query(
+            object="social_mention",
+            filter_={},
+            limit=1,
+        )
+    except SDKError as exc:
+        if exc.status_code == 404:
+            pytest.skip(
+                "social_mention object not bootstrapped in this Attio workspace; "
+                "run `scripts/social-mention-bootstrap.py --apply` against the "
+                "target workspace before running this test.",
+            )
+        raise
+
+
 @pytest.fixture
 def created_people_record_ids() -> list[str]:
     return []
@@ -98,5 +126,30 @@ def cleanup_people_records(
         except Exception as exc:
             print(
                 f"Warning: failed to delete Attio test person record {record_id}: {exc}",
+                file=sys.stderr,
+            )
+
+
+@pytest.fixture
+def created_mention_record_ids() -> list[str]:
+    return []
+
+
+@pytest.fixture
+def cleanup_mention_records(
+    client: Any,
+    created_mention_record_ids: list[str],
+) -> Iterator[None]:
+    yield
+    for record_id in created_mention_record_ids:
+        try:
+            client.records.delete_v2_objects_object_records_record_id_(
+                object="social_mention",
+                record_id=record_id,
+            )
+
+        except Exception as exc:
+            print(
+                f"Warning: failed to delete Attio test social_mention record {record_id}: {exc}",
                 file=sys.stderr,
             )
