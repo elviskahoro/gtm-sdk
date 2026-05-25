@@ -1,3 +1,4 @@
+# trunk-ignore-all(ruff/PGH003,trunk/ignore-does-nothing)
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -18,12 +19,41 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
     from pathlib import Path
 
-BUCKET_NAME: str = "dlthub-devx-test-bucket"
-MODAL_SECRET_COLLECTION_NAME: str = "devx-gcp-202605111323"
 
+# trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
+# fmt: off
+from src.fathom.webhook.message import (
+    Webhook as FathomMessageWebhook,
+)
+from src.fathom.webhook.call import (
+    Webhook as FathomCallWebhook,
+)
+from src.octolens.webhook import (
+    Webhook as OctolensMentionWebhook,
+)
+from src.rb2b.webhook.visit import (
+    Webhook as Rb2bVisitWebhook,
+)
+from src.caldotcom.webhook.booking import (
+    Webhook as CaldotcomBookingWebhook,
+)
+# fmt: on
+# trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
+
+
+class WebhookModel(WebhookModelToReplace):  # type: ignore # trunk-ignore(ruff/F821)
+    pass
+
+
+WebhookModel.model_rebuild()
+
+BUCKET_NAME: str = WebhookModel.raw_get_bucket_name()
 
 image: Image = modal.Image.debian_slim().uv_pip_install(
     "fastapi[standard]",
+    # flatsplode is imported transitively via src/{caldotcom,fathom,rb2b}/utils.py
+    # when the WebhookModelToReplace substitution pulls in any of those models.
+    "flatsplode",
     "gcsfs",  # https://github.com/fsspec/gcsfs
     "orjson",
     "uuid7",
@@ -31,6 +61,7 @@ image: Image = modal.Image.debian_slim().uv_pip_install(
 image = image.add_local_python_source(
     *[
         "libs",
+        "src",
     ],
 )
 app = modal.App(
@@ -100,8 +131,9 @@ class SourceFileRaw(NamedTuple):
 @app.function(
     secrets=[
         modal.Secret.from_name(
-            name=MODAL_SECRET_COLLECTION_NAME,
-        ),
+            name=name,
+        )
+        for name in WebhookModel.modal_get_secret_collection_names()
     ],
     region="us-east4",
     enable_memory_snapshot=False,

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from uuid_extensions import uuid7
 
 from libs.caldotcom import Webhook as CalcomWebhook
-from libs.dlt.bucket_naming import etl_bucket_name
+from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.meetings import canonical_meeting_uid
 from src.caldotcom.utils import (
     generate_gcs_filename,
@@ -88,6 +88,25 @@ class Webhook(CalcomWebhook):
     @staticmethod
     def etl_get_bucket_name() -> str:
         return etl_bucket_name(source="calcom", entity_plural="bookings")
+
+    @staticmethod
+    def raw_get_bucket_name() -> str:
+        return raw_bucket_name(source="calcom", entity_plural="bookings")
+
+    @staticmethod
+    def raw_get_app_name() -> str:
+        from libs.dlt.filesystem_gcp import CloudGoogle
+
+        return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
+
+    # Raw passthrough has no per-source invariants — it lands the JSON body
+    # untouched. Trivial implementations satisfy the symmetric-triple contract
+    # the registry sync expects without inventing fake validity rules.
+    def raw_is_valid_webhook(self) -> bool:
+        return True
+
+    def raw_get_invalid_webhook_error_msg(self) -> str:
+        return "raw passthrough accepts any payload; should not be reachable"
 
     @staticmethod
     def storage_get_app_name() -> str:

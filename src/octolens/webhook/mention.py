@@ -6,7 +6,7 @@ from typing import Annotated, Any, ClassVar, Literal, cast
 from pydantic import BaseModel, Field, RootModel
 
 from libs.attio.values import normalize_linkedin_url
-from libs.dlt.bucket_naming import etl_bucket_name
+from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.octolens import RelevanceScore, Webhook as OctolensMentionWebhook
 from src.octolens.utils import generate_gcs_filename
 
@@ -137,6 +137,23 @@ class Webhook(OctolensMentionWebhook):
     @staticmethod
     def etl_get_bucket_name() -> str:
         return etl_bucket_name(source="octolens", entity_plural="mentions")
+
+    @staticmethod
+    def raw_get_bucket_name() -> str:
+        return raw_bucket_name(source="octolens", entity_plural="mentions")
+
+    @staticmethod
+    def raw_get_app_name() -> str:
+        from libs.dlt.filesystem_gcp import CloudGoogle
+
+        return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
+
+    # Raw passthrough has no per-source invariants — see caldotcom/booking.py.
+    def raw_is_valid_webhook(self) -> bool:
+        return True
+
+    def raw_get_invalid_webhook_error_msg(self) -> str:
+        return "raw passthrough accepts any payload; should not be reachable"
 
     @staticmethod
     def storage_get_app_name() -> str:
