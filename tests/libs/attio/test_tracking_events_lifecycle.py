@@ -440,6 +440,52 @@ def test_embedded_newlines_in_details_line_still_dedupe(
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
+def test_legacy_multiline_entry_still_dedupes(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """Rows persisted BEFORE the post-fix single-line invariant may contain
+    entries with embedded newlines. The helper re-fuses such entries via
+    ISO-prefix detection so a retried multi-line webhook still dedupes.
+    """
+    # Simulate a legacy row where the cancellation entry was stored across
+    # multiple physical lines (pre-fix). The separator between entries is also
+    # a newline, so a naive splitlines() would shatter the cancel entry.
+    legacy_details = (
+        "2026-05-10T12:00:00Z scheduled — host: a; attendees: b\n"
+        "2026-05-14T00:00:00Z cancelled — by host@dlthub.com:\n"
+        "scheduling conflict\n"
+        "with another meeting"
+    )
+    client = MagicMock()
+    existing = MagicMock()
+    existing.id.record_id = "te_existing"
+    existing.model_dump.return_value = {
+        "values": {
+            "details": [{"value": legacy_details}],
+            "timestamp": [{"value": "2026-05-14T00:00:00+00:00"}],
+        },
+    }
+    client.records.post_v2_objects_object_records_query.return_value.data = [existing]
+    mock_get_client.return_value.__enter__.return_value = client
+
+    # Retry comes in with the multi-line cancellation details_line.
+    env = find_or_create_meeting_lifecycle_event(
+        _valid_input(
+            details_line=(
+                "2026-05-14T00:00:00Z cancelled — by host@dlthub.com:\n"
+                "scheduling conflict\n"
+                "with another meeting"
+            ),
+        ),
+    )
+
+    assert env.action == "noop"
+    client.records.patch_v2_objects_object_records_record_id_.assert_not_called()
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
 def test_sdk_failure_returns_failed_envelope(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001

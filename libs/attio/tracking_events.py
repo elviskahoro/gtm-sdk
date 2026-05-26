@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,6 +30,13 @@ _LIFECYCLE_OWNER_ACTOR_UUID = "663f9ad9-6704-5aff-be6d-48edb58bd12c"
 # object. Kept as a module constant so the helper, dispatcher, and bootstrap
 # stay in lockstep.
 _LIFECYCLE_EVENT_TYPE = "calcom_meeting"
+
+# Heuristic for splitting cumulative ``details`` text back into individual
+# transition entries. Each entry starts with an ISO-8601 timestamp written by
+# ``_details_line`` in the dispatcher. Used by ``_existing_details_entries``
+# to best-effort handle legacy rows that may have stored entries with
+# embedded newlines before the post-fix single-line invariant was enforced.
+_DETAILS_ENTRY_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}T")
 
 
 def find_or_create_tracking_event(input: TrackingEventInput) -> ReliabilityEnvelope:
@@ -173,13 +181,14 @@ def find_or_create_meeting_lifecycle_event(
                 existing_details = _extract_text_slug(existing[0], "details")
                 existing_timestamp = _extract_date_slug(existing[0], "timestamp")
 
-            # Duplicate retry: an existing line in the cumulative details
-            # already EQUALS this transition (full-line match, not substring)
-            # → no-op. Hookdeck retries on 4xx/5xx are the main source of
-            # these. Line-equality avoids the false-positive where a new
-            # line happens to be a substring of an older entry. Both sides
-            # have been collapsed to single-line via _collapse_to_single_line.
-            if existing_details and details_line in existing_details.splitlines():
+            # Duplicate retry: an existing entry in the cumulative details
+            # already EQUALS this transition. Both sides are normalized to
+            # single-line via ``_collapse_to_single_line`` (incoming) and
+            # ``_existing_details_entries`` (stored), so this works correctly
+            # for post-fix rows AND best-effort for legacy rows whose entries
+            # may contain embedded newlines.
+            existing_entries = _existing_details_entries(existing_details)
+            if details_line in existing_entries:
                 return ReliabilityEnvelope(
                     success=True,
                     partial_success=False,
@@ -269,6 +278,38 @@ def find_or_create_meeting_lifecycle_event(
             "meeting_lifecycle_event": input.model_dump(mode="json"),
         },
     )
+
+
+def _existing_details_entries(existing_details: str) -> list[str]:
+    """Return the canonical list of transition entries from a stored details text.
+
+    Post-fix data: every entry is exactly one line, separated by ``\\n``.
+    Splitting on ``\\n`` returns the entries as-is.
+
+    Legacy data (pre-fix): an entry may have embedded ``\\n`` from cal.com
+    free-form fields, so naive ``splitlines()`` would shatter one logical
+    entry into multiple physical lines and miss the dedupe. We re-fuse
+    consecutive lines into a single entry whenever a line does NOT start
+    with an ISO-8601 timestamp (the prefix the dispatcher always emits via
+    ``_details_line``). The fused entry is then collapsed to single-line so
+    it compares against incoming (also-collapsed) ``details_line`` values.
+    """
+    if not existing_details:
+        return []
+    entries: list[str] = []
+    current: list[str] = []
+    for line in existing_details.splitlines():
+        if _DETAILS_ENTRY_PREFIX.match(line):
+            if current:
+                entries.append(_collapse_to_single_line(" ".join(current)))
+            current = [line]
+        elif current:
+            current.append(line)
+        # Lines before the first ISO-prefixed line are dropped — they don't
+        # belong to any well-formed entry and shouldn't be matched against.
+    if current:
+        entries.append(_collapse_to_single_line(" ".join(current)))
+    return entries
 
 
 def _collapse_to_single_line(text: str) -> str:
