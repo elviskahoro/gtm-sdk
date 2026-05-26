@@ -4,6 +4,14 @@ The other 6 trigger types are covered in ``test_webhook_fixtures.py``. This
 file focuses on the CREATED branch — participant mapping, RSVP status
 translation, and the canonical ical_uid derivation that lets Fathom land on the
 same Attio Meeting record.
+
+Per the spec at
+``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``,
+BOOKING_CREATED now emits FOUR ops: UpsertCompany (host's domain) +
+UpsertPerson (host) + UpsertMeeting + EmitMeetingLifecycleEvent. The
+host-domain Company gates the host-Person upsert in the dispatcher's
+LookupTable. UpsertMeeting is therefore no longer ``ops[0]`` — use
+``_find_upsert_meeting`` to extract it.
 """
 
 from __future__ import annotations
@@ -15,8 +23,18 @@ import orjson
 
 from libs.caldotcom.models import BookingCreatedPayload
 from libs.meetings import canonical_meeting_uid
-from src.attio.ops import MeetingExternalRef, UpsertMeeting
+from src.attio.ops import AttioOp, MeetingExternalRef, UpsertMeeting
 from src.caldotcom.webhook.booking import Webhook
+
+
+def _find_upsert_meeting(ops: list[AttioOp]) -> UpsertMeeting:
+    matches = [o for o in ops if isinstance(o, UpsertMeeting)]
+    assert len(matches) == 1, (
+        f"expected exactly 1 UpsertMeeting in plan; got {len(matches)} "
+        f"in {[type(o).__name__ for o in ops]}"
+    )
+    return matches[0]
+
 
 FIXTURE = Path("api/samples/caldotcom.booking.created.redacted.json")
 
@@ -61,9 +79,7 @@ def test_attio_is_valid_webhook_false_with_no_attendees() -> None:
 def test_attio_get_operations_returns_single_upsert_meeting() -> None:
     plan = _load().attio_get_operations()
 
-    assert len(plan) == 1
-    op = plan[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(plan)
     assert isinstance(op.external_ref, MeetingExternalRef)
     expected = canonical_meeting_uid(
         host_email="host@dlthub.com",
@@ -90,10 +106,10 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
 
 
 def test_attio_get_operations_ignores_icsUid_in_favor_of_canonical_uid() -> None:
-    with_ics = _load().attio_get_operations()[0]
-    without_ics = _mutated_created_webhook(icsUid=None).attio_get_operations()[0]
-    assert isinstance(with_ics, UpsertMeeting)
-    assert isinstance(without_ics, UpsertMeeting)
+    with_ics = _find_upsert_meeting(_load().attio_get_operations())
+    without_ics = _find_upsert_meeting(
+        _mutated_created_webhook(icsUid=None).attio_get_operations(),
+    )
     assert with_ics.external_ref.ical_uid == without_ics.external_ref.ical_uid
 
 
@@ -119,8 +135,7 @@ def test_attio_creator_email_falls_back_to_organizer() -> None:
         organizer={"email": "organizer@example.com"},
     )
     assert w.attio_is_valid_webhook() is True
-    op = w.attio_get_operations()[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(w.attio_get_operations())
     assert op.external_ref.ical_uid == canonical_meeting_uid(
         host_email="organizer@example.com",
         start=datetime.fromisoformat("2026-05-20T15:00:00+00:00"),
@@ -133,8 +148,7 @@ def test_unknown_booking_status_does_not_drop_payload() -> None:
     instead of failing the discriminator and silently dropping the event."""
     w = _mutated_created_webhook(status="rescheduled_pending_review")
     assert w.attio_is_valid_webhook() is True
-    op = w.attio_get_operations()[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(w.attio_get_operations())
     # Attendee statuses fall back to ``accepted`` for unknown values.
     assert all(p.status == "accepted" for p in op.participants if not p.is_organizer)
 
@@ -148,8 +162,7 @@ def test_hostless_cancelled_organizer_mirrors_booking_status() -> None:
         organizer={"email": "organizer@example.com"},
         status="cancelled",
     )
-    op = w.attio_get_operations()[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(w.attio_get_operations())
     organizers = [p for p in op.participants if p.is_organizer]
     assert len(organizers) == 1
     assert organizers[0].status == "declined"
@@ -167,10 +180,7 @@ def test_hostless_created_still_adds_organizer_participant() -> None:
         hosts=[],
         organizer={"email": "organizer@example.com"},
     )
-    ops = w.attio_get_operations()
-    assert len(ops) == 1
-    op = ops[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(w.attio_get_operations())
     organizers = [p for p in op.participants if p.is_organizer]
     assert len(organizers) == 1
     assert organizers[0].email_address == "organizer@example.com"
@@ -211,8 +221,7 @@ def test_attio_get_operations_marks_absent_attendee_declined() -> None:
     envelope = orjson.loads(FIXTURE.read_bytes())
     envelope["payload"]["attendees"][0]["absent"] = True
     w = Webhook.model_validate(envelope)
-    op = w.attio_get_operations()[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(w.attio_get_operations())
     external = next(
         p for p in op.participants if p.email_address == "external@example.com"
     )
@@ -225,8 +234,7 @@ def test_attio_get_operations_maps_cancelled_status_to_declined() -> None:
     BOOKING_CANCELLED webhook, but the field is still on the CREATED model.)
     """
     w = _mutated_created_webhook(status="cancelled")
-    op = w.attio_get_operations()[0]
-    assert isinstance(op, UpsertMeeting)
+    op = _find_upsert_meeting(w.attio_get_operations())
     external = next(
         p for p in op.participants if p.email_address == "external@example.com"
     )

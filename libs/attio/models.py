@@ -206,84 +206,84 @@ class MentionInput(BaseModel):
 class TrackingEventInput(BaseModel):
     """Resolved-record-id form of a tracking_events upsert.
 
-    Mirrors the live workspace schema 1:1 — writable surface is
-    ``{external_id, source, name, event_type, event_subtype, body, contact,
-    timestamp, owner}``. Any source-specific detail (rb2b's captured_url,
-    referrer, tags, city/state/zipcode, is_repeat_visit; form fields; etc.)
-    is JSON-stringified into ``body_json``; the raw payload also lands in
-    GCS via the ETL/raw export paths for warehouse-side filtering.
-
-    The ``contact`` slug on the live object is People-only — there is no
-    company record-reference attribute — so anonymous events land with
-    ``contact=None`` and are findable only by ``external_id``. See ai-5x9
-    for the planned filter that drops Attio writes when no Person resolves.
-
-    The ``source`` slug is an open-ended select carrying the emitter slug
-    (``rb2b``, ``caldotcom``, ``form``, ...) so Attio views can filter by
-    source without parsing ``external_id`` strings. The vocabulary
-    self-registers JIT inside the writer — see ai-ztm.
-
-    History: ai-wq6 fixed the prior shape that wrote ``captured_url`` and
-    six other non-existent slugs.
+    The dispatcher converts UpsertTrackingEvent (which carries refs) into
+    this model, replacing refs with resolved Attio record IDs.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     external_id: str
-    source: str
     name: str
     event_type: str
-    event_subtype: str | None = None
     event_timestamp: datetime
     body_json: str
 
+    captured_url: str
+    referrer: str | None = None
+    is_repeat_visit: bool | None = None
+    tags: list[str] = Field(default_factory=list)
+    city: str | None = None
+    state: str | None = None
+    zipcode: str | None = None
+
     related_person_record_id: str | None = None
+    related_company_record_id: str | None = None
 
 
-# Allowed lifecycle event types. Kept narrow so a typo can't silently create a
-# new select option in Attio. Extend when a new Cal.com trigger needs to write.
-MeetingLifecycleEventType = Literal[
-    "meeting_cancelled",
-    "meeting_rescheduled",
-    "meeting_no_show",
-    "meeting_no_show_host",
-    "meeting_ended",
+# Closed vocabulary for the per-row state. Mirrored in the bootstrap script's
+# _EVENT_SUBTYPE_OPTIONS. Extending requires re-running the bootstrap.
+MeetingLifecycleSubtype = Literal[
+    "scheduled",
+    "cancelled",
+    "rescheduled",
+    "no_show_attendee",
+    "no_show_host",
+    "completed",
 ]
 
 
 class MeetingLifecycleEventInput(BaseModel):
-    """Resolved-record-id form of a meeting-lifecycle tracking_events write.
+    """Per-meeting ``tracking_events`` write for a cal.com meeting lifecycle row.
 
-    Writes the narrow subset of ``tracking_events`` slugs that actually exist on
-    the live workspace schema (``name``, ``event_type``, ``external_id``,
-    ``source``, ``body``, ``timestamp``, ``contact``).
+    One row per meeting, keyed by ``external_id = canonical_meeting_uid(host,
+    start)``. Each cal.com webhook for the same meeting PATCHes the same row,
+    advancing ``event_subtype`` and appending a new line to the cumulative
+    ``details`` text. See
+    ``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``.
 
-    The legacy ``TrackingEventInput`` writes ``captured_url`` etc. which don't
-    exist in this workspace — see plan-02 side-finding. Don't reuse that path
-    here.
+    The helper writes the following slugs (all confirmed present on prod's
+    ``tracking_events`` and bootstrapped onto dev): ``external_id``, ``name``,
+    ``event_type`` (always ``"calcom_meeting"``), ``event_subtype``, ``body``,
+    ``details``, ``no_show``, ``timestamp``, ``people``, ``owner``.
 
-    ``source`` is fixed to ``"caldotcom"`` because this writer is the
-    caldotcom-only audit path; the field exists so the row joins the same
-    ``source`` select vocabulary as the canonical writer (see ai-ztm).
+    ``contact`` (dev-only legacy slug) is intentionally NOT written. Plan-02's
+    lifecycle code wrote to it, which made the codepath silently broken on
+    prod where that slug doesn't exist. The dispatcher uses ``people`` going
+    forward.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    # Idempotency key. Pattern:
-    # ``"caldotcom:<event_type>:<booking_uid>:<attendee_email>"``. Non-unique in
-    # schema (see ai-277), so the helper uses query-then-patch.
+    # ``canonical_meeting_uid(host_email, start)`` — same value as the Attio
+    # Meeting record's ``external_ref.ical_uid``. Cross-reference between the
+    # tracking_events row and the Meeting record without a foreign key.
     external_id: str
-    source: Literal["caldotcom"] = "caldotcom"
-    name: str
-    event_type: MeetingLifecycleEventType
+    # Cal.com booking title, e.g. "Acme × dlt pricing call". Combined with
+    # ``event_subtype`` to form the row's ``name`` slug.
+    meeting_title: str
+    event_subtype: MeetingLifecycleSubtype
+    # Webhook ``createdAt``. Overwritten on every transition so the row's
+    # timestamp tracks the most recent state change.
     timestamp: datetime
-    # JSON-stringified context (reason, cancelledBy, old/new times, etc.).
-    # Free-form because Attio has no destination for these structured fields.
+    # Raw webhook payload, JSON-stringified. Overwritten on every transition;
+    # the helper does not keep historical bodies.
     body_json: str
-    # Optional: when the attendee isn't yet a Person in Attio, the event still
-    # writes with ``contact = None`` so the audit row exists.
-    contact_person_record_id: str | None = None
-    # Carried through for cross-reference (``ical_uid`` of the source meeting,
-    # whether or not the meeting record itself can be mutated). Stored inside
-    # ``body_json`` rather than as a separate field — Attio has no Meeting
-    # foreign-key on tracking_events.
+    # One-line summary of THIS transition, e.g.
+    # "2026-05-27T08:00:00Z cancelled — by alice@dlthub.com: scheduling conflict".
+    # The helper reads the existing ``details`` text, appends "\\n" + this
+    # line, and writes back.
+    details_line: str
+    # Resolved host Person record id. The dispatcher upserts the host via
+    # UpsertPerson before emitting EmitMeetingLifecycleEvent so this is always
+    # set when the helper runs.
+    host_person_record_id: str

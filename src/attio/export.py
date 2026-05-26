@@ -43,7 +43,6 @@ from libs.attio.notes import (
 )
 from libs.attio.people import (
     get_person_values,
-    search_people as libs_search_people,
     upsert_person as libs_upsert_person,
 )
 from libs.attio.tracking_events import (
@@ -453,6 +452,7 @@ def _handle_upsert_tracking_event(
     table: LookupTable,
 ) -> ReliabilityEnvelope:
     person_id: str | None = None
+    company_id: str | None = None
     if op.subject_person is not None:
         person_id = table.resolve(op.subject_person)
         if person_id is None:
@@ -476,57 +476,93 @@ def _handle_upsert_tracking_event(
                 skipped_fields=[],
                 meta={"output_schema_version": "v1"},
             )
+    if op.subject_company is not None:
+        company_id = table.resolve(op.subject_company)
+        if company_id is None:
+            return ReliabilityEnvelope(
+                success=False,
+                partial_success=False,
+                action="failed",
+                record_id=None,
+                errors=[
+                    ErrorEntry(
+                        code="unresolved_ref",
+                        message=(
+                            f"could not resolve {op.subject_company.ref_kind}:"
+                            f"{op.subject_company.model_dump()}"
+                        ),
+                        error_type="UnresolvedRefError",
+                        fatal=True,
+                    ),
+                ],
+                warnings=[],
+                skipped_fields=[],
+                meta={"output_schema_version": "v1"},
+            )
 
     return find_or_create_tracking_event(
         TrackingEventInput(
             external_id=op.external_id,
-            source=op.source,
             name=op.name,
             event_type=op.event_type,
-            event_subtype=op.event_subtype,
             event_timestamp=op.event_timestamp,
             body_json=op.body_json,
+            captured_url=op.captured_url,
+            referrer=op.referrer,
+            is_repeat_visit=op.is_repeat_visit,
+            tags=op.tags,
+            city=op.city,
+            state=op.state,
+            zipcode=op.zipcode,
             related_person_record_id=person_id,
+            related_company_record_id=company_id,
         ),
     )
 
 
-def _resolve_person_record_id_by_email(email: str) -> str | None:
-    """Best-effort: return the Attio People record id for an email, or None.
-
-    Used by ``_handle_emit_meeting_lifecycle_event`` to populate the
-    ``contact`` field on the tracking_events row. Network failures collapse to
-    None — the audit row still writes (with ``contact = None``) so the gap
-    is visible in Attio rather than swallowed.
-    """
-    try:
-        envelope = libs_search_people(email=email, limit=1)
-    except Exception:  # noqa: BLE001 — best-effort lookup
-        logger.exception("attio search_people failed for email=%s", email)
-        return None
-    if not envelope.success:
-        return None
-    results = envelope.meta.get("results") or []
-    if not results:
-        return None
-    first = results[0]
-    return first.get("record_id") if isinstance(first, dict) else None
-
-
 def _handle_emit_meeting_lifecycle_event(
     op: EmitMeetingLifecycleEvent,
-    table: LookupTable,  # noqa: ARG001 — lifecycle events don't depend on in-plan refs
+    table: LookupTable,
 ) -> ReliabilityEnvelope:
-    person_record_id = _resolve_person_record_id_by_email(op.attendee_email)
+    """Resolve the host Person record_id via the plan's LookupTable and write.
+
+    The Cal.com dispatcher always emits ``UpsertCompany`` + ``UpsertPerson``
+    for the host BEFORE this op in the same plan, so the table is populated
+    by the time this handler runs. A missing host PersonRef is a programming
+    error (the dispatcher should not emit this op without it).
+    """
+    host_record_id = table.resolve(op.host)
+    if host_record_id is None:
+        return ReliabilityEnvelope(
+            success=False,
+            partial_success=False,
+            action="failed",
+            record_id=None,
+            errors=[
+                ErrorEntry(
+                    code="unresolved_ref",
+                    message=(
+                        "EmitMeetingLifecycleEvent.host did not resolve via "
+                        f"LookupTable: {op.host.model_dump()}. The Cal.com "
+                        "dispatcher must emit UpsertPerson for the host first."
+                    ),
+                    error_type="UnresolvedRefError",
+                    fatal=True,
+                ),
+            ],
+            warnings=[],
+            skipped_fields=[],
+            meta={"output_schema_version": "v1"},
+        )
     return find_or_create_meeting_lifecycle_event(
         MeetingLifecycleEventInput(
             external_id=op.external_id,
-            source=op.source,
-            name=op.name,
-            event_type=op.event_type,
+            meeting_title=op.meeting_title,
+            event_subtype=op.event_subtype,
             timestamp=op.timestamp,
             body_json=op.body_json,
-            contact_person_record_id=person_record_id,
+            details_line=op.details_line,
+            host_person_record_id=host_record_id,
         ),
     )
 

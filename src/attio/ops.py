@@ -175,29 +175,11 @@ class UpsertMention(BaseModel):
 
 
 class UpsertTrackingEvent(BaseModel):
-    """Source-agnostic op for creating/updating a ``tracking_events`` row.
+    """Source-agnostic op for creating/updating a `tracking_events` row.
 
-    Fields map 1:1 to the live workspace's writable surface. Source-specific
-    detail (rb2b's captured_url/referrer/tags/etc., form fields, etc.)
-    belongs in ``body_json`` — the schema's ``body`` slug is explicitly
-    designed as the per-source escape hatch. See ai-wq6 for the prior shape
-    that carried dead fields downstream into a writer that 4xx'd against
-    the live workspace.
-
-    ``source``, ``event_type``, and ``event_subtype`` are open-ended
-    selects whose option vocabulary self-registers JIT inside the
-    libs/attio writer — pass any source-meaningful string. Current
-    callers: rb2b emits ``source=rb2b`` + ``rb2b_visit`` +
-    ``first_visit``/``repeat_visit``; forms emit ``source=form`` +
-    ``form_submission`` + the form id (``signup-dlthub``, ...).
-    ``source`` exists so Attio views can filter rows by emitter without
-    parsing the ``external_id`` prefix — see ai-ztm.
-
-    The dispatcher resolves ``subject_person`` via the plan's LookupTable;
-    the adapter is called with the already-resolved Person record id.
-    ``subject_company`` is intentionally absent — the live
-    ``tracking_events`` schema has no company record-reference attribute,
-    so a Company ref would have nowhere to land.
+    The dispatcher resolves `subject_person` and `subject_company` via the
+    plan's LookupTable; the libs/attio adapter is called with already-resolved
+    record IDs.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -205,55 +187,70 @@ class UpsertTrackingEvent(BaseModel):
     op_type: Literal["upsert_tracking_event"] = "upsert_tracking_event"
 
     external_id: str
-    source: str
     name: str
-    event_type: str
-    event_subtype: str | None = None
+    event_type: Literal["rb2b_visit"]
     event_timestamp: datetime
     body_json: str
 
+    captured_url: str
+    referrer: str | None = None
+    is_repeat_visit: bool | None = None
+    tags: list[str] = Field(default_factory=list)
+    city: str | None = None
+    state: str | None = None
+    zipcode: str | None = None
+
     subject_person: PersonRef | None = None
+    subject_company: CompanyRef | None = None
 
 
 class EmitMeetingLifecycleEvent(BaseModel):
-    """Cal.com-specific op for a meeting-lifecycle audit row.
+    """Source-agnostic op for the per-meeting tracking_events lifecycle row.
 
-    Writes a ``tracking_events`` row linked to the attendee's Person record (if
-    found). Used by Cal.com because Attio's Meeting API does not support PATCH
-    or DELETE — meeting state mutations (cancel / reschedule / no-show / ended)
-    have nowhere else to land. See plan-02 for the API probe + rationale.
+    One op per cal.com webhook arrival. The dispatcher PATCHes a single
+    ``tracking_events`` row per meeting (keyed by ``external_id``), advancing
+    ``event_subtype`` and appending to the cumulative ``details``.
 
-    The dispatcher resolves ``attendee_email`` to a Person record id via
-    ``libs.attio.people.search_people``. If no match, the row still writes with
-    ``contact = None`` so the audit trail exists.
+    The op carries a ``PersonRef`` for the host. The dispatcher's
+    ``LookupTable`` resolves it to a record_id — earlier ops in the same plan
+    (``UpsertCompany`` + ``UpsertPerson`` for the host) populate the table. The
+    host upsert is therefore part of every emit-lifecycle plan and ensures the
+    ``people`` slug on the row is always populated.
 
-    ``source`` is pinned to ``"caldotcom"`` because this op only fires from
-    the Cal.com webhook; the field exists so the row joins the same
-    ``source`` select vocabulary the canonical writer uses (see ai-ztm),
-    enabling per-source Attio filters across both audit and visit rows.
+    Used by cal.com because Attio's ``/v2/meetings/`` is append-only — meeting
+    state mutations have nowhere else to land. See plan-02 for the API probe,
+    and the spec at
+    ``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``
+    for the per-meeting row model.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     op_type: Literal["emit_meeting_lifecycle_event"] = "emit_meeting_lifecycle_event"
-    # Stable idempotency key. Convention:
-    # ``"caldotcom:<event_type>:<booking_uid>:<attendee_email>"``.
+    # ``canonical_meeting_uid(host_email, start)``. Same value as the Attio
+    # Meeting record's ``external_ref.ical_uid`` — the cross-reference between
+    # the tracking_events row and the Meeting record.
     external_id: str
-    source: Literal["caldotcom"] = "caldotcom"
-    event_type: Literal[
-        "meeting_cancelled",
-        "meeting_rescheduled",
-        "meeting_no_show",
-        "meeting_no_show_host",
-        "meeting_ended",
+    # Cal.com booking title, combined with ``event_subtype`` to form ``name``.
+    meeting_title: str
+    event_subtype: Literal[
+        "scheduled",
+        "cancelled",
+        "rescheduled",
+        "no_show_attendee",
+        "no_show_host",
+        "completed",
     ]
-    name: str
+    # Webhook ``createdAt``. Updates on every transition.
     timestamp: datetime
+    # Raw webhook payload, JSON-stringified. Overwritten on every transition.
     body_json: str
-    attendee_email: str
-    # ``ical_uid`` of the source Attio Meeting record. Carried for cross-
-    # reference (already embedded in ``body_json``); no Attio foreign key.
-    meeting_ical_uid: str | None = None
+    # One-line summary appended to cumulative ``details``. See spec for the
+    # per-variant format.
+    details_line: str
+    # Reference to the host's Person record. Resolved by ``LookupTable`` from
+    # an earlier ``UpsertPerson`` op in the same plan.
+    host: PersonRef
 
 
 AttioOp = Annotated[
