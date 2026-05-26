@@ -31,12 +31,21 @@ _LIFECYCLE_OWNER_ACTOR_UUID = "663f9ad9-6704-5aff-be6d-48edb58bd12c"
 # stay in lockstep.
 _LIFECYCLE_EVENT_TYPE = "calcom_meeting"
 
-# Heuristic for splitting cumulative ``details`` text back into individual
-# transition entries. Each entry starts with an ISO-8601 timestamp written by
-# ``_details_line`` in the dispatcher. Used by ``_existing_details_entries``
-# to best-effort handle legacy rows that may have stored entries with
-# embedded newlines before the post-fix single-line invariant was enforced.
-_DETAILS_ENTRY_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}T")
+# Regex for splitting cumulative ``details`` text back into individual
+# transition entries. Matches the FULL prefix shape the dispatcher's
+# ``_details_line`` emits: ``<ISO-Z timestamp> <event_subtype> — ``. Used by
+# ``_existing_details_entries`` to handle legacy rows that may have entries
+# with embedded newlines from cal.com free-form text. The full-shape match
+# (timestamp + state vocabulary + em-dash delimiter) is specific enough that
+# free-form summary text wrapping into a continuation can't accidentally
+# look like an entry boundary — even a continuation that happens to start
+# with an ISO timestamp would also need to carry one of the six exact state
+# strings + the em-dash on the same line.
+_DETAILS_ENTRY_PREFIX = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z "
+    r"(?:scheduled|cancelled|rescheduled|no_show_attendee|no_show_host|completed) "
+    r"— ",
+)
 
 
 def find_or_create_tracking_event(input: TrackingEventInput) -> ReliabilityEnvelope:
