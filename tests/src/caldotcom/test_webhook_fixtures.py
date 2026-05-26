@@ -139,6 +139,11 @@ class TestOperationDispatch:
         op = ops[0]
         assert isinstance(op, EmitMeetingLifecycleEvent)
         assert op.event_type == "meeting_cancelled"
+        # source is pinned via the Literal default — caldotcom callers don't
+        # set it explicitly. Lock the invariant so a future refactor of the
+        # default doesn't silently land caldotcom rows in the wrong Attio
+        # source bucket. ai-ztm.
+        assert op.source == "caldotcom"
         assert op.attendee_email == "sam@example.com"
         # ical_uid derived from organizer.email + startTime (== OLD time).
         expected = canonical_meeting_uid(
