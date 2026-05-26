@@ -75,3 +75,39 @@ def test_get_person_values_raises_when_required_identifier_missing(
         )
 
     mock_get_client.assert_not_called()
+
+
+@patch("libs.attio.people.get_client")
+def test_get_person_values_linkedin_expands_url_variants(mock_get_client) -> None:
+    """T9: When matching_attribute=linkedin, the read filter must expand to the
+    same URL variants the write path searches across. Otherwise a non-canonical
+    URL on the op can miss the existing record on the read side while the write
+    still hits it — silently bypassing merge_only_if_empty protection.
+
+    Regression test for the Codex review on the ai-805 push: raw equality on
+    linkedin would leave a read/write mismatch for variant URLs.
+    """
+    mock_client = MagicMock()
+    mock_client.records.post_v2_objects_object_records_query.return_value.data = []
+    mock_get_client.return_value.__enter__.return_value = mock_client
+
+    from libs.attio.people import _linkedin_url_variants, get_person_values
+
+    input_url = "https://linkedin.com/in/foo"
+    get_person_values(
+        matching_attribute="linkedin",
+        email=None,
+        linkedin=input_url,
+        github_handle=None,
+    )
+
+    call = mock_client.records.post_v2_objects_object_records_query.call_args
+    filter_ = call.kwargs["filter_"]
+
+    expected_variants = _linkedin_url_variants(input_url)
+    assert len(expected_variants) > 1, (
+        "test setup expects a non-canonical URL that expands to >1 variant"
+    )
+    assert filter_ == {
+        "$or": [{"linkedin": v} for v in expected_variants],
+    }, f"Expected $or-of-variants filter, got {filter_}"

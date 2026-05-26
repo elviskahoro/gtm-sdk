@@ -666,11 +666,26 @@ def get_person_values(
             f"requires non-empty {matching_attribute!r}",
         )
 
+    # LinkedIn URLs vary on scheme, host prefix, and trailing slash. The write
+    # path in ``upsert_person`` searches the full variant set via
+    # ``_search_people_raw``; the read here must too, otherwise a non-canonical
+    # URL on the op can miss the existing record and silently bypass
+    # ``merge_only_if_empty`` protection while the write still hits it.
+    filter_: dict[str, Any]
+    if matching_attribute == "linkedin":
+        variants = _linkedin_url_variants(filter_value)
+        if len(variants) == 1:
+            filter_ = {filter_key: variants[0]}
+        else:
+            filter_ = {"$or": [{filter_key: v} for v in variants]}
+    else:
+        filter_ = {filter_key: filter_value}
+
     try:
         with get_client() as client:
             response = client.records.post_v2_objects_object_records_query(
                 object="people",
-                filter_={filter_key: filter_value},
+                filter_=filter_,
                 limit=1,
             )
 
