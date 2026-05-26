@@ -39,16 +39,25 @@ def _verify_infisical_keys(names: Iterable[str]) -> None:
             ) from exc
         except InfisicalFetchError as exc:
             # Mirror the old `modal.Secret.from_name(...).hydrate()` classification:
-            # a permanently-missing secret is a config problem the operator must
-            # fix (populate the key); any other fetch failure (network down,
-            # Infisical 5xx, etc.) is a retryable transport issue. Pattern-match
-            # the wrapped APIError message rather than picking up a richer
-            # exception type — the SDK collapses 404/5xx into a single
-            # InfisicalFetchError, so the message is the only signal available.
+            # config errors (missing secret, expired/wrong token, forbidden
+            # lookup) need operator action; transport errors are retryable.
+            # Pattern-match the wrapped APIError message because the Infisical
+            # SDK collapses all upstream failures into a single
+            # InfisicalFetchError with no structured status code.
             msg = str(exc).lower()
-            if "404" in msg or "not found" in msg:
+            if any(
+                marker in msg
+                for marker in (
+                    "404",
+                    "not found",
+                    "401",
+                    "403",
+                    "unauthorized",
+                    "forbidden",
+                )
+            ):
                 raise ConfigurationError(
-                    f"Infisical key '{name}' missing: {exc}",
+                    f"Infisical key '{name}' missing or inaccessible: {exc}",
                 ) from exc
             raise ConnectivityError(
                 f"Transient Infisical failure resolving '{name}': {exc}",

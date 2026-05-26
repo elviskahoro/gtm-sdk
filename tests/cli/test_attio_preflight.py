@@ -38,6 +38,26 @@ def test_missing_infisical_key_raises_configuration_error(monkeypatch) -> None:
     assert "ATTIO_API_KEY" in str(exc_info.value)
 
 
+def test_unauthorized_infisical_failure_raises_configuration_error(monkeypatch) -> None:
+    monkeypatch.setenv("MODAL_TOKEN_ID", "id_123")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "secret_123")
+
+    @contextmanager
+    def _unauthorized(name: str):
+        raise InfisicalFetchError(
+            f"Failed to fetch {name} from Infisical: APIError: Unauthorized (Status: 401)",
+        )
+        yield  # unreachable
+
+    monkeypatch.setattr("cli.attio.preflight.infisical.fetch", _unauthorized)
+
+    with pytest.raises(ConfigurationError):
+        run_people_preflight(
+            connectivity_probe=True,
+            function_name="attio_search_people",
+        )
+
+
 def test_transient_infisical_failure_raises_connectivity_error(monkeypatch) -> None:
     monkeypatch.setenv("MODAL_TOKEN_ID", "id_123")
     monkeypatch.setenv("MODAL_TOKEN_SECRET", "secret_123")
