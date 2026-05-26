@@ -211,6 +211,107 @@ def test_no_show_variants_set_no_show_true(
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
+def test_duplicate_retry_is_noop(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """Hookdeck retry → identical details_line already in existing row → noop."""
+    client = MagicMock()
+    existing = MagicMock()
+    existing.id.record_id = "te_existing"
+    existing.model_dump.return_value = {
+        "values": {
+            "details": [
+                {
+                    "value": (
+                        "2026-05-14T00:00:00Z cancelled — by host@dlthub.com: reason"
+                    ),
+                },
+            ],
+            "timestamp": [{"value": "2026-05-14T00:00:00+00:00"}],
+        },
+    }
+    client.records.post_v2_objects_object_records_query.return_value.data = [existing]
+    mock_get_client.return_value.__enter__.return_value = client
+
+    env = find_or_create_meeting_lifecycle_event(_valid_input())
+
+    assert env.success is True
+    assert env.action == "noop"
+    assert env.record_id == "te_existing"
+    # No PATCH issued — duplicate is a true no-op.
+    client.records.patch_v2_objects_object_records_record_id_.assert_not_called()
+    client.records.post_v2_objects_object_records.assert_not_called()
+    assert env.meta.get("reason") == "duplicate_details_line"
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
+def test_stale_arrival_appends_details_only(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """Late-arriving older webhook → details appended, state NOT reverted.
+
+    Example: a BOOKING_CREATED is delivered AFTER a BOOKING_CANCELLED has
+    already been recorded. Without this guard the late CREATED would clobber
+    event_subtype back to ``scheduled`` and overwrite ``body`` with the stale
+    creation payload.
+    """
+    client = MagicMock()
+    existing = MagicMock()
+    existing.id.record_id = "te_existing"
+    existing.model_dump.return_value = {
+        "values": {
+            # Existing row is the LATER cancellation.
+            "details": [
+                {
+                    "value": (
+                        "2026-05-15T12:00:00Z cancelled — by host@dlthub.com: reason"
+                    ),
+                },
+            ],
+            "timestamp": [{"value": "2026-05-15T12:00:00+00:00"}],
+            "event_subtype": [{"option": "cancelled"}],
+        },
+    }
+    client.records.post_v2_objects_object_records_query.return_value.data = [existing]
+    patch_resp = MagicMock()
+    patch_resp.data.id.record_id = "te_existing"
+    client.records.patch_v2_objects_object_records_record_id_.return_value = patch_resp
+    mock_get_client.return_value.__enter__.return_value = client
+
+    # Incoming is an OLDER scheduled-state webhook arriving late.
+    env = find_or_create_meeting_lifecycle_event(
+        _valid_input(
+            event_subtype="scheduled",
+            timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
+            details_line=("2026-05-14T00:00:00Z scheduled — host: a; attendees: b"),
+        ),
+    )
+
+    assert env.success is True
+    assert env.action == "updated"
+
+    # Only `details` was written. event_subtype / body / timestamp / name etc.
+    # are absent — the existing newer state is preserved.
+    values = _values_from_call(
+        client.records.patch_v2_objects_object_records_record_id_.call_args,
+    )
+    assert set(values.keys()) == {"details"}
+    # Late line is appended (the cumulative log shows historical context).
+    assert values["details"] == [
+        {
+            "value": (
+                "2026-05-15T12:00:00Z cancelled — by host@dlthub.com: reason"
+                "\n2026-05-14T00:00:00Z scheduled — host: a; attendees: b"
+            ),
+        },
+    ]
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
 def test_sdk_failure_returns_failed_envelope(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001

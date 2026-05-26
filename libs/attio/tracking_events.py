@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from libs.attio.attributes import ensure_select_options
@@ -118,6 +119,22 @@ def find_or_create_meeting_lifecycle_event(
     The ``event_subtype`` select option is seeded just-in-time so the helper is
     robust against the bootstrap not having been re-run yet. Same for
     ``event_type:calcom_meeting``.
+
+    Resilience to webhook delivery anomalies (flagged by roborev on the
+    initial implementation):
+
+    - **Duplicate retry**: Hookdeck retries on 4xx/5xx. A retried delivery
+      arrives with an identical ``details_line`` (same timestamp + state +
+      summary). We dedupe by substring-checking the existing ``details``
+      field. Exact-match → no-op write returning ``"noop"``.
+
+    - **Out-of-order delivery**: cal.com or the network can deliver a webhook
+      whose ``timestamp`` precedes a transition we already wrote (e.g. a late
+      ``BOOKING_CREATED`` arriving after ``BOOKING_CANCELLED``). We compare
+      ``input.timestamp`` to the stored row's timestamp. Older →
+      append to ``details`` only (preserving historical context) and leave
+      ``event_subtype`` / ``body`` / ``timestamp`` at their newer values.
+      Same-or-newer → full state write.
     """
     try:
         # Seed the select options just in time. Bootstrap is the primary path;
@@ -144,39 +161,73 @@ def find_or_create_meeting_lifecycle_event(
             )
             existing = list(query_response.data or [])
 
-            # Cumulative details: read the existing row's `details` text and
-            # append the new transition line. New row → use details_line as-is.
             existing_details = ""
+            existing_timestamp: datetime | None = None
             if existing:
                 existing_details = _extract_text_slug(existing[0], "details")
+                existing_timestamp = _extract_date_slug(existing[0], "timestamp")
+
+            # Duplicate retry: exact same transition line already present in
+            # the cumulative details → no-op. Hookdeck retries on 4xx/5xx are
+            # the main source of these.
+            if existing_details and input.details_line in existing_details:
+                return ReliabilityEnvelope(
+                    success=True,
+                    partial_success=False,
+                    action="noop",
+                    record_id=existing[0].id.record_id,
+                    warnings=[],
+                    skipped_fields=[],
+                    errors=[],
+                    meta={
+                        "output_schema_version": "v1",
+                        "reason": "duplicate_details_line",
+                        "meeting_lifecycle_event": input.model_dump(mode="json"),
+                    },
+                )
+
             new_details = (
                 f"{existing_details}\n{input.details_line}"
                 if existing_details
                 else input.details_line
             )
 
-            values: dict[str, Any] = {
-                "external_id": [{"value": input.external_id}],
-                "name": [{"value": name}],
-                "event_type": [{"option": _LIFECYCLE_EVENT_TYPE}],
-                "event_subtype": [{"option": input.event_subtype}],
-                "body": [{"value": input.body_json}],
-                "details": [{"value": new_details}],
-                "no_show": [{"value": no_show}],
-                "timestamp": [{"value": input.timestamp.isoformat()}],
-                "people": [
-                    {
-                        "target_object": "people",
-                        "target_record_id": input.host_person_record_id,
-                    },
-                ],
-                "owner": [
-                    {
-                        "referenced_actor_type": "workspace-member",
-                        "referenced_actor_id": _LIFECYCLE_OWNER_ACTOR_UUID,
-                    },
-                ],
-            }
+            # Out-of-order: incoming webhook precedes the stored transition.
+            # Write the historical line to details ONLY; leave the row's
+            # event_subtype / body / timestamp at the (newer) values they
+            # already hold so a late BOOKING_CREATED can't clobber a recorded
+            # cancellation.
+            is_stale = (
+                existing_timestamp is not None and input.timestamp < existing_timestamp
+            )
+
+            if is_stale:
+                values: dict[str, Any] = {
+                    "details": [{"value": new_details}],
+                }
+            else:
+                values = {
+                    "external_id": [{"value": input.external_id}],
+                    "name": [{"value": name}],
+                    "event_type": [{"option": _LIFECYCLE_EVENT_TYPE}],
+                    "event_subtype": [{"option": input.event_subtype}],
+                    "body": [{"value": input.body_json}],
+                    "details": [{"value": new_details}],
+                    "no_show": [{"value": no_show}],
+                    "timestamp": [{"value": input.timestamp.isoformat()}],
+                    "people": [
+                        {
+                            "target_object": "people",
+                            "target_record_id": input.host_person_record_id,
+                        },
+                    ],
+                    "owner": [
+                        {
+                            "referenced_actor_type": "workspace-member",
+                            "referenced_actor_id": _LIFECYCLE_OWNER_ACTOR_UUID,
+                        },
+                    ],
+                }
 
             if existing:
                 record_id = existing[0].id.record_id
@@ -228,6 +279,23 @@ def _extract_text_slug(record: Any, slug: str) -> str:
     if isinstance(first, dict):
         return first.get("value") or ""
     return ""
+
+
+def _extract_date_slug(record: Any, slug: str) -> datetime | None:
+    """Return the date/timestamp value of ``slug`` parsed as a UTC datetime.
+
+    Attio's ``date`` attribute on the live ``tracking_events`` schema stores
+    values as ISO-8601 strings (with or without time). Returns ``None`` for
+    missing slug / empty list / unparseable input — the caller falls back to
+    treating the row as having no recorded timestamp.
+    """
+    raw = _extract_text_slug(record, slug)
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _error_envelope(error: Exception) -> ReliabilityEnvelope:
