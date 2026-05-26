@@ -139,7 +139,7 @@ def _ops_for_created(
         return []
 
     ical_uid = canonical_meeting_uid(host_email=host_email, start=payload.start)
-    title = payload.title or "Cal.com booking"
+    title = payload.title or "CALCOM Booking"
     description = payload.additionalNotes or payload.description or title
     booking_status = payload.status
 
