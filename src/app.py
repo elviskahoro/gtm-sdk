@@ -47,6 +47,11 @@ image = (
     .add_local_python_source("src")
 )
 
+# TODO(ai-672): same silent miss-route footgun ai-2aw fixed for
+# `webhooks/export_to_attio.py`. Migrate to the inline `from_dict`
+# bootstrap + `libs.infisical.fetch_all` + per-lib `api_key_scope`
+# pattern. ~17 @app.function sites in src/attio,apollo,parallel touch
+# these — kept out of ai-2aw to scope that PR to the webhook flow.
 secrets_apollo = modal.Secret.from_name("apollo")
 secrets_attio = modal.Secret.from_name("attio")
 secrets_parallel = modal.Secret.from_name("parallel")

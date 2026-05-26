@@ -34,8 +34,8 @@ def _person_webhook_with_linkedin(value: str | None) -> Webhook:
     return Webhook.model_validate(raw)
 
 
-def test_attio_get_secret_collection_names() -> None:
-    assert Webhook.attio_get_secret_collection_names() == ["attio"]
+def test_required_api_keys() -> None:
+    assert Webhook.required_api_keys() == ["ATTIO_API_KEY"]
 
 
 def test_extract_domain_strips_scheme_path_and_www() -> None:

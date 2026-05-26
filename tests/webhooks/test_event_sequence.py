@@ -78,6 +78,21 @@ def _isolated_contextvars() -> Any:
         structured._SOURCE.set(prev_source)
 
 
+@pytest.fixture(autouse=True)
+def _stub_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Short-circuit ``infisical.fetch_all`` to the env path.
+
+    The Attio export endpoint resolves each ``required_api_keys()`` entry via
+    env first, then falls back to Infisical. By exporting non-empty dummy
+    values for both keys we avoid the Infisical bootstrap-auth path entirely;
+    the downstream Attio call still fails (no real key, no network) which is
+    the original test shape — these tests assert on the log lines emitted
+    *before* that failure.
+    """
+    monkeypatch.setenv("ATTIO_API_KEY", "stub-attio-key-for-tests")
+    monkeypatch.setenv("CALCOM_API_KEY", "stub-calcom-key-for-tests")
+
+
 @pytest.fixture
 def attio_caldotcom_handler(tmp_path: Path) -> ModuleType:
     return _load_substituted_handler(

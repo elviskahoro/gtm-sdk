@@ -14,6 +14,9 @@ silent failure here would hide the gap and corrupt audit logs.
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from types import TracebackType
 from typing import Any
 
@@ -22,6 +25,30 @@ import httpx
 from libs.caldotcom.models import BookingCreatedPayload
 
 CALCOM_API_BASE = "https://api.cal.com"
+
+_api_key_var: ContextVar[str | None] = ContextVar(
+    "calcom_api_key",
+    default=None,
+)
+
+
+@contextmanager
+def api_key_scope(api_key: str) -> Generator[None, None, None]:
+    """Bind ``api_key`` as the active Cal.com key for this async/sync context.
+
+    Mirrors :func:`libs.attio.client.api_key_scope` — the webhook flow opens
+    this scope after fetching ``CALCOM_API_KEY`` from Infisical, and
+    :meth:`CalcomClient.from_env` reads from the contextvar before falling
+    back to ``os.environ``. The scope is reset on exit so concurrent
+    requests in the same Modal container do not see each other's keys.
+    """
+    token = _api_key_var.set(api_key)
+    try:
+        yield
+    finally:
+        _api_key_var.reset(token)
+
+
 # Pinned per Cal.com docs: "BookingOutput_2024_08_13" shape matches our
 # BookingCreatedPayload model. Bump deliberately when migrating.
 CALCOM_API_VERSION = "2024-08-13"
@@ -90,17 +117,20 @@ class CalcomClient:
 
     @classmethod
     def from_env(cls) -> CalcomClient:
-        """Build a client from ``CALCOM_API_KEY`` in the process environment.
+        """Build a client from the active key for this request.
 
-        The webhook runtime injects this via a Modal Secret bound on the app.
-        Local invocation must `infisical run ... -- <cmd>` to populate it.
+        Resolution order: the contextvar set by :func:`api_key_scope` first
+        (webhook flow — populated from Infisical at request boundary), then
+        ``CALCOM_API_KEY`` in ``os.environ`` (back-compat for any local
+        invocation outside the scope). The webhook runtime no longer binds
+        a named ``caldotcom`` Modal Secret; the key lives in Infisical.
         """
-        try:
-            api_key = os.environ["CALCOM_API_KEY"]
-        except KeyError as exc:
+        api_key = (_api_key_var.get() or os.environ.get("CALCOM_API_KEY") or "").strip()
+        if not api_key:
             raise RuntimeError(
-                "CALCOM_API_KEY not set — required for BOOKING_NO_SHOW_UPDATED "
-                "handling. Add it to Infisical (dev) and the 'caldotcom' Modal "
-                "secret. See plan-02 deploy notes.",
-            ) from exc
+                "CALCOM_API_KEY not resolved. Provide one of: "
+                "(1) call inside libs.caldotcom.client.api_key_scope(...), "
+                "(2) set CALCOM_API_KEY in the process environment. "
+                "Required for BOOKING_NO_SHOW_UPDATED handling.",
+            )
         return cls(api_key=api_key)
