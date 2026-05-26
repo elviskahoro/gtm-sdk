@@ -207,7 +207,7 @@ class TrackingEventInput(BaseModel):
     """Resolved-record-id form of a tracking_events upsert.
 
     Mirrors the live workspace schema 1:1 — writable surface is
-    ``{external_id, name, event_type, event_subtype, body, contact,
+    ``{external_id, source, name, event_type, event_subtype, body, contact,
     timestamp, owner}``. Any source-specific detail (rb2b's captured_url,
     referrer, tags, city/state/zipcode, is_repeat_visit; form fields; etc.)
     is JSON-stringified into ``body_json``; the raw payload also lands in
@@ -218,6 +218,11 @@ class TrackingEventInput(BaseModel):
     ``contact=None`` and are findable only by ``external_id``. See ai-5x9
     for the planned filter that drops Attio writes when no Person resolves.
 
+    The ``source`` slug is an open-ended select carrying the emitter slug
+    (``rb2b``, ``caldotcom``, ``form``, ...) so Attio views can filter by
+    source without parsing ``external_id`` strings. The vocabulary
+    self-registers JIT inside the writer — see ai-ztm.
+
     History: ai-wq6 fixed the prior shape that wrote ``captured_url`` and
     six other non-existent slugs.
     """
@@ -225,6 +230,7 @@ class TrackingEventInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     external_id: str
+    source: str
     name: str
     event_type: str
     event_subtype: str | None = None
@@ -250,11 +256,15 @@ class MeetingLifecycleEventInput(BaseModel):
 
     Writes the narrow subset of ``tracking_events`` slugs that actually exist on
     the live workspace schema (``name``, ``event_type``, ``external_id``,
-    ``body``, ``timestamp``, ``contact``).
+    ``source``, ``body``, ``timestamp``, ``contact``).
 
     The legacy ``TrackingEventInput`` writes ``captured_url`` etc. which don't
     exist in this workspace — see plan-02 side-finding. Don't reuse that path
     here.
+
+    ``source`` is fixed to ``"caldotcom"`` because this writer is the
+    caldotcom-only audit path; the field exists so the row joins the same
+    ``source`` select vocabulary as the canonical writer (see ai-ztm).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -263,6 +273,7 @@ class MeetingLifecycleEventInput(BaseModel):
     # ``"caldotcom:<event_type>:<booking_uid>:<attendee_email>"``. Non-unique in
     # schema (see ai-277), so the helper uses query-then-patch.
     external_id: str
+    source: Literal["caldotcom"] = "caldotcom"
     name: str
     event_type: MeetingLifecycleEventType
     timestamp: datetime

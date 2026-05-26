@@ -599,6 +599,7 @@ def test_handle_upsert_tracking_event_resolves_person_ref(mock_libs) -> None:
     result = _handle_upsert_tracking_event(
         UpsertTrackingEvent(
             external_id="rb2b:abc123",
+            source="rb2b",
             name="https://example.test/pricing",
             event_type="rb2b_visit",
             event_subtype="repeat_visit",
@@ -613,6 +614,7 @@ def test_handle_upsert_tracking_event_resolves_person_ref(mock_libs) -> None:
     input_arg = mock_libs.call_args.args[0]
     assert input_arg.related_person_record_id == "pe_1"
     assert input_arg.event_subtype == "repeat_visit"
+    assert input_arg.source == "rb2b"
 
 
 @patch("src.attio.export.find_or_create_tracking_event")
@@ -624,6 +626,7 @@ def test_handle_upsert_tracking_event_unresolved_ref_is_fatal(mock_libs) -> None
     result = _handle_upsert_tracking_event(
         UpsertTrackingEvent(
             external_id="rb2b:abc123",
+            source="rb2b",
             name="https://example.test/pricing",
             event_type="rb2b_visit",
             event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
@@ -650,6 +653,7 @@ def test_handle_upsert_tracking_event_no_refs_passes_none(mock_libs) -> None:
     result = _handle_upsert_tracking_event(
         UpsertTrackingEvent(
             external_id="rb2b:abc123",
+            source="rb2b",
             name="https://example.test/pricing",
             event_type="rb2b_visit",
             event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),

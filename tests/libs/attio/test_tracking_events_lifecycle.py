@@ -72,11 +72,20 @@ def test_miss_then_create_seeds_option_and_writes(
     assert env.action == "created"
     assert env.record_id == "te_new"
 
-    # Option vocabulary was seeded JIT.
-    mock_ensure_options.assert_called_once()
-    _args, kwargs = mock_ensure_options.call_args
-    assert kwargs.get("attribute_slug") == "event_type"
-    assert kwargs.get("options") == ["meeting_cancelled"]
+    # Both vocabularies seeded JIT — source so caldotcom rows join the same
+    # filterable select as rb2b/form/etc (ai-ztm), and event_type so the
+    # specific lifecycle option exists before write.
+    seeded = [c.kwargs for c in mock_ensure_options.call_args_list]
+    assert {
+        "target_object": "tracking_events",
+        "attribute_slug": "source",
+        "options": ["caldotcom"],
+    } in seeded
+    assert {
+        "target_object": "tracking_events",
+        "attribute_slug": "event_type",
+        "options": ["meeting_cancelled"],
+    } in seeded
 
     # Query was scoped to the right object + external_id.
     q_args = client.records.post_v2_objects_object_records_query.call_args
@@ -139,8 +148,11 @@ def test_contact_none_writes_without_contact_field(
     assert values is not None
     assert "contact" not in values
     # And the other slugs are present.
-    for slug in ("name", "event_type", "external_id", "body", "timestamp"):
+    for slug in ("name", "source", "event_type", "external_id", "body", "timestamp"):
         assert slug in values, f"missing slug: {slug}"
+    # source is pinned to the caldotcom literal so all lifecycle rows land
+    # in the same Attio source bucket.
+    assert values["source"] == [{"option": "caldotcom"}]
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")

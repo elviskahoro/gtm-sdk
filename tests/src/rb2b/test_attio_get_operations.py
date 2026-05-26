@@ -91,6 +91,7 @@ def test_attio_get_operations_person_and_company_emits_three_ops_in_order() -> N
     assert ops[1].merge_only_if_empty == ["title", "city", "state", "zipcode"]
     te = ops[2]
     assert te.external_id.startswith("rb2b:")
+    assert te.source == "rb2b"
     assert te.event_type == "rb2b_visit"
     assert te.event_subtype in {"first_visit", "repeat_visit"}
     assert te.name == w.payload.captured_url

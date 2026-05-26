@@ -68,12 +68,19 @@ def find_or_create_tracking_event(input: TrackingEventInput) -> ReliabilityEnvel
 def _ensure_option_vocabulary(input: TrackingEventInput) -> None:
     """Seed select-option titles the payload references just-in-time.
 
-    ``event_type`` and ``event_subtype`` are both open-ended selects per
-    their workspace descriptions ("Expand as new types are tracked.",
-    "Kept open-ended for future subtypes."). New sources (rb2b, fathom,
-    caldotcom lifecycle...) self-register their option titles on first
-    write rather than requiring a manual bootstrap step.
+    ``source``, ``event_type``, and ``event_subtype`` are all open-ended
+    selects per their workspace descriptions ("Expand as new types are
+    tracked.", "Kept open-ended for future subtypes."). New sources (rb2b,
+    fathom, caldotcom lifecycle...) self-register their option titles on
+    first write rather than requiring a manual bootstrap step. ``source``
+    enables Attio-side filtering by emitter without parsing
+    ``external_id`` prefixes — see ai-ztm.
     """
+    ensure_select_options(
+        target_object=_OBJECT,
+        attribute_slug="source",
+        options=[input.source],
+    )
     ensure_select_options(
         target_object=_OBJECT,
         attribute_slug="event_type",
@@ -100,13 +107,20 @@ def find_or_create_meeting_lifecycle_event(
     bypasses that bug by emitting a narrower value-dict.
 
     Idempotency: ``external_id`` is non-unique in schema, so we query-then-patch
-    (mirroring the existing pattern). The event_type select option is seeded
-    just-in-time so the first ``meeting_cancelled`` event also creates the
-    option.
+    (mirroring the existing pattern). The ``event_type`` and ``source`` select
+    options are seeded just-in-time so the first ``meeting_cancelled`` event
+    creates the lifecycle option and the first lifecycle write registers
+    ``"caldotcom"`` in the source vocabulary alongside other emitters — see
+    ai-ztm.
     """
     try:
-        # Seed the select option if it's new — otherwise the write 400s with
+        # Seed select options if they're new — otherwise the write 400s with
         # "Cannot find option value ...".
+        ensure_select_options(
+            target_object=_OBJECT,
+            attribute_slug="source",
+            options=[input.source],
+        )
         ensure_select_options(
             target_object=_OBJECT,
             attribute_slug="event_type",
@@ -115,6 +129,7 @@ def find_or_create_meeting_lifecycle_event(
 
         values: dict[str, Any] = {
             "name": [{"value": input.name}],
+            "source": [{"option": input.source}],
             "event_type": [{"option": input.event_type}],
             "external_id": [{"value": input.external_id}],
             "body": [{"value": input.body_json}],

@@ -130,6 +130,7 @@ def test_upsert_person_github_handle_construction() -> None:
 def _valid_tracking_event_kwargs() -> dict[str, Any]:
     return dict(
         external_id="rb2b:abc123",
+        source="rb2b",
         name="https://example.test/pricing",
         event_type="rb2b_visit",
         event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
@@ -142,8 +143,20 @@ def test_upsert_tracking_event_minimal_valid() -> None:
 
     op = UpsertTrackingEvent(**_valid_tracking_event_kwargs())
     assert op.op_type == "upsert_tracking_event"
+    assert op.source == "rb2b"
     assert op.event_subtype is None
     assert op.subject_person is None
+
+
+def test_upsert_tracking_event_source_is_required() -> None:
+    """``source`` must be set so the tracking_events row can be filtered by
+    emitter in Attio without parsing the external_id prefix — ai-ztm."""
+    from src.attio.ops import UpsertTrackingEvent
+
+    kwargs = _valid_tracking_event_kwargs()
+    kwargs.pop("source")
+    with pytest.raises(ValidationError):
+        UpsertTrackingEvent(**kwargs)
 
 
 def test_upsert_tracking_event_with_person_ref_and_subtype() -> None:

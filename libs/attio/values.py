@@ -391,16 +391,20 @@ def build_tracking_event_values(
     """Build the Attio values dict for a tracking_events record write.
 
     Emits only the slugs that exist on the live workspace schema
-    (``external_id, name, event_type, event_subtype, body, contact,
+    (``external_id, source, name, event_type, event_subtype, body, contact,
     timestamp``). The ``timestamp`` attribute is a *date* in Attio, not a
     datetime, so the event timestamp is truncated to day precision —
     sub-day ordering survives inside ``body_json`` and in the GCS raw
     landing. ``contact`` is People-only; ``owner`` is left for human
     curation. See ai-wq6 for the prior shape that wrote seven dead slugs
-    (``captured_url`` and friends).
+    (``captured_url`` and friends). The ``source`` slug carries the
+    emitter identifier (``rb2b``, ``caldotcom``, ``form``, ...) so Attio
+    views can filter by source without parsing the ``external_id`` prefix
+    — see ai-ztm.
     """
     values: dict[str, list[dict[str, Any]]] = {
         "external_id": _scalar_value(input.external_id),
+        "source": _select_value(input.source),
         "name": _scalar_value(input.name),
         "event_type": _select_value(input.event_type),
         "timestamp": _scalar_value(input.event_timestamp.date().isoformat()),
