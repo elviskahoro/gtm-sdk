@@ -5,7 +5,11 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from libs.attio.values import format_location_from_parts, normalize_linkedin_url
+from libs.attio.values import (
+    format_location_from_parts,
+    normalize_linkedin_company_url,
+    normalize_linkedin_url,
+)
 from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.rb2b import Webhook as Rb2bWebhook
 from libs.webhook.filter import WebhookFilter, WebhookFilters
@@ -181,7 +185,14 @@ class Webhook(Rb2bWebhook):
         ops: list[Any] = []
         domain = self._attio_domain()
         email = self.payload.business_email
-        linkedin = normalize_linkedin_url(self.payload.linkedin_url)
+        # rb2b's ``linkedin_url`` field is overloaded: sometimes the
+        # visitor's profile (``/in/<handle>``), sometimes the company page
+        # (``/company/<slug>``). Discriminate by URL shape — the normalizers
+        # return None for the wrong shape — and route each variant to the
+        # appropriate op. Neither match → drop silently (the original
+        # payload still lands in GCS raw + ETL for the audit trail).
+        linkedin_person = normalize_linkedin_url(self.payload.linkedin_url)
+        linkedin_company = normalize_linkedin_company_url(self.payload.linkedin_url)
 
         if domain:
             ops.append(
@@ -191,10 +202,12 @@ class Webhook(Rb2bWebhook):
                     industry=self.payload.industry,
                     employee_count=self.payload.employee_count,
                     estimate_revenue=self.payload.estimate_revenue,
+                    linkedin_url=linkedin_company,
                     merge_only_if_empty=[
                         "industry",
                         "employee_count",
                         "estimate_revenue",
+                        "linkedin_url",
                     ],
                 ),
             )
@@ -206,7 +219,7 @@ class Webhook(Rb2bWebhook):
                     email=email,
                     first_name=self.payload.first_name,
                     last_name=self.payload.last_name,
-                    linkedin=linkedin,
+                    linkedin=linkedin_person,
                     company_domain=domain,
                     title=self.payload.title,
                     city=self.payload.city,

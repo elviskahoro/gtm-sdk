@@ -13,6 +13,7 @@ class CompanyInput(BaseModel):
     industry: str | None = None
     employee_count: str | None = None
     estimate_revenue: str | None = None
+    linkedin_url: str | None = None
 
 
 class CompanyResult(BaseModel):

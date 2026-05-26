@@ -116,6 +116,36 @@ def test_build_values_omits_domains_when_domain_absent() -> None:
     assert "domains" not in values
 
 
+def test_build_values_emits_linkedin_for_company_url() -> None:
+    values = _build_values(
+        CompanyInput(
+            name="Acme",
+            domain="acme.com",
+            linkedin_url="https://www.linkedin.com/company/acme/",
+        ),
+    )
+    assert values["linkedin"] == ["https://www.linkedin.com/company/acme"]
+
+
+def test_build_values_drops_linkedin_when_input_is_profile_url() -> None:
+    # Defense in depth: even if a /in/ URL leaks past the rb2b discriminator
+    # into CompanyInput.linkedin_url, _build_values must drop it so the
+    # Company linkedin slug never gets a profile URL.
+    values = _build_values(
+        CompanyInput(
+            name="Acme",
+            domain="acme.com",
+            linkedin_url="https://www.linkedin.com/in/bob-jones",
+        ),
+    )
+    assert "linkedin" not in values
+
+
+def test_build_values_omits_linkedin_when_absent() -> None:
+    values = _build_values(CompanyInput(name="Acme", domain="acme.com"))
+    assert "linkedin" not in values
+
+
 def test_upsert_company_prefers_domain_over_name_for_search() -> None:
     # Domain match should bypass name search even when name spelling differs
     # from what's on the existing record. This is the regression ai-21r fixes:

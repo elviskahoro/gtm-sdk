@@ -575,6 +575,69 @@ def test_handle_upsert_company_merge_strips_populated_slugs(
     mock_get_values.assert_called_once_with("example.test")
 
 
+@patch("src.attio.export.get_company_values")
+@patch("src.attio.export.libs_upsert_company")
+def test_handle_upsert_company_merge_strips_populated_linkedin(
+    mock_upsert,
+    mock_get_values,
+) -> None:
+    """``linkedin_url`` on the op maps to the ``linkedin`` slug on the
+    existing record. When that slug is already populated and the op opted
+    into ``merge_only_if_empty=["linkedin_url"]``, the dispatcher must
+    null the input so we don't stomp curated CRM data.
+    """
+    mock_get_values.return_value = {
+        "linkedin": [{"value": "https://www.linkedin.com/company/curated"}],
+    }
+    mock_upsert.return_value.success = True
+    mock_upsert.return_value.record_id = "co_2"
+
+    from src.attio.export import _handle_upsert_company
+    from src.attio.ops import UpsertCompany
+
+    result = _handle_upsert_company(
+        UpsertCompany(
+            domain="example.test",
+            linkedin_url="https://www.linkedin.com/company/from-rb2b",
+            merge_only_if_empty=["linkedin_url"],
+        ),
+        LookupTable(),
+    )
+
+    assert result.success is True
+    company_input = mock_upsert.call_args.args[0]
+    assert company_input.linkedin_url is None
+
+
+@patch("src.attio.export.get_company_values")
+@patch("src.attio.export.libs_upsert_company")
+def test_handle_upsert_company_merge_keeps_linkedin_when_empty(
+    mock_upsert,
+    mock_get_values,
+) -> None:
+    """If the existing Company has no ``linkedin``, the op's value must
+    flow through even with ``merge_only_if_empty=["linkedin_url"]``.
+    """
+    mock_get_values.return_value = {"linkedin": None}
+    mock_upsert.return_value.success = True
+    mock_upsert.return_value.record_id = "co_3"
+
+    from src.attio.export import _handle_upsert_company
+    from src.attio.ops import UpsertCompany
+
+    _handle_upsert_company(
+        UpsertCompany(
+            domain="example.test",
+            linkedin_url="https://www.linkedin.com/company/from-rb2b",
+            merge_only_if_empty=["linkedin_url"],
+        ),
+        LookupTable(),
+    )
+
+    company_input = mock_upsert.call_args.args[0]
+    assert company_input.linkedin_url == "https://www.linkedin.com/company/from-rb2b"
+
+
 # Tests for _handle_upsert_tracking_event
 
 

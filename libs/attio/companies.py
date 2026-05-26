@@ -23,6 +23,7 @@ from libs.attio.sdk_boundary import (
 from libs.attio.values import (
     format_company_description,
     format_company_domains,
+    format_company_linkedin,
     format_company_name,
 )
 
@@ -51,6 +52,16 @@ def _build_values(input: CompanyInput, partial: bool = False) -> dict[str, Any]:
     description = format_company_description(input.description)
     if description:
         values["description"] = description
+
+    # The Attio standard ``companies`` object exposes a writable ``linkedin``
+    # slug (type=text, single-value) — confirmed via
+    # ``tmp/probe_company_linkedin_write.py``. ``format_company_linkedin``
+    # normalizes through ``/company/<slug>`` shape, so profile URLs slipped
+    # into ``input.linkedin_url`` will canonicalize to None and be dropped
+    # instead of polluting the Company record.
+    linkedin = format_company_linkedin(input.linkedin_url)
+    if linkedin:
+        values["linkedin"] = linkedin
 
     return values
 

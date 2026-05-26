@@ -7,9 +7,11 @@ from libs.attio.values import (
     build_core_person_values,
     build_mention_values,
     build_optional_person_values,
+    format_company_linkedin,
     format_linkedin,
     format_location,
     format_location_from_parts,
+    normalize_linkedin_company_url,
     normalize_linkedin_url,
 )
 
@@ -193,6 +195,55 @@ def test_format_linkedin_passes_through_non_profile_urls() -> None:
 def test_format_linkedin_returns_none_for_empty() -> None:
     assert format_linkedin(None) is None
     assert format_linkedin("") is None
+
+
+CANONICAL_LINKEDIN_COMPANY = "https://www.linkedin.com/company/acme-corp"
+
+
+def test_normalize_linkedin_company_url_returns_canonical_form() -> None:
+    for url in (
+        "https://www.linkedin.com/company/acme-corp",
+        "https://linkedin.com/company/acme-corp",
+        "http://www.linkedin.com/company/acme-corp",
+        "http://linkedin.com/company/acme-corp",
+        "https://www.linkedin.com/company/acme-corp/",
+        "https://www.linkedin.com/company/acme-corp?trk=foo",
+        "  https://www.linkedin.com/company/acme-corp  ",
+    ):
+        assert normalize_linkedin_company_url(url) == CANONICAL_LINKEDIN_COMPANY, url
+
+
+def test_normalize_linkedin_company_url_rejects_non_company() -> None:
+    assert normalize_linkedin_company_url(None) is None
+    assert normalize_linkedin_company_url("") is None
+    assert normalize_linkedin_company_url("not a url") is None
+    assert (
+        normalize_linkedin_company_url("https://www.linkedin.com/in/bob-jones") is None
+    )
+    assert (
+        normalize_linkedin_company_url("https://www.linkedin.com/feed/update/123")
+        is None
+    )
+
+
+def test_format_company_linkedin_canonicalizes_company_urls() -> None:
+    assert format_company_linkedin(
+        "https://linkedin.com/company/acme-corp/",
+    ) == [CANONICAL_LINKEDIN_COMPANY]
+    assert format_company_linkedin(
+        "http://www.linkedin.com/company/acme-corp?utm=x",
+    ) == [CANONICAL_LINKEDIN_COMPANY]
+
+
+def test_format_company_linkedin_rejects_profile_urls() -> None:
+    # Profile URLs must not pollute the Company linkedin slug. The rb2b
+    # discriminator routes /in/ URLs to UpsertPerson.linkedin instead.
+    assert format_company_linkedin("https://www.linkedin.com/in/bob-jones") is None
+
+
+def test_format_company_linkedin_returns_none_for_empty() -> None:
+    assert format_company_linkedin(None) is None
+    assert format_company_linkedin("") is None
 
 
 def test_build_tracking_event_values_minimum() -> None:
