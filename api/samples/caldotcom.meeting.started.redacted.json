@@ -1,7 +1,7 @@
 {
   "triggerEvent": "MEETING_STARTED",
   "id": 19200781,
-  "uid": "o1U9kpMNYCf54S3zWPvdeu",
+  "uid": "redacted_meeting_started_booking_uid_01",
   "title": "dltHub exploration between Alex Host and Sam Attendee",
   "description": "",
   "customInputs": [],
@@ -52,7 +52,7 @@
     "videoCallUrl": "https://meet.google.com/xxx-xxxx-xxx"
   },
   "isRecorded": false,
-  "iCalUID": "o1U9kpMNYCf54S3zWPvdeu@Cal.com",
+  "iCalUID": "redacted_meeting_started_booking_uid_01@Cal.com",
   "iCalSequence": 0,
   "rating": null,
   "ratingFeedback": null,
@@ -110,7 +110,7 @@
     {
       "id": 29890653,
       "type": "google_meet_video",
-      "uid": "o1U9kpMNYCf54S3zWPvdeu",
+      "uid": "redacted_meeting_started_booking_uid_01",
       "meetingId": null,
       "meetingUrl": "https://meet.google.com/xxx-xxxx-xxx",
       "bookingId": 19200781

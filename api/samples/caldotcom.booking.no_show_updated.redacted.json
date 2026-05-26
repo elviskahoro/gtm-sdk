@@ -2,7 +2,7 @@
   "triggerEvent": "BOOKING_NO_SHOW_UPDATED",
   "createdAt": "2026-05-11T07:43:44.114Z",
   "payload": {
-    "bookingUid": "wjvt1yoCAGK6KmaLnmszng",
+    "bookingUid": "redacted_no_show_booking_uid_01",
     "bookingId": 19237249,
     "attendees": [
       {
