@@ -65,7 +65,7 @@ def _write_default_stubs(bin_dir: Path) -> None:
             """\
             #!/usr/bin/env bash
             if [[ "${1:-}" == "secret" && "${2:-}" == "list" ]]; then
-                echo '[{"Name": "devx-gcp-202605111323"}, {"Name": "attio"}]'
+                echo '[{"Name": "devx-gcp-202605260000"}, {"Name": "attio"}]'
                 exit 0
             fi
             if [[ "${1:-}" == "deploy" ]]; then
@@ -223,7 +223,7 @@ def test_restore_on_deploy_failure(stub_bin: Path) -> None:
             """\
             #!/usr/bin/env bash
             if [[ "${1:-}" == "secret" && "${2:-}" == "list" ]]; then
-                echo '[{"Name": "devx-gcp-202605111323"}, {"Name": "attio"}]'
+                echo '[{"Name": "devx-gcp-202605260000"}, {"Name": "attio"}]'
                 exit 0
             fi
             if [[ "${1:-}" == "deploy" ]]; then
@@ -264,7 +264,7 @@ def test_modal_token_isolation(stub_bin: Path, tmp_path: Path) -> None:
             f"""\
             #!/usr/bin/env bash
             if [[ "${{1:-}}" == "secret" && "${{2:-}}" == "list" ]]; then
-                echo '[{{"Name": "devx-gcp-202605111323"}}, {{"Name": "attio"}}]'
+                echo '[{{"Name": "devx-gcp-202605260000"}}, {{"Name": "attio"}}]'
                 exit 0
             fi
             if [[ "${{1:-}}" == "deploy" ]]; then

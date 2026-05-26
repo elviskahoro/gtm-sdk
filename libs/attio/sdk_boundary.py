@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import datetime
 from types import ModuleType
 from typing import Any, Protocol, cast
 
@@ -59,16 +60,30 @@ def build_post_note_request(
     title: str,
     format_: str,
     content: str,
+    created_at: datetime | None = None,
 ) -> object:
+    """Build the Notes POST request body.
+
+    ``created_at`` is optional; when set, it is passed to the SDK model so
+    the resulting Note's ``created_at`` reflects the backdated value
+    (documented Attio behavior: "if you wish to backdate a note for
+    migration or other purposes, you can override with a custom
+    ``created_at`` value").
+    """
     models = _import_attio_models_module()
     constructor = getattr(models, "PostV2NotesData")
-    return constructor(
-        parent_object=parent_object,
-        parent_record_id=parent_record_id,
-        title=title,
-        format_=format_,
-        content=content,
-    )
+    kwargs: dict[str, Any] = {
+        "parent_object": parent_object,
+        "parent_record_id": parent_record_id,
+        "title": title,
+        "format_": format_,
+        "content": content,
+    }
+    if created_at is not None:
+        # The SDK accepts either a string or a datetime; pass an ISO string
+        # to avoid any timezone normalization surprises.
+        kwargs["created_at"] = created_at.isoformat()
+    return constructor(**kwargs)
 
 
 def build_post_meeting_request(

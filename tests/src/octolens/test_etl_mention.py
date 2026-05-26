@@ -22,7 +22,7 @@ def test_etl_get_bucket_name() -> None:
 
 
 def test_modal_secret_collection_names() -> None:
-    assert Webhook.modal_get_secret_collection_names() == ["devx-gcp-202605111323"]
+    assert Webhook.modal_get_secret_collection_names() == ["devx-gcp-202605260000"]
 
 
 def test_storage_get_base_model_type_returns_none() -> None:

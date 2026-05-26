@@ -20,7 +20,7 @@ class Webhook(FathomWebhook):
 
     @staticmethod
     def modal_get_secret_collection_names() -> list[str]:
-        return ["devx-gcp-202605111323"]
+        return ["devx-gcp-202605260000"]
 
     @staticmethod
     def etl_get_bucket_name() -> str:

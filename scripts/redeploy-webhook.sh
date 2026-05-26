@@ -252,7 +252,7 @@ fi
 
 # --- preflight: Modal secrets ----------------------------------------------
 
-# All five sources currently return ["devx-gcp-202605111323"] from
+# All five sources currently return ["devx-gcp-202605260000"] from
 # modal_get_secret_collection_names() — the GCP service-account Modal
 # Secret used by the etl/raw handlers. The export_to_attio handler no
 # longer binds a named ``attio`` Modal Secret: it ships an inline
@@ -260,12 +260,12 @@ fi
 # ATTIO_API_KEY / CALCOM_API_KEY from Infisical at request boundary
 # (see ai-2aw). If a new source introduces a different named secret,
 # extend this list.
-REQUIRED_SECRETS=(devx-gcp-202605111323)
+REQUIRED_SECRETS=(devx-gcp-202605260000)
 
 echo "Preflighting Modal secrets: ${REQUIRED_SECRETS[*]}"
 # Use --json so secret names are emitted in full. The default table renderer
 # truncates the Name column with `…`, which made `grep -w` miss long secret
-# names like `devx-gcp-202605111323` even when they exist.
+# names like `devx-gcp-202605260000` even when they exist.
 MODAL_SECRET_LIST="$(
   infisical run \
     --projectId "${INFISICAL_PROJECT_ID}" \
@@ -276,7 +276,7 @@ MODAL_SECRET_LIST="$(
 
 for secret in "${REQUIRED_SECRETS[@]}"; do
   # Match `"Name": "<secret>"` exactly so a prefix like `devx-gcp` doesn't
-  # accidentally satisfy a check for `devx-gcp-202605111323`.
+  # accidentally satisfy a check for `devx-gcp-202605260000`.
   if ! grep -qF "\"Name\": \"${secret}\"" <<<"${MODAL_SECRET_LIST}"; then
     fail "Missing Modal secret in dlthub workspace: ${secret}. Create it before deploying."
   fi

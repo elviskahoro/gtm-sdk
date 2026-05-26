@@ -719,3 +719,86 @@ def error_envelope(error: Exception, *, strict: bool = False) -> ReliabilityEnve
             ),
         ],
     )
+
+
+def _split_name(name: str) -> tuple[str, str | None]:
+    parts = name.strip().split(" ", 1)
+    if len(parts) == 1:
+        return parts[0], None
+    return parts[0], parts[1]
+
+
+def find_person_by_name_at_company(
+    name: str,
+    company_record_id: str,
+) -> str | None:
+    """Find a Person by name; on multi-match, prefer the one linked to ``company_record_id``.
+
+    Splits ``name`` on the first space — single-word names match first_name
+    only. Returns the lex-smallest matching record_id on tied multi-match
+    (mirrors the policy in ``upsert_person``).
+    """
+    first, last = _split_name(name)
+    filter_conditions: list[dict[str, Any]] = [{"name": {"first_name": first}}]
+    if last:
+        filter_conditions.append({"name": {"last_name": last}})
+    if len(filter_conditions) == 1:
+        filter_: dict[str, Any] = filter_conditions[0]
+    else:
+        filter_ = {"$and": filter_conditions}
+
+    with get_client() as client:
+        response = client.records.post_v2_objects_object_records_query(
+            object="people",
+            filter_=filter_,
+            limit=50,
+        )
+        if not response.data:
+            return None
+        # Prefer a match already linked to the company.
+        for rec in response.data:
+            for cv in rec.values.get("company", []):
+                if getattr(cv, "target_record_id", None) == company_record_id:
+                    return rec.id.record_id
+        # Fall back to the lex-smallest record_id.
+        return sorted(rec.id.record_id for rec in response.data)[0]
+
+
+def stub_create_person(
+    name: str,
+    company_record_id: str,
+    *,
+    apply: bool,
+) -> str:
+    """Create a Person record with only ``name`` (split on first space) and a company link.
+
+    Preview mode returns ``preview-<name>``. Apply mode does not require an
+    email — it goes around ``PersonInput`` (which mandates one of
+    email/linkedin/github) by hitting the SDK directly with a minimal
+    payload. The created Person can be enriched later by other workflows.
+    """
+    if not apply:
+        return f"preview-{name}"
+
+    first, last = _split_name(name)
+    values: dict[str, Any] = {
+        "name": [{"first_name": first, "last_name": last or "", "full_name": name}],
+        "company": [
+            {"target_object": "companies", "target_record_id": company_record_id},
+        ],
+    }
+    with get_client() as client:
+        try:
+            response = client.records.post_v2_objects_object_records(
+                object="people",
+                data=build_post_record_request(values),
+            )
+            return response.data.id.record_id
+        except Exception as exc:
+            if is_uniqueness_conflict(exc):
+                from libs.attio.sdk_boundary import extract_existing_record_id
+
+                existing = extract_existing_record_id(exc)
+                if existing:
+                    return existing
+            raise

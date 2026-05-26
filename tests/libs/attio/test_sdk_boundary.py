@@ -168,3 +168,38 @@ def test_model_dump_or_empty_uses_model_dump_if_available() -> None:
 
     assert sdk_boundary.model_dump_or_empty(_ModelLike()) == {"ok": True}
     assert sdk_boundary.model_dump_or_empty(object()) == {}
+
+
+def test_build_post_note_request_passes_created_at() -> None:
+    from datetime import UTC, datetime
+
+    from libs.attio.sdk_boundary import build_post_note_request
+
+    created_at = datetime(2025, 1, 5, 0, 0, 0, tzinfo=UTC)
+    request = build_post_note_request(
+        parent_object="companies",
+        parent_record_id="cid",
+        title="t",
+        format_="markdown",
+        content="body",
+        created_at=created_at,
+    )
+    # Pydantic serializes datetime to ISO string; either form is acceptable
+    # so long as the value round-trips.
+    value = getattr(request, "created_at", None)
+    assert value is not None
+    assert "2025-01-05" in str(value)
+
+
+def test_build_post_note_request_omits_created_at_when_none() -> None:
+    from libs.attio.sdk_boundary import build_post_note_request
+
+    request = build_post_note_request(
+        parent_object="companies",
+        parent_record_id="cid",
+        title="t",
+        format_="markdown",
+        content="body",
+    )
+    # Either the attribute is absent or it's None.
+    assert getattr(request, "created_at", None) is None

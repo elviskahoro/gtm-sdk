@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from libs.attio.client import get_client
@@ -25,6 +26,7 @@ from libs.attio.values import (
     format_company_domains,
     format_company_linkedin,
     format_company_name,
+    normalize_company_name,
 )
 
 
@@ -331,3 +333,204 @@ def update_company(
             raise
 
         return _extract_result(response.data, created=False)
+
+
+logger = logging.getLogger(__name__)
+
+
+def find_company_by_domain(domain: str) -> str | None:
+    """Find a Company record by exact domain match. Returns lex-smallest on multi-match."""
+    if not domain or not domain.strip():
+        return None
+    with get_client() as client:
+        response = client.records.post_v2_objects_object_records_query(
+            object="companies",
+            filter_={"domains": {"domain": domain.strip().lower()}},
+            limit=10,
+        )
+        if not response.data:
+            return None
+        return sorted(r.id.record_id for r in response.data)[0]
+
+
+def find_company_by_name(name: str) -> str | None:
+    """Find a Company record by exact name first, then normalized fallback.
+
+    Exact match: server-side ``name = {"$eq": name}`` filter.
+    Normalized fallback: ``$contains`` query for the first significant
+    word of the name, then client-side filter via ``normalize_company_name``.
+    Returns the lexicographically smallest matching record_id on multi-match.
+    """
+    if not name or not name.strip():
+        return None
+
+    with get_client() as client:
+        # 1. Try exact match.
+        exact_response = client.records.post_v2_objects_object_records_query(
+            object="companies",
+            filter_={"name": {"$eq": name.strip()}},
+            limit=2,
+        )
+        if exact_response.data:
+            return sorted(r.id.record_id for r in exact_response.data)[0]
+
+        # 2. Normalized fallback: $contains on the first significant token.
+        target = normalize_company_name(name)
+        if not target:
+            return None
+        # Use the un-normalized first token for the server filter; we
+        # post-filter client-side via normalize_company_name.
+        first_token = target.split(" ", 1)[0]
+        broad_response = client.records.post_v2_objects_object_records_query(
+            object="companies",
+            filter_={"name": {"$contains": first_token}},
+            limit=50,
+        )
+        candidates: list[str] = []
+        for rec in broad_response.data:
+            for nv in rec.values.get("name", []):
+                value = getattr(nv, "value", None)
+                if value and normalize_company_name(value) == target:
+                    candidates.append(rec.id.record_id)
+                    break
+        if not candidates:
+            return None
+        return sorted(candidates)[0]
+
+
+def stub_create_company(name: str, *, apply: bool) -> str:
+    """Create a Company with only ``name`` set. Idempotent via 409 handling.
+
+    Preview mode returns a synthetic ``preview-<n>`` id so downstream code
+    can keep wiring values without writing. Apply mode reuses the existing
+    ``add_company`` path and falls back to ``extract_existing_record_id``
+    on uniqueness conflict.
+    """
+    if not apply:
+        return f"preview-{name}"
+
+    try:
+        result = add_company(CompanyInput(name=name))
+        return result.record_id
+    except AttioConflictError as exc:
+        existing = getattr(exc, "existing_record_id", None)
+        if existing:
+            return existing
+        # No existing_record_id in the conflict payload — fall back to a
+        # name lookup.
+        found = find_company_by_name(name)
+        if found:
+            return found
+        raise
+
+
+_OWNER_ATTR_SLUG_CACHE: dict[str, str] = {}
+
+
+def _resolve_owner_attr_slug() -> str:
+    """Resolve and cache the Companies ``Owner`` attribute slug.
+
+    Attio's "Owner" attribute is an actor-reference; the slug may be
+    ``owner`` (default) but workspaces can rename it. Looking up the slug
+    once via metadata avoids hard-coding.
+    """
+    if "companies" in _OWNER_ATTR_SLUG_CACHE:
+        return _OWNER_ATTR_SLUG_CACHE["companies"]
+    with get_client() as client:
+        response = client.attributes.get_v2_target_identifier_attributes(
+            target="objects",
+            identifier="companies",
+        )
+        for attr in response.data:
+            title = (getattr(attr, "title", "") or "").lower()
+            if title == "owner":
+                slug = getattr(attr, "api_slug", "owner") or "owner"
+                _OWNER_ATTR_SLUG_CACHE["companies"] = slug
+                return slug
+    # Default to "owner" if metadata didn't resolve.
+    _OWNER_ATTR_SLUG_CACHE["companies"] = "owner"
+    return "owner"
+
+
+def _extract_current_owner_id(record_values: Any, slug: str) -> str | None:
+    if isinstance(record_values, dict):
+        owner_values = record_values.get(slug, [])
+    else:
+        owner_values = getattr(record_values, slug, []) or []
+    for ov in owner_values:
+        # Attio actor-reference attribute exposes ``referenced_actor_id`` on
+        # the value; older shapes may use ``target_record_id``.
+        for attr_name in ("referenced_actor_id", "target_record_id"):
+            value = getattr(ov, attr_name, None)
+            if value:
+                return value
+    return None
+
+
+def set_company_owner(
+    *,
+    company_record_id: str,
+    person_record_id: str,
+    apply: bool,
+) -> ReliabilityEnvelope:
+    """Set ``Company.Owner`` on a Companies record.
+
+    Reads the current value first and PATCHes only when the requested
+    person differs. Preview mode is a pure noop. The Owner attribute slug
+    is resolved once per process via ``_resolve_owner_attr_slug``.
+    """
+    if not apply:
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="noop",
+            record_id=company_record_id,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1", "preview": True},
+        )
+
+    slug = _resolve_owner_attr_slug()
+    with get_client() as client:
+        current = client.records.get_v2_objects_object_records_record_id_(
+            object="companies",
+            record_id=company_record_id,
+        )
+        existing = _extract_current_owner_id(current.data.values, slug)
+        if existing == person_record_id:
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=company_record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "owner_already_set": True},
+            )
+
+        client.records.patch_v2_objects_object_records_record_id_(
+            object="companies",
+            record_id=company_record_id,
+            data=build_patch_record_request(
+                {
+                    slug: [
+                        {
+                            "referenced_actor_id": person_record_id,
+                            "referenced_actor_type": "workspace-member",
+                        },
+                    ],
+                },
+            ),
+        )
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="updated",
+            record_id=company_record_id,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1"},
+        )

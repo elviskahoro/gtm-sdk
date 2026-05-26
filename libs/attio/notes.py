@@ -2,6 +2,7 @@ import sys
 from typing import Any
 
 from libs.attio.client import get_client
+from libs.attio.contracts import ReliabilityEnvelope
 from libs.attio.errors import AttioNotFoundError, AttioValidationError
 from libs.attio.models import NoteInput, NoteResult
 from libs.attio.sdk_boundary import build_post_note_request, model_dump_or_empty
@@ -100,6 +101,106 @@ def add_note(input: NoteInput) -> NoteResult:
         )
 
         return _extract_result(response.data)
+
+
+def find_note_by_title(
+    *,
+    parent_object: str,
+    parent_record_id: str,
+    title: str,
+) -> str | None:
+    """Return the note_id of an existing Note with this exact title on this parent.
+
+    Linear scan of the parent's notes list; Attio does not expose a
+    server-side title filter for Notes. Used by ``create_note`` for
+    idempotency.
+    """
+    with get_client() as client:
+        response = client.notes.get_v2_notes(
+            parent_object=parent_object,
+            parent_record_id=parent_record_id,
+        )
+        for note in response.data:
+            if getattr(note, "title", None) == title:
+                return note.id.note_id
+    return None
+
+
+def create_note(
+    *,
+    input: NoteInput,
+    apply: bool,
+) -> ReliabilityEnvelope:
+    """Idempotently create a Note attached to a parent record.
+
+    Differs from the existing ``add_note`` in two ways: (1) it requires
+    ``input.parent_record_id`` to be set (no email/domain resolution), and
+    (2) it short-circuits via ``find_note_by_title`` so re-runs against the
+    same parent + title return ``action="noop"`` with the existing
+    ``record_id``.
+
+    ``input.format`` is passed through verbatim (defaults to ``"plaintext"``
+    on ``NoteInput``; callers from the loader explicitly pass
+    ``format="markdown"``).
+
+    Preview mode (``apply=False``) never reads or writes.
+    """
+    if not apply:
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="noop",
+            record_id=None,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1", "preview": True},
+        )
+
+    if not input.parent_record_id:
+        raise AttioValidationError(
+            "create_note requires input.parent_record_id; "
+            "use add_note for email/domain resolution.",
+        )
+
+    existing = find_note_by_title(
+        parent_object=input.parent_object,
+        parent_record_id=input.parent_record_id,
+        title=input.title,
+    )
+    if existing is not None:
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="noop",
+            record_id=existing,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1", "idempotent": True},
+        )
+
+    with get_client() as client:
+        response = client.notes.post_v2_notes(
+            data=build_post_note_request(
+                parent_object=input.parent_object,
+                parent_record_id=input.parent_record_id,
+                title=input.title,
+                format_=input.format,
+                content=input.content,
+                created_at=input.created_at,
+            ),
+        )
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="created",
+            record_id=response.data.id.note_id,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1"},
+        )
 
 
 def update_note(note_id: str, input: NoteInput) -> NoteResult:
