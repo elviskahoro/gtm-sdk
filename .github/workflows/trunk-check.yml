@@ -1,4 +1,4 @@
-name: Trunk Check
+name: Lint and type check with Trunk
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   trunk_check:
-    name: Trunk Check
+    name: Lint and type check with Trunk
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

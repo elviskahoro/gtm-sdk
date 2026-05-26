@@ -1,4 +1,4 @@
-name: integration
+name: Integration tests
 
 on:
   schedule:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   pytest-integration:
-    name: pytest -m integration (Dagger)
+    name: Integration tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

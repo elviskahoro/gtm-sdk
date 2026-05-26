@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   pytest:
-    name: pytest (Dagger)
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
