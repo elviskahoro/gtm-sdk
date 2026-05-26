@@ -204,3 +204,4 @@ When adding functionality:
 5. **Webhook handler?** → `webhooks/<name>.py`. Independent Modal app.
 
 See `AGENTS.md` (symlinked from `CLAUDE.md`) for the authoritative version of these rules.
+
