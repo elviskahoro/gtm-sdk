@@ -1,8 +1,8 @@
 # Webhooks
 
 Standalone Modal apps. Each `export_to_*.py` deploys one Modal app per source
-via the `WebhookModelToReplace` placeholder pattern documented in
-[`CLAUDE.md` → Webhook deploys](../CLAUDE.md).
+via the `WebhookModelToReplace` placeholder pattern — see
+[Deploying](#deploying) below.
 
 ## Structured logs
 
@@ -44,12 +44,73 @@ Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
 ## Files
 
 - `export_to_attio.py` — per-source app, writes to Attio.
-- `export_to_gcp_etl.py` — per-source app, writes the transformed payload to GCS.
-- `export_to_gcp_raw.py` — single dev app pointed at `dlthub-devx-test-bucket`. The
-  five `dlthub_devx_<source>_<entity>_raw` apps currently in Modal are deployed
-  from a substituted variant; bringing this file in line with that pattern is
-  tracked by the `is_valid_webhook` coverage audit ticket.
+- `export_to_gcp_etl.py` — per-source app, writes the transformed payload to a
+  per-source GCS bucket.
+- `export_to_gcp_raw.py` — per-source app, writes the raw payload to a
+  per-source GCS bucket (`WebhookModel.raw_get_bucket_name()`).
 - `registry.yaml` — **gitignored**. Generated locally; see below.
+
+## Deploying
+
+Use `scripts/deploy-webhook.sh` — never `modal deploy webhooks/<file>.py`
+directly. Handler files live in source control with a `WebhookModelToReplace`
+placeholder so the working tree stays source-agnostic; the script substitutes
+the placeholder, deploys, and restores the file in one safe step.
+
+```shell
+set -a && source .env.local && set +a   # once per shell
+
+# Deploy one source to one handler.
+scripts/deploy-webhook.sh export_to_attio   CaldotcomBookingWebhook
+scripts/deploy-webhook.sh export_to_gcp_etl Rb2bVisitWebhook
+
+# Deploy every source imported by the handler (one Modal app per source).
+scripts/deploy-webhook.sh export_to_attio   --all
+scripts/deploy-webhook.sh export_to_gcp_etl --all
+scripts/deploy-webhook.sh export_to_gcp_raw --all
+```
+
+Valid `<handler>` and `<source>` values are discovered at runtime from
+`webhooks/*.py` and that handler's `Webhook as <Alias>` imports — there is no
+list inside the script to maintain.
+
+### Why a script, not `modal deploy`
+
+Running `modal deploy webhooks/<file>.py` directly on the working tree fails
+with `NameError: WebhookModelToReplace is not defined`. Each handler ships one
+Modal app *per source*; the placeholder is what keeps the file deployable to N
+different sources from a single source-controlled definition. Deploying one
+source does not redeploy the others — after a shared-code change (e.g. inside
+`libs/dlt/`), bump each source individually or stale containers keep importing
+removed symbols.
+
+### Pitfalls the script handles for you
+
+These are the failure modes baked into the script. If you ever bypass it,
+these are what bite:
+
+- **Env clobber.** Your shell's personal `MODAL_TOKEN_ID` /
+  `MODAL_TOKEN_SECRET` silently win over the Infisical-injected dlthub
+  workspace tokens, and deploys land in the wrong workspace. The script
+  `unset`s both before invoking `infisical run`.
+- **`cp -i` alias.** An interactive `cp` alias in your shell silently answers
+  "no" when the script restores the placeholder, leaving the substituted form
+  in the working tree and the next deploy reading the wrong source. The
+  script uses `\cp -f` to bypass aliases.
+- **`infisical run` stored in a shell variable.** Storing
+  `infisical run --token … --` in a variable and expanding it inline
+  (`$INF modal deploy …`) breaks under zsh — the whole variable becomes
+  `argv[0]` and the service token leaks to stderr / shell history. The script
+  always invokes `infisical run` with its full argument list, never via a
+  variable.
+
+Additional mitigations (concurrent-invocation lock, trap-scoped restore, Modal
+secret + GCS bucket preflight) are catalogued in `CLAUDE.md` →
+**Scripted deploy pitfalls**. The CI smoke test at
+`tests/scripts/test_deploy_webhook.py` covers the substitute/restore loop,
+the EXIT-trap restore on deploy failure, the `MODAL_TOKEN_ID` unset, and the
+`\cp` alias bypass; the lock and preflight paths are not yet exercised in
+CI.
 
 ## Registry
 
@@ -78,11 +139,15 @@ Modal workspace.
 
 ## Rotation procedure
 
-When you redeploy a Modal app, its name (and therefore its URL) stays the same
-— Modal app names are deterministic from `WebhookModel.<handler>_get_app_name()`.
-The registry usually only needs a refresh:
+When you redeploy a Modal app, its name (and therefore its URL) stays the same.
+App names are deterministic per handler family: `export_to_attio` uses
+`WebhookModel.attio_get_app_name()` directly, while the GCP handlers
+(`export_to_gcp_etl`, `export_to_gcp_raw`) derive their app name from
+`CloudGoogle.clean_bucket_name(bucket_name=WebhookModel.<prefix>_get_bucket_name())`.
+Either way, redeploys are name-stable and the registry usually only needs
+a refresh:
 
-1. Redeploy via the substitution pattern in CLAUDE.md.
+1. Redeploy via `scripts/deploy-webhook.sh` (see [Deploying](#deploying)).
 2. Run `gtm webhook sync` to refresh `generated_at`.
 
 If you change the wiring inside Hookdeck (rerouting a source to a different
