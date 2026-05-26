@@ -674,6 +674,20 @@ def _verify_clean_restore(handler_file: Path) -> None:
     sys.exit(1)
 
 
+def _resolve_infisical_host() -> str | None:
+    """Coerce ``INFISICAL_HOST`` to ``None`` when unset *or* empty.
+
+    Both shapes must collapse to ``None``: ``os.environ.get(...)`` returns
+    ``None`` for unset, and ``or None`` converts the falsy empty string the
+    same way. Forwarding ``""`` to ``_deploy_via_dagger`` would bake an
+    empty ``INFISICAL_HOST`` into the runtime bootstrap secret, which
+    confuses ``libs/infisical`` self-host vs. SaaS detection at the first
+    webhook event. Extracted from ``_deploy_one`` so the coercion has a
+    direct unit test (tests/scripts/test_deploy_webhook_dagger.py).
+    """
+    return os.environ.get("INFISICAL_HOST") or None
+
+
 def _deploy_one(handler_file: Path, source: str) -> None:
     """Substitute placeholder → deploy → restore from backup → verify clean."""
     assert _handler is not None  # set by main() before the loop
@@ -696,9 +710,7 @@ def _deploy_one(handler_file: Path, source: str) -> None:
                     infisical_token=os.environ["INFISICAL_TOKEN"],
                     infisical_project_id=os.environ["INFISICAL_PROJECT_ID"],
                     infisical_env=os.environ["INFISICAL_ENV"],
-                    # Forward only when set so we don't bake an empty
-                    # INFISICAL_HOST into the runtime bootstrap secret.
-                    infisical_host=os.environ.get("INFISICAL_HOST") or None,
+                    infisical_host=_resolve_infisical_host(),
                 ),
             )
     finally:
