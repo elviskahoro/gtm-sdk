@@ -1,26 +1,38 @@
-"""Idempotent attribute bootstrap for the meeting-lifecycle row model on tracking_events.
+"""Idempotent attribute bootstrap for the ``tracking_events`` Attio object.
 
-Surfaces cal.com meeting lifecycle as a per-meeting MUTATING row on the
-existing ``tracking_events`` object -- one row per meeting (keyed by
-``external_id = canonical_meeting_uid(host, start)``), patched in place as the
-meeting transitions through states. See
-``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``.
+Covers two concerns on the same object:
+
+A. Cross-emitter ``source`` select attribute (ai-ztm). The canonical writer in
+   ``libs/attio/values.py`` and the lifecycle writer in
+   ``libs/attio/tracking_events.py`` both emit ``source`` so Attio views can
+   filter rows by emitter (rb2b / caldotcom / form / ...) without parsing the
+   ``external_id`` prefix. ``ensure_select_options`` JIT-seeds option titles
+   on first write but cannot create the attribute itself -- without it Attio
+   400s with "Cannot find attribute with slug source".
+
+B. Meeting-lifecycle row model. Surfaces cal.com meeting lifecycle as a
+   per-meeting MUTATING row keyed by
+   ``external_id = canonical_meeting_uid(host, start)``, patched in place as
+   the meeting transitions through states. See
+   ``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``.
 
 The schema audit (2026-05-25) found prod's ``tracking_events`` already has
-every slug the dispatcher needs (``details``, ``no_show``, ``people``, plus the
-existing baseline). Dev is behind prod -- it has ``contact`` instead of
-``people`` and lacks ``details`` / ``no_show``. This script brings dev in line
-with prod and seeds the new select options on both.
+every lifecycle slug the dispatcher needs (``details``, ``no_show``,
+``people``, plus the existing baseline). Dev is behind prod -- it has
+``contact`` instead of ``people`` and lacks ``details`` / ``no_show``. This
+script brings dev in line with prod and seeds the new select options on both.
 
 What this script does in each workspace:
 
-1. Add the ``people`` record-reference attribute (allowed_objects=["people"]).
+1. Add the ``source`` select attribute (cross-emitter filter). Option titles
+   grow JIT on first write per emitter -- this only creates the attribute.
+2. Add the ``people`` record-reference attribute (allowed_objects=["people"]).
    No-op on prod where it already exists.
-2. Add the ``details`` text attribute. No-op on prod.
-3. Add the ``no_show`` checkbox attribute. No-op on prod.
-4. Seed ``event_type`` option ``calcom_meeting`` (single namespace value used by
+3. Add the ``details`` text attribute. No-op on prod.
+4. Add the ``no_show`` checkbox attribute. No-op on prod.
+5. Seed ``event_type`` option ``calcom_meeting`` (single namespace value used by
    every meeting-lifecycle row).
-5. Seed ``event_subtype`` options: ``scheduled``, ``cancelled``, ``rescheduled``,
+6. Seed ``event_subtype`` options: ``scheduled``, ``cancelled``, ``rescheduled``,
    ``no_show_attendee``, ``no_show_host``, ``completed``.
 
 What this script deliberately does NOT do:
@@ -36,8 +48,8 @@ What this script deliberately does NOT do:
   history) per the spec.
 
 Usage:
-    uv run python scripts/tracking-events-meeting-lifecycle-bootstrap.py --preview
-    uv run python scripts/tracking-events-meeting-lifecycle-bootstrap.py --apply
+    uv run python scripts/attio-bootstrap-tracking_events.py --preview
+    uv run python scripts/attio-bootstrap-tracking_events.py --apply
 
 Run against dev first (``infisical run ... --env=dev -- ...``), verify the new
 slugs are visible in Attio, then run against prod.
@@ -71,9 +83,17 @@ _EVENT_SUBTYPE_OPTIONS: tuple[str, ...] = (
 )
 
 # (slug, title, type, extra) -- ``extra`` carries the record-reference's
-# allowed_objects when applicable. Order is illustrative; attributes are
-# independent and Attio accepts them in any order.
+# allowed_objects or a select attribute's description when applicable. Order
+# is illustrative; attributes are independent and Attio accepts them in any
+# order.
+_SOURCE_DESCRIPTION = (
+    "Emitter slug for the row (rb2b, caldotcom, form, ...). "
+    "Used to filter tracking_events views by source without parsing "
+    "the external_id prefix. Vocabulary grows JIT — new emitters "
+    "self-register their option title on first write."
+)
 _ATTRIBUTES: tuple[tuple[str, str, str, dict[str, object] | None], ...] = (
+    ("source", "Source", "select", {"description": _SOURCE_DESCRIPTION}),
     ("people", "People", "record-reference", {"allowed_objects": ["people"]}),
     ("details", "Details", "text", None),
     ("no_show", "No Show", "checkbox", None),
@@ -88,7 +108,9 @@ def main(apply: bool) -> int:
     # exist, but doing creates first keeps the printed result order matching
     # the order an operator would read the schema in.
     for slug, title, attr_type, extra in _ATTRIBUTES:
-        allowed = (extra or {}).get("allowed_objects")
+        extra_d = extra or {}
+        allowed = extra_d.get("allowed_objects")
+        description = extra_d.get("description")
         r = create_attribute(
             target_object=TARGET,
             title=title,
@@ -96,6 +118,7 @@ def main(apply: bool) -> int:
             attribute_type=attr_type,
             is_multiselect=False,
             allowed_objects=allowed,  # type: ignore[arg-type]
+            description=description,  # type: ignore[arg-type]
             apply=apply,
         )
         results.append(

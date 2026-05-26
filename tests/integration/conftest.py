@@ -64,7 +64,7 @@ def _format_missing_objects_message(
         "Integration suite preflight failed: required Attio object(s) missing "
         f"in target workspace: {', '.join(parts)}. The corresponding live "
         "regression test(s) would otherwise skip silently and let real "
-        "failures land green. Bootstrap with scripts/social-mention-bootstrap.py "
+        "failures land green. Bootstrap with scripts/attio-bootstrap-social_mentions.py "
         "against an unblocked workspace, or free a slot in the target one."
     )
 

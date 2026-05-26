@@ -83,7 +83,7 @@ def social_mention_bootstrapped(
     attio_auth_probe: None,  # noqa: ARG001 — chains auth probe
 ) -> None:
     # social_mention is a custom Attio object that must be bootstrapped via
-    # scripts/social-mention-bootstrap.py --apply before any mention upsert
+    # scripts/attio-bootstrap-social_mentions.py --apply before any mention upsert
     # works. If a workspace was created without running bootstrap (e.g. a
     # fresh dev workspace), skip mention-writer integration tests with a
     # clear pointer rather than erroring deep inside _ensure_select_options.
@@ -99,7 +99,7 @@ def social_mention_bootstrapped(
         if exc.status_code == 404:
             pytest.skip(
                 "social_mention object not bootstrapped in this Attio workspace; "
-                "run `scripts/social-mention-bootstrap.py --apply` against the "
+                "run `scripts/attio-bootstrap-social_mentions.py --apply` against the "
                 "target workspace before running this test.",
             )
         raise
