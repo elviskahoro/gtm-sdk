@@ -90,6 +90,7 @@ def test_attio_get_operations_person_and_company_emits_three_ops_in_order() -> N
         "industry",
         "employee_count",
         "estimate_revenue",
+        "linkedin_url",
     ]
     assert ops[1].merge_only_if_empty == ["title", "city", "state", "zipcode"]
     te = ops[2]
@@ -198,7 +199,11 @@ def test_linkedin_query_string_is_stripped() -> None:
     assert _person_op_linkedin(w) == "https://www.linkedin.com/in/bob-jones"
 
 
-def test_linkedin_company_url_is_dropped_but_person_still_created() -> None:
+def test_linkedin_company_url_is_dropped_from_person_op() -> None:
+    """A ``/company/`` URL must not pollute ``UpsertPerson.linkedin``.
+    The person op is still emitted (email is set on this fixture); only
+    the linkedin field is None on it.
+    """
     w = _person_webhook_with_linkedin("https://www.linkedin.com/company/acme")
     ops = w.attio_get_operations()
     assert any(type(op).__name__ == "UpsertPerson" for op in ops)
@@ -213,6 +218,44 @@ def test_linkedin_none_passes_through_as_none() -> None:
 def test_linkedin_empty_string_normalizes_to_none() -> None:
     w = _person_webhook_with_linkedin("")
     assert _person_op_linkedin(w) is None
+
+
+def test_company_only_visit_routes_linkedin_to_upsert_company() -> None:
+    """rb2b's company_only fixture has a ``/company/<slug>`` URL and no
+    business_email. The discriminator should route the URL to
+    ``UpsertCompany.linkedin_url`` (and the company op should declare
+    ``linkedin_url`` in ``merge_only_if_empty`` so curated CRM data
+    survives repeat visits).
+    """
+    w = _load("rb2b.visit.company_only.redacted.json")
+    ops = w.attio_get_operations()
+    company_op = next(op for op in ops if type(op).__name__ == "UpsertCompany")
+    assert company_op.linkedin_url == "https://www.linkedin.com/company/acme-corp"
+    assert "linkedin_url" in company_op.merge_only_if_empty
+
+
+def test_company_op_has_no_linkedin_when_payload_is_person_url() -> None:
+    """A ``/in/<handle>`` URL on a payload that also resolves a Company
+    (via website) must NOT land on the Company linkedin field — it's the
+    visitor's personal profile, not the company's page.
+    """
+    raw = _load_raw("rb2b.visit.person_and_company.redacted.json")
+    raw["payload"]["LinkedIn URL"] = "https://www.linkedin.com/in/bob-jones"
+    w = Webhook.model_validate(raw)
+    company_op = next(
+        op for op in w.attio_get_operations() if type(op).__name__ == "UpsertCompany"
+    )
+    assert company_op.linkedin_url is None
+
+
+def test_company_op_has_no_linkedin_when_payload_missing() -> None:
+    raw = _load_raw("rb2b.visit.person_and_company.redacted.json")
+    raw["payload"]["LinkedIn URL"] = None
+    w = Webhook.model_validate(raw)
+    company_op = next(
+        op for op in w.attio_get_operations() if type(op).__name__ == "UpsertCompany"
+    )
+    assert company_op.linkedin_url is None
 
 
 def test_attio_get_operations_flat_envelope_normalizes() -> None:

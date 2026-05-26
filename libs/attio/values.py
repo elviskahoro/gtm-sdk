@@ -16,6 +16,11 @@ _LINKEDIN_PROFILE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LINKEDIN_COMPANY_RE = re.compile(
+    r"^https?://(?:www\.)?linkedin\.com/company/([^/?#]+)",
+    re.IGNORECASE,
+)
+
 
 def normalize_linkedin_url(url: str | None) -> str | None:
     """Canonicalize a LinkedIn profile URL to ``https://www.linkedin.com/in/<handle>``.
@@ -31,6 +36,27 @@ def normalize_linkedin_url(url: str | None) -> str | None:
         return None
     handle = match.group(1).rstrip("/")
     return f"https://www.linkedin.com/in/{handle}"
+
+
+def normalize_linkedin_company_url(url: str | None) -> str | None:
+    """Canonicalize a LinkedIn **company** URL to ``https://www.linkedin.com/company/<slug>``.
+
+    Counterpart to ``normalize_linkedin_url`` which handles ``/in/<handle>``
+    profile URLs. rb2b's ``linkedin_url`` field is sometimes the visitor's
+    profile (no business_email, but identifiable individual) and sometimes the
+    company page (anonymous traffic for a known company); callers discriminate
+    by which normalizer returns non-None.
+
+    Returns ``None`` for falsy input or URLs that are not company-page shape so
+    profile URLs and other shapes fall through to the profile normalizer.
+    """
+    if not url:
+        return None
+    match = _LINKEDIN_COMPANY_RE.match(url.strip())
+    if not match:
+        return None
+    slug = match.group(1).rstrip("/")
+    return f"https://www.linkedin.com/company/{slug}"
 
 
 def normalize_email_address_list(candidates: Iterable[str | None]) -> list[str]:
@@ -232,6 +258,22 @@ def format_company_domains(domain: str | None) -> list[dict[str, str]] | None:
     if not domain:
         return None
     return [{"domain": domain}]
+
+
+def format_company_linkedin(url: str | None) -> list[str] | None:
+    """Format a LinkedIn company URL for Attio Company ``linkedin`` slug.
+
+    The slug is a single-value ``text`` attribute on the standard ``companies``
+    object (confirmed prod 2026-05-26 via ``tmp/probe_company_linkedin_write.py``),
+    so the write shape is the same as ``format_company_description``:
+    ``[<url_string>]``. Pre-normalizes through ``normalize_linkedin_company_url``
+    so we never write a profile (``/in/...``) or otherwise malformed URL into
+    the company linkedin slug.
+    """
+    canonical = normalize_linkedin_company_url(url)
+    if not canonical:
+        return None
+    return [canonical]
 
 
 def format_company_description(description: str | None) -> list[str] | None:

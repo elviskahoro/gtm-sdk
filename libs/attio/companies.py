@@ -22,6 +22,8 @@ from libs.attio.sdk_boundary import (
 )
 from libs.attio.values import (
     format_company_description,
+    format_company_domains,
+    format_company_linkedin,
     format_company_name,
 )
 
@@ -32,13 +34,34 @@ def _build_values(input: CompanyInput, partial: bool = False) -> dict[str, Any]:
     if input.name:
         values["name"] = format_company_name(input.name)
 
-    # Note: domains field writing is disabled because the Attio API rejects it.
-    # Domain matching is now done via name-based search instead.
-    # TODO: Investigate Attio domains attribute configuration.
+    # Attio's ``domains`` attribute applies TLD validation and rejects RFC-2606
+    # reserved TLDs (``.test``, ``.invalid``, ``.example``, ``.localhost``)
+    # with the *misleading* error
+    # ``An invalid value was passed to attribute with slug "domains"``.
+    # The error names the attribute, not the value, so it reads like a schema
+    # problem. It isn't — the writer below is shape-correct; the offending
+    # input is a value with a reserved TLD. Commit ``2763b67`` misdiagnosed
+    # this and disabled the writer entirely; ai-21r restored it after
+    # ``tmp/probe_company_domain_write.py`` confirmed real domains write fine.
+    # Use ``example.com`` (also RFC-reserved but accepted by Attio) for any
+    # probe/fixture domains — same convention as ``format_email_addresses_for_write``.
+    domains = format_company_domains(input.domain)
+    if domains:
+        values["domains"] = domains
 
     description = format_company_description(input.description)
     if description:
         values["description"] = description
+
+    # The Attio standard ``companies`` object exposes a writable ``linkedin``
+    # slug (type=text, single-value) — confirmed via
+    # ``tmp/probe_company_linkedin_write.py``. ``format_company_linkedin``
+    # normalizes through ``/company/<slug>`` shape, so profile URLs slipped
+    # into ``input.linkedin_url`` will canonicalize to None and be dropped
+    # instead of polluting the Company record.
+    linkedin = format_company_linkedin(input.linkedin_url)
+    if linkedin:
+        values["linkedin"] = linkedin
 
     return values
 
@@ -106,9 +129,8 @@ def search_companies(
     conditions: list[dict[str, Any]] = []
     if name:
         conditions.append({"name": {"$contains": name}})
-    # Note: domain filtering is not supported by Attio API as of SDK 0.22.8.
-    # Fall back to name-only search, which matches domain if it's included in the name field.
-    # TODO: Monitor for Attio API improvements to support domain filtering.
+    if domain:
+        conditions.append({"domains": domain})
 
     if not conditions:
         raise AttioValidationError("Provide at least one search criterion.")
@@ -173,15 +195,22 @@ def _result_envelope(
 
 
 def upsert_company(input: CompanyInput) -> ReliabilityEnvelope:
-    """Search by name, then add or update — mirrors libs.attio.people.upsert_person.
+    """Search by domain (preferred) or name, then add or update.
 
-    When ``input.name`` is None the function falls back to creating a new
-    company, since we have no key to deduplicate on. Multi-match picks the
-    lexicographically smallest ``record_id`` and flags the envelope as
-    ``partial_success`` with a ``upsert_multi_match_selected_record`` warning.
+    Mirrors ``libs.attio.people.upsert_person``. Domain is the stronger
+    deduplication key — name spellings drift (``"Acme"`` vs ``"Acme, Inc"``
+    vs ``"acme"``) while ``domains`` is canonical. When ``input.domain`` is
+    set we search by domain; otherwise we fall back to name. When neither
+    is set we fall through to creating a new company.
+
+    Multi-match picks the lexicographically smallest ``record_id`` and flags
+    the envelope as ``partial_success`` with a
+    ``upsert_multi_match_selected_record`` warning.
     """
     matches: list[CompanySearchResult] = []
-    if input.name:
+    if input.domain:
+        matches = search_companies(domain=input.domain, limit=50)
+    elif input.name:
         matches = search_companies(name=input.name, limit=50)
 
     if len(matches) == 0:

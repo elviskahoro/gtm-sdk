@@ -119,6 +119,12 @@ class UpsertCompany(BaseModel):
     industry: str | None = None
     employee_count: str | None = None
     estimate_revenue: str | None = None
+    # LinkedIn company-page URL (``/company/<slug>`` shape). Source webhooks
+    # (rb2b) discriminate ``/in/<handle>`` vs ``/company/<slug>`` before
+    # populating this. The dispatcher writes it to the Company ``linkedin``
+    # slug; non-company-page URLs are rejected by
+    # ``libs.attio.values.format_company_linkedin``.
+    linkedin_url: str | None = None
     merge_only_if_empty: list[str] = Field(default_factory=list)
 
 

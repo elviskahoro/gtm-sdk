@@ -247,6 +247,7 @@ def _handle_upsert_company(
     industry = op.industry
     employee_count = op.employee_count
     estimate_revenue = op.estimate_revenue
+    linkedin_url = op.linkedin_url
 
     if op.merge_only_if_empty:
         existing = get_company_values(op.domain)
@@ -266,6 +267,11 @@ def _handle_upsert_company(
                 "estimate_revenue",
             ):
                 estimate_revenue = None
+            if "linkedin_url" in op.merge_only_if_empty and _has_populated_value(
+                existing,
+                "linkedin",
+            ):
+                linkedin_url = None
 
     return libs_upsert_company(
         CompanyInput(
@@ -274,6 +280,7 @@ def _handle_upsert_company(
             industry=industry,
             employee_count=employee_count,
             estimate_revenue=estimate_revenue,
+            linkedin_url=linkedin_url,
         ),
     )
 
