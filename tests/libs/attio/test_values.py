@@ -200,6 +200,7 @@ def test_build_tracking_event_values_minimum() -> None:
 
     i = TrackingEventInput(
         external_id="rb2b:abc",
+        source="rb2b",
         name="https://example.test/p",
         event_type="rb2b_visit",
         event_timestamp=datetime(2026, 5, 14, 9, 0),
@@ -208,6 +209,7 @@ def test_build_tracking_event_values_minimum() -> None:
     vs = build_tracking_event_values(i)
     # Required slugs always present, matching the live schema's writable surface
     assert vs["external_id"] == [{"value": "rb2b:abc"}]
+    assert vs["source"] == [{"option": "rb2b"}]
     assert vs["name"] == [{"value": "https://example.test/p"}]
     assert vs["event_type"] == [{"option": "rb2b_visit"}]
     assert vs["timestamp"] == [{"value": "2026-05-14"}]  # date, not datetime
@@ -233,6 +235,7 @@ def test_build_tracking_event_values_with_subtype_and_contact() -> None:
 
     i = TrackingEventInput(
         external_id="rb2b:abc",
+        source="rb2b",
         name="https://example.test/p",
         event_type="rb2b_visit",
         event_subtype="repeat_visit",
@@ -254,6 +257,7 @@ def test_build_tracking_event_values_truncates_timestamp_to_day() -> None:
 
     i = TrackingEventInput(
         external_id="rb2b:abc",
+        source="rb2b",
         name="x",
         event_type="rb2b_visit",
         event_timestamp=datetime(2026, 5, 14, 23, 59, 59),
@@ -261,3 +265,21 @@ def test_build_tracking_event_values_truncates_timestamp_to_day() -> None:
     )
     vs = build_tracking_event_values(i)
     assert vs["timestamp"] == [{"value": "2026-05-14"}]
+
+
+def test_build_tracking_event_values_source_is_select_shape() -> None:
+    """``source`` must use the Attio select shape ``[{"option": ...}]`` so
+    Attio-side filters and views can group by emitter. ai-ztm."""
+    from libs.attio.models import TrackingEventInput
+    from libs.attio.values import build_tracking_event_values
+
+    i = TrackingEventInput(
+        external_id="caldotcom:meeting_ended:uid:a@b.test",
+        source="caldotcom",
+        name="meeting ended",
+        event_type="meeting_ended",
+        event_timestamp=datetime(2026, 5, 14, 9, 0),
+        body_json="{}",
+    )
+    vs = build_tracking_event_values(i)
+    assert vs["source"] == [{"option": "caldotcom"}]

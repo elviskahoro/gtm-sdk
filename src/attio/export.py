@@ -480,6 +480,7 @@ def _handle_upsert_tracking_event(
     return find_or_create_tracking_event(
         TrackingEventInput(
             external_id=op.external_id,
+            source=op.source,
             name=op.name,
             event_type=op.event_type,
             event_subtype=op.event_subtype,
@@ -520,6 +521,7 @@ def _handle_emit_meeting_lifecycle_event(
     return find_or_create_meeting_lifecycle_event(
         MeetingLifecycleEventInput(
             external_id=op.external_id,
+            source=op.source,
             name=op.name,
             event_type=op.event_type,
             timestamp=op.timestamp,

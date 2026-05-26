@@ -238,6 +238,7 @@ class Webhook(Rb2bWebhook):
         ops.append(
             UpsertTrackingEvent(
                 external_id=f"rb2b:{self.event_id}",
+                source="rb2b",
                 name=self.payload.captured_url or "",
                 event_type="rb2b_visit",
                 event_subtype=event_subtype,

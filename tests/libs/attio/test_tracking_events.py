@@ -9,6 +9,7 @@ from pydantic import ValidationError
 def _valid_kwargs() -> dict[str, Any]:
     return dict(
         external_id="rb2b:abc123",
+        source="rb2b",
         name="https://example.test/pricing",
         event_type="rb2b_visit",
         event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
@@ -158,6 +159,36 @@ def test_find_or_create_tracking_event_jit_seeds_event_type_and_subtype(
         "target_object": "tracking_events",
         "attribute_slug": "event_subtype",
         "options": ["repeat_visit"],
+    } in seeded
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
+def test_find_or_create_tracking_event_jit_seeds_source(
+    mock_get_client,
+    mock_ensure_options,
+) -> None:
+    """source self-registers on first write per ai-ztm so new emitters
+    (rb2b, caldotcom, future fathom/form/...) never need a manual
+    bootstrap step before their first tracking_events row lands."""
+    client = MagicMock()
+    client.records.post_v2_objects_object_records_query.return_value.data = []
+    create_resp = MagicMock()
+    create_resp.data.id.record_id = "te_new"
+    client.records.post_v2_objects_object_records.return_value = create_resp
+    mock_get_client.return_value.__enter__.return_value = client
+
+    from libs.attio.models import TrackingEventInput
+    from libs.attio.tracking_events import find_or_create_tracking_event
+
+    i = TrackingEventInput(**_valid_kwargs())  # source="rb2b"
+    find_or_create_tracking_event(i)
+
+    seeded = [c.kwargs for c in mock_ensure_options.call_args_list]
+    assert {
+        "target_object": "tracking_events",
+        "attribute_slug": "source",
+        "options": ["rb2b"],
     } in seeded
 
 

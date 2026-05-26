@@ -184,11 +184,14 @@ class UpsertTrackingEvent(BaseModel):
     that carried dead fields downstream into a writer that 4xx'd against
     the live workspace.
 
-    ``event_type`` and ``event_subtype`` are open-ended selects whose
-    option vocabulary self-registers JIT inside the libs/attio writer —
-    pass any source-meaningful string. Current callers: rb2b emits
-    ``rb2b_visit`` + ``first_visit``/``repeat_visit``; forms emit
+    ``source``, ``event_type``, and ``event_subtype`` are open-ended
+    selects whose option vocabulary self-registers JIT inside the
+    libs/attio writer — pass any source-meaningful string. Current
+    callers: rb2b emits ``source=rb2b`` + ``rb2b_visit`` +
+    ``first_visit``/``repeat_visit``; forms emit ``source=form`` +
     ``form_submission`` + the form id (``signup-dlthub``, ...).
+    ``source`` exists so Attio views can filter rows by emitter without
+    parsing the ``external_id`` prefix — see ai-ztm.
 
     The dispatcher resolves ``subject_person`` via the plan's LookupTable;
     the adapter is called with the already-resolved Person record id.
@@ -202,6 +205,7 @@ class UpsertTrackingEvent(BaseModel):
     op_type: Literal["upsert_tracking_event"] = "upsert_tracking_event"
 
     external_id: str
+    source: str
     name: str
     event_type: str
     event_subtype: str | None = None
@@ -212,7 +216,7 @@ class UpsertTrackingEvent(BaseModel):
 
 
 class EmitMeetingLifecycleEvent(BaseModel):
-    """Source-agnostic op for a Cal.com meeting-lifecycle audit row.
+    """Cal.com-specific op for a meeting-lifecycle audit row.
 
     Writes a ``tracking_events`` row linked to the attendee's Person record (if
     found). Used by Cal.com because Attio's Meeting API does not support PATCH
@@ -222,6 +226,11 @@ class EmitMeetingLifecycleEvent(BaseModel):
     The dispatcher resolves ``attendee_email`` to a Person record id via
     ``libs.attio.people.search_people``. If no match, the row still writes with
     ``contact = None`` so the audit trail exists.
+
+    ``source`` is pinned to ``"caldotcom"`` because this op only fires from
+    the Cal.com webhook; the field exists so the row joins the same
+    ``source`` select vocabulary the canonical writer uses (see ai-ztm),
+    enabling per-source Attio filters across both audit and visit rows.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -230,6 +239,7 @@ class EmitMeetingLifecycleEvent(BaseModel):
     # Stable idempotency key. Convention:
     # ``"caldotcom:<event_type>:<booking_uid>:<attendee_email>"``.
     external_id: str
+    source: Literal["caldotcom"] = "caldotcom"
     event_type: Literal[
         "meeting_cancelled",
         "meeting_rescheduled",
