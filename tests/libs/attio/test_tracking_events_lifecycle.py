@@ -397,6 +397,49 @@ def test_naive_existing_timestamp_does_not_crash_stale_check(
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
+def test_embedded_newlines_in_details_line_still_dedupe(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """Cal.com free-form fields (cancellationReason etc.) can carry embedded
+    newlines. The helper collapses them to single spaces before storing AND
+    before comparing — so a retry with the same multi-line input still
+    dedupes against the previously stored (collapsed) line.
+    """
+    multi_line = (
+        "2026-05-14T00:00:00Z cancelled — by host@dlthub.com:\n"
+        "scheduling conflict\n"
+        "with another meeting"
+    )
+    # What the helper should have stored on the first arrival (newlines
+    # collapsed to single spaces).
+    collapsed = (
+        "2026-05-14T00:00:00Z cancelled — by host@dlthub.com: "
+        "scheduling conflict with another meeting"
+    )
+
+    client = MagicMock()
+    existing = MagicMock()
+    existing.id.record_id = "te_existing"
+    existing.model_dump.return_value = {
+        "values": {
+            "details": [{"value": collapsed}],
+            "timestamp": [{"value": "2026-05-14T00:00:00+00:00"}],
+        },
+    }
+    client.records.post_v2_objects_object_records_query.return_value.data = [existing]
+    mock_get_client.return_value.__enter__.return_value = client
+
+    # Retry comes in with the original multi-line details_line.
+    env = find_or_create_meeting_lifecycle_event(_valid_input(details_line=multi_line))
+
+    assert env.action == "noop"
+    client.records.patch_v2_objects_object_records_record_id_.assert_not_called()
+    client.records.post_v2_objects_object_records.assert_not_called()
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
 def test_sdk_failure_returns_failed_envelope(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001

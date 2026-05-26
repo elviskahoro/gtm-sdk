@@ -153,6 +153,12 @@ def find_or_create_meeting_lifecycle_event(
 
         no_show = input.event_subtype in ("no_show_attendee", "no_show_host")
         name = f"{input.event_subtype} {input.meeting_title}"
+        # Cal.com free-form fields (cancellationReason, ratingFeedback, meeting
+        # title, etc.) can carry embedded newlines. Collapse them so every
+        # stored transition is exactly one physical line — both for readability
+        # and so the line-equality dedupe below stays correct (roborev round 3
+        # caught the splitlines() boundary bug).
+        details_line = _collapse_to_single_line(input.details_line)
 
         with get_client() as client:
             query_response = client.records.post_v2_objects_object_records_query(
@@ -171,8 +177,9 @@ def find_or_create_meeting_lifecycle_event(
             # already EQUALS this transition (full-line match, not substring)
             # → no-op. Hookdeck retries on 4xx/5xx are the main source of
             # these. Line-equality avoids the false-positive where a new
-            # line happens to be a substring of an older entry.
-            if existing_details and input.details_line in existing_details.splitlines():
+            # line happens to be a substring of an older entry. Both sides
+            # have been collapsed to single-line via _collapse_to_single_line.
+            if existing_details and details_line in existing_details.splitlines():
                 return ReliabilityEnvelope(
                     success=True,
                     partial_success=False,
@@ -189,9 +196,9 @@ def find_or_create_meeting_lifecycle_event(
                 )
 
             new_details = (
-                f"{existing_details}\n{input.details_line}"
+                f"{existing_details}\n{details_line}"
                 if existing_details
-                else input.details_line
+                else details_line
             )
 
             # Out-of-order: incoming webhook precedes the stored transition.
@@ -262,6 +269,20 @@ def find_or_create_meeting_lifecycle_event(
             "meeting_lifecycle_event": input.model_dump(mode="json"),
         },
     )
+
+
+def _collapse_to_single_line(text: str) -> str:
+    """Collapse embedded newlines + whitespace runs into single spaces.
+
+    Cal.com free-form fields can carry ``\\n`` characters (cancellation
+    reasons users typed across two lines, rating feedback with bullet
+    points, etc.). Stored ``details_line`` values must be exactly one
+    physical line so the line-equality dedupe in the lifecycle helper
+    works correctly — roborev round 3 caught the boundary case where a
+    transition with embedded newlines would be broken into pieces by
+    ``splitlines()`` and the same webhook retry would no longer dedupe.
+    """
+    return " ".join(text.split())
 
 
 def _extract_text_slug(record: Any, slug: str) -> str:
