@@ -209,7 +209,7 @@ def _preflight_modal_secrets() -> None:
     ``"Name": "<secret>"`` token to keep a prefix like ``devx-gcp`` from
     accidentally satisfying a longer name.
     """
-    print(f"Preflighting Modal secrets: {' '.join(REQUIRED_MODAL_SECRETS)}")
+    print(f"Preflighting Modal secrets ({len(REQUIRED_MODAL_SECRETS)} required)")
     proc = _infisical_run(
         ["uv", "run", "modal", "secret", "list", "--json"],
         env_slug="dev",
