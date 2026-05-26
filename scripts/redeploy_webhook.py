@@ -224,8 +224,8 @@ def _preflight_modal_secrets() -> None:
         needle = f'"Name": "{secret}"'
         if needle not in payload:
             _fail(
-                f"Missing Modal secret in dlthub workspace: {secret}. Create "
-                f"it before deploying.",
+                "Missing one or more required Modal secrets in the dlthub "
+                "workspace. Create required secrets before deploying.",
             )
 
 
