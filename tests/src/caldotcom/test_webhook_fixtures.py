@@ -92,7 +92,7 @@ def _fake_booking_for_no_show() -> BookingCreatedPayload:
     return BookingCreatedPayload.model_validate(
         {
             "triggerEvent": "BOOKING_CREATED",
-            "uid": "wjvt1yoCAGK6KmaLnmszng",
+            "uid": "redacted_no_show_booking_uid_01",
             "start": "2026-05-11T07:00:00.000Z",
             "end": "2026-05-11T07:30:00.000Z",
             "title": "Discovery call",
