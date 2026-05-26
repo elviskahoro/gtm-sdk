@@ -6,7 +6,7 @@ import modal
 import pytest
 
 from cli.attio.preflight import run_people_preflight
-from libs.attio.errors import ConfigurationError
+from libs.attio.errors import ConfigurationError, ConnectivityError
 from libs.infisical.errors import InfisicalAuthError, InfisicalFetchError
 
 
@@ -21,7 +21,10 @@ def test_missing_infisical_key_raises_configuration_error(monkeypatch) -> None:
 
     @contextmanager
     def _explode(name: str):
-        raise InfisicalFetchError(f"{name} not found in Infisical")
+        raise InfisicalFetchError(
+            f"Failed to fetch {name} from Infisical: APIError: Secret with name "
+            f"'{name}' not found (Status: 404)",
+        )
         yield  # unreachable, but makes this a generator
 
     monkeypatch.setattr("cli.attio.preflight.infisical.fetch", _explode)
@@ -33,6 +36,26 @@ def test_missing_infisical_key_raises_configuration_error(monkeypatch) -> None:
         )
 
     assert "ATTIO_API_KEY" in str(exc_info.value)
+
+
+def test_transient_infisical_failure_raises_connectivity_error(monkeypatch) -> None:
+    monkeypatch.setenv("MODAL_TOKEN_ID", "id_123")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "secret_123")
+
+    @contextmanager
+    def _flake(name: str):
+        raise InfisicalFetchError(
+            f"Failed to fetch {name} from Infisical: ConnectionError: read timeout",
+        )
+        yield  # unreachable
+
+    monkeypatch.setattr("cli.attio.preflight.infisical.fetch", _flake)
+
+    with pytest.raises(ConnectivityError):
+        run_people_preflight(
+            connectivity_probe=True,
+            function_name="attio_search_people",
+        )
 
 
 def test_infisical_auth_failure_raises_configuration_error(monkeypatch) -> None:

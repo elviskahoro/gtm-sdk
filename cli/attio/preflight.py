@@ -38,8 +38,20 @@ def _verify_infisical_keys(names: Iterable[str]) -> None:
                 "Source .env.local and export INFISICAL_ENV before running this CLI.",
             ) from exc
         except InfisicalFetchError as exc:
-            raise ConfigurationError(
-                f"Infisical key '{name}' missing or invalid: {exc}",
+            # Mirror the old `modal.Secret.from_name(...).hydrate()` classification:
+            # a permanently-missing secret is a config problem the operator must
+            # fix (populate the key); any other fetch failure (network down,
+            # Infisical 5xx, etc.) is a retryable transport issue. Pattern-match
+            # the wrapped APIError message rather than picking up a richer
+            # exception type — the SDK collapses 404/5xx into a single
+            # InfisicalFetchError, so the message is the only signal available.
+            msg = str(exc).lower()
+            if "404" in msg or "not found" in msg:
+                raise ConfigurationError(
+                    f"Infisical key '{name}' missing: {exc}",
+                ) from exc
+            raise ConnectivityError(
+                f"Transient Infisical failure resolving '{name}': {exc}",
             ) from exc
 
 
