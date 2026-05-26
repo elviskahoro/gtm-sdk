@@ -233,7 +233,9 @@ def _ops_for_created(
             event_subtype="scheduled",
             timestamp=created_at,
             body_json=json.dumps(
-                payload.model_dump(mode="json"), default=str, sort_keys=True
+                payload.model_dump(mode="json"),
+                default=str,
+                sort_keys=True,
             ),
             details_line=_details_line(created_at, "scheduled", summary),
             host=_host_person_ref(host_email),
@@ -275,7 +277,9 @@ def _ops_for_cancelled(
             event_subtype="cancelled",
             timestamp=created_at,
             body_json=json.dumps(
-                payload.model_dump(mode="json"), default=str, sort_keys=True
+                payload.model_dump(mode="json"),
+                default=str,
+                sort_keys=True,
             ),
             details_line=_details_line(created_at, "cancelled", summary),
             host=_host_person_ref(host_email),
@@ -317,7 +321,9 @@ def _ops_for_rescheduled(
             event_subtype="rescheduled",
             timestamp=created_at,
             body_json=json.dumps(
-                payload.model_dump(mode="json"), default=str, sort_keys=True
+                payload.model_dump(mode="json"),
+                default=str,
+                sort_keys=True,
             ),
             details_line=_details_line(created_at, "rescheduled", summary),
             host=_host_person_ref(host_email),
@@ -365,7 +371,9 @@ def _ops_for_no_show(
             event_subtype="no_show_attendee",
             timestamp=created_at,
             body_json=json.dumps(
-                payload.model_dump(mode="json"), default=str, sort_keys=True
+                payload.model_dump(mode="json"),
+                default=str,
+                sort_keys=True,
             ),
             details_line=_details_line(created_at, "no_show_attendee", summary),
             host=_host_person_ref(host_email),
@@ -398,7 +406,9 @@ def _ops_for_meeting_ended(
             event_subtype=event_subtype,
             timestamp=created_at,
             body_json=json.dumps(
-                payload.model_dump(mode="json"), default=str, sort_keys=True
+                payload.model_dump(mode="json"),
+                default=str,
+                sort_keys=True,
             ),
             details_line=_details_line(created_at, event_subtype, summary),
             host=_host_person_ref(host_email),
