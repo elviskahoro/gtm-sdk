@@ -21,6 +21,11 @@ import pytest
 from fastapi import Request
 
 from libs.logging import structured
+from scripts.redeploy_webhook import (
+    PLACEHOLDER,
+    _discover_handlers,
+    _discover_sources,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HANDLERS_DIR = REPO_ROOT / "webhooks"
@@ -33,7 +38,14 @@ def _load_substituted_handler(
     tmp_path: Path,
 ) -> ModuleType:
     src = (HANDLERS_DIR / f"{handler_name}.py").read_text()
-    substituted = src.replace("WebhookModelToReplace", source_alias)
+    # Import the placeholder string from the deploy script (rather than
+    # hard-coding the literal) so this test fails loudly if the constant
+    # ever gets renamed without updating every callsite.
+    assert PLACEHOLDER in src, (
+        f"{handler_name}.py is missing the {PLACEHOLDER!r} placeholder "
+        "that scripts/redeploy_webhook.py substitutes at deploy time"
+    )
+    substituted = src.replace(PLACEHOLDER, source_alias)
     target = tmp_path / f"{handler_name}.py"
     target.write_text(substituted)
     module_name = f"_test_webhook_{handler_name}_{source_alias}"
@@ -371,3 +383,189 @@ def test_gcp_raw_handle_records_byte_length_for_multibyte_payload(
     assert received["request_id"] == "handle-raw"
     completed = next(line for line in lines if line["event"] == "webhook.completed")
     assert completed["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Cross-product log-emission coverage (ai-fdu)
+#
+# The scenario tests above cover specific (handler, source) pairs in depth
+# — happy path, validation failure, error, multibyte, etc. They do NOT prove
+# that every other (handler, source) combo's substituted code (a) imports
+# cleanly and (b) emits the structured-log schema Modal's dashboard relies
+# on for source-filtering and request_id correlation. That's the gap this
+# parametrized test closes: one lenient "did the schema show up?" assertion
+# across all 3 handlers × 5 sources = 15 combinations.
+# ---------------------------------------------------------------------------
+
+# Map an import alias → its payload fixture filename. Keyed by a substring
+# of the alias so the table tolerates the per-handler naming drift the deploy
+# script already tolerates (e.g. `OctolensWebhook` in export_to_attio.py vs
+# `OctolensMentionWebhook` in export_to_gcp_etl.py / export_to_gcp_raw.py).
+# If a new source is added that doesn't match any substring, the test fails
+# loudly at collection time with KeyError pointing at the missing entry.
+_FIXTURE_BY_SOURCE_FAMILY: dict[str, str] = {
+    "Caldotcom": "caldotcom.booking.created.redacted.json",
+    "FathomCall": "fathom.recording.redacted.json",
+    "FathomMessage": "fathom.recording.redacted.json",
+    "Octolens": "octolens.mention.created.twitter.redacted.json",
+    "Rb2b": "rb2b.visit.person_and_company.redacted.json",
+}
+
+
+def _fixture_for(source_alias: str) -> str:
+    for family, fixture in _FIXTURE_BY_SOURCE_FAMILY.items():
+        if family in source_alias:
+            return fixture
+    raise KeyError(
+        f"no payload fixture mapped for source alias {source_alias!r}; "
+        f"add an entry to _FIXTURE_BY_SOURCE_FAMILY in {__file__}",
+    )
+
+
+def _matrix() -> list[tuple[str, str]]:
+    """Discover (handler, source_alias) pairs the same way the deploy script
+    does. This guarantees the test covers exactly what `redeploy_webhook.py`
+    would deploy — not a hand-maintained list that drifts."""
+    pairs: list[tuple[str, str]] = []
+    for handler_name in _discover_handlers():
+        handler_path = HANDLERS_DIR / f"{handler_name}.py"
+        for source_alias in _discover_sources(handler_path):
+            pairs.append((handler_name, source_alias))
+    return pairs
+
+
+def _call_typed_handler(
+    module: ModuleType,
+    payload: dict[str, Any],
+    request: Request,
+) -> object:
+    webhook = module.WebhookModel.model_validate(payload)
+    return module._handle(webhook, request)
+
+
+def _call_raw_handler(
+    module: ModuleType,
+    payload: dict[str, Any],
+    request: Request,
+) -> object:
+    # export_to_gcp_raw.web() takes the raw dict — no Pydantic gating.
+    return module._handle(payload, request)
+
+
+_CALLERS: dict[str, Any] = {
+    "export_to_attio": _call_typed_handler,
+    "export_to_gcp_etl": _call_typed_handler,
+    "export_to_gcp_raw": _call_raw_handler,
+}
+
+
+def _stub_attio_downstream(
+    module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeResult:
+        @staticmethod
+        def body() -> str:
+            return "ok-attio"
+
+    def _fake_execute(_plan: object) -> _FakeResult:
+        return _FakeResult()
+
+    monkeypatch.setattr(module, "execute", _fake_execute)
+
+
+def _stub_etl_downstream(
+    module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_gcp_to_filesystem(module, monkeypatch, returns="ok-etl")
+
+    # _get_storage_source_file_data calls .remote() on a Modal function when
+    # storage_get_base_model_type() is non-None; short-circuit so the test
+    # never touches the Modal runtime regardless of which source is wired.
+    def _no_storage(**_kw: object) -> None:
+        return None
+
+    monkeypatch.setattr(module, "_get_storage_source_file_data", _no_storage)
+
+
+def _stub_raw_downstream(
+    module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_gcp_to_filesystem(module, monkeypatch, returns="ok-raw")
+
+
+_STUBS: dict[str, Any] = {
+    "export_to_attio": _stub_attio_downstream,
+    "export_to_gcp_etl": _stub_etl_downstream,
+    "export_to_gcp_raw": _stub_raw_downstream,
+}
+
+
+@pytest.mark.parametrize(
+    ("handler_name", "source_alias"),
+    _matrix(),
+    ids=lambda v: v,
+)
+def test_substituted_handler_emits_log_schema(
+    handler_name: str,
+    source_alias: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """For every (handler, source) combo: substitution applies cleanly, the
+    substituted module imports without error, and _handle() emits at least
+    one structured log line with the ts/event/source/request_id schema
+    Modal's dashboard relies on.
+
+    Lenient by design — terminal-event choice depends on whether the source
+    implements the handler's contract (e.g. FathomMessageWebhook returns
+    False for both attio_is_valid_webhook and etl_is_valid_webhook, so its
+    handlers emit webhook.validation_failed instead of webhook.completed).
+    The strict-sequence assertions live in the scenario tests above.
+    """
+    module = _load_substituted_handler(handler_name, source_alias, tmp_path)
+    _STUBS[handler_name](module, monkeypatch)
+
+    payload_path = SAMPLES_DIR / _fixture_for(source_alias)
+    payload = orjson.loads(payload_path.read_bytes())
+    request_id = f"req-{handler_name}-{source_alias}"
+    request = _make_request({"X-Request-Id": request_id})
+    capsys.readouterr()
+
+    try:
+        _CALLERS[handler_name](module, payload, request)
+    except Exception:  # noqa: BLE001, S110  # trunk-ignore(bandit/B110)
+        # Pydantic ValidationError or downstream raises are fine — the test
+        # asserts on the structured log lines, which are emitted before and
+        # around any failure (webhook.completed status=error wraps the
+        # raise; webhook.validation_failed precedes a soft reject).
+        pass
+
+    lines = _read_log_lines(capsys)
+    assert lines, f"no structured log lines emitted for {handler_name} + {source_alias}"
+
+    required_fields = {"ts", "event", "source", "request_id"}
+    for line in lines:
+        missing = required_fields - line.keys()
+        assert not missing, f"log line missing required fields {missing}: {line}"
+
+    request_ids = {line["request_id"] for line in lines}
+    assert request_ids == {request_id}, (
+        f"all lines for one request must share a request_id; got {request_ids}"
+    )
+
+    sources = {line["source"] for line in lines}
+    assert len(sources) == 1, f"source must be consistent per request; got {sources}"
+    assert next(iter(sources)), "source must be non-empty"
+
+    events = {line["event"] for line in lines}
+    assert "webhook.received" in events, (
+        f"expected webhook.received in event stream; got {events}"
+    )
+    terminal = {"webhook.completed", "webhook.validation_failed", "webhook.error"}
+    assert events & terminal, (
+        f"expected at least one terminal event in {terminal}; got {events}"
+    )
