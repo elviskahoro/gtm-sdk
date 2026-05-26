@@ -3,8 +3,8 @@ from __future__ import annotations
 from src.fathom.webhook.message import Webhook
 
 
-def test_attio_get_secret_collection_names() -> None:
-    assert Webhook.attio_get_secret_collection_names() == ["attio"]
+def test_required_api_keys() -> None:
+    assert Webhook.required_api_keys() == ["ATTIO_API_KEY"]
 
 
 def test_attio_is_valid_webhook_always_false() -> None:

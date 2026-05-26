@@ -545,10 +545,14 @@ class Webhook(CalcomWebhook):
     # --- Attio export contract ---
 
     @staticmethod
-    def attio_get_secret_collection_names() -> list[str]:
-        # ``caldotcom`` carries CALCOM_API_KEY used by BOOKING_NO_SHOW_UPDATED.
-        # Must be created in Modal (dlthub workspace) — see plan-02 deploy notes.
-        return ["attio", "caldotcom"]
+    def required_api_keys() -> list[str]:
+        # CALCOM_API_KEY is NOT declared here — only the BOOKING_NO_SHOW_UPDATED
+        # branch touches Cal.com's API. Declaring it would force the other
+        # Cal.com event types (BOOKING_CREATED/CANCELLED/RESCHEDULED/MEETING_*)
+        # to fail when CALCOM_API_KEY is missing or rotated, even though
+        # they never reach `_calcom_client()`. ``_calcom_client()`` fetches
+        # the key lazily inside the NO_SHOW branch.
+        return ["ATTIO_API_KEY"]
 
     @staticmethod
     def attio_get_app_name() -> str:
@@ -561,8 +565,21 @@ class Webhook(CalcomWebhook):
         return _validation_result(self.payload)[1]
 
     def _calcom_client(self) -> CalcomClient:
-        """Build a Cal.com API client from env. Override-friendly for tests."""
-        return CalcomClient.from_env()
+        """Build a Cal.com API client. Lazy on CALCOM_API_KEY.
+
+        Reached only on the BOOKING_NO_SHOW_UPDATED path (see
+        ``attio_get_operations``), so the Cal.com key fetch happens only
+        when the API actually needs to be called. Keeps the other Cal.com
+        event types (BOOKING_CREATED/CANCELLED/RESCHEDULED/MEETING_*)
+        unaffected by Cal.com key health — they don't reach this method.
+
+        Override-friendly for tests: replace ``_calcom_client`` on a
+        subclass to skip the network entirely.
+        """
+        from libs import infisical
+
+        with infisical.fetch("CALCOM_API_KEY") as api_key:
+            return CalcomClient(api_key=api_key)
 
     def attio_get_operations(self) -> list[AttioOp]:
         payload = self.payload
