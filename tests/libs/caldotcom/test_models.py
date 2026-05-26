@@ -70,12 +70,12 @@ def test_cancelled_payload_carries_organizer_and_reason() -> None:
     w = _load("caldotcom.booking.cancelled.redacted.json")
     p = w.payload
     assert isinstance(p, BookingCancelledPayload)
-    assert p.uid == "7NTwtb1h8SnDMGJbGWNVXg"
+    assert p.uid == "redacted_cancelled_booking_uid_01"
     assert p.organizer is not None
     assert p.organizer.email == "alex@example.com"
     assert p.cancellationReason == "redacted"
     assert p.cancelledBy == "alex@example.com"
-    assert p.iCalUID == "7NTwtb1h8SnDMGJbGWNVXg@Cal.com"
+    assert p.iCalUID == "redacted_cancelled_booking_uid_01@Cal.com"
     assert [a.email for a in p.attendees] == ["sam@example.com"]
 
 
@@ -98,7 +98,7 @@ def test_no_show_payload_is_slim() -> None:
     w = _load("caldotcom.booking.no_show_updated.redacted.json")
     p = w.payload
     assert isinstance(p, BookingNoShowPayload)
-    assert p.bookingUid == "wjvt1yoCAGK6KmaLnmszng"
+    assert p.bookingUid == "redacted_no_show_booking_uid_01"
     assert (
         p.attendees
         == [
@@ -116,12 +116,12 @@ def test_meeting_ended_flat_shape_lifts_into_payload() -> None:
     w = _load("caldotcom.meeting.ended.redacted.json")
     p = w.payload
     assert isinstance(p, MeetingEndedPayload)
-    assert p.uid == "vR6cS6aLNKNqRRcKEciviX"
+    assert p.uid == "redacted_meeting_ended_booking_uid_01"
     assert p.userPrimaryEmail == "alex@example.com"
     assert p.noShowHost is False
     assert p.rating is None
     assert [a.email for a in p.attendees] == ["sam@example.com", "jamie@example.com"]
-    assert p.iCalUID == "7HyZhszqGYkZhwF8mYbuJG@Cal.com"
+    assert p.iCalUID == "redacted_meeting_ended_from_reschedule_uid_01@Cal.com"
 
 
 def test_meeting_started_flat_shape_lifts_into_payload() -> None:
