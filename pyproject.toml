@@ -27,7 +27,7 @@ dependencies = [
   "opentelemetry-sdk",
   "opentelemetry-exporter-otlp-proto-http",
   "opentelemetry-semantic-conventions",
-  "dlthub>=0.22.1",
+  "dlthub>=0.27.0",
   "logfire>=4.32.1",
   "openai>=2.34.0",
   "emoji>=2.15.0",
