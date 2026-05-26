@@ -179,6 +179,10 @@ def _run_deploy(
     env["PATH"] = f"{stub_bin}{os.pathsep}{env['PATH']}"
     env["INFISICAL_PROJECT_ID"] = "test-project-id"
     env["INFISICAL_TOKEN"] = "test-token"
+    # INFISICAL_ENV is a fail-closed preflight added by ai-2aw — see the
+    # script header. Tests pin to "dev" since they stub the modal binary
+    # and never reach Infisical.
+    env.setdefault("INFISICAL_ENV", "dev")
     if env_overrides:
         env.update(env_overrides)
     return subprocess.run(

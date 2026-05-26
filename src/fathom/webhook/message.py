@@ -76,8 +76,8 @@ class Webhook(FathomWebhook):
     # --- Attio export contract ---
 
     @staticmethod
-    def attio_get_secret_collection_names() -> list[str]:
-        return ["attio"]
+    def required_api_keys() -> list[str]:
+        return ["ATTIO_API_KEY"]
 
     @staticmethod
     def attio_get_app_name() -> str:

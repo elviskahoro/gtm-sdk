@@ -58,12 +58,15 @@ def _mutated_created_webhook(**overrides: object) -> Webhook:
     return Webhook.model_validate(envelope)
 
 
-def test_attio_get_secret_collection_names_includes_caldotcom() -> None:
-    """Plan-02 added the 'caldotcom' secret for the BOOKING_NO_SHOW_UPDATED
-    Cal.com API fetch. Both must be present so the Modal app injects both."""
-    names = Webhook.attio_get_secret_collection_names()
-    assert "attio" in names
-    assert "caldotcom" in names
+def test_required_api_keys_attio_only() -> None:
+    """Cal.com webhook declares only ATTIO_API_KEY as required.
+
+    CALCOM_API_KEY is fetched lazily inside ``_calcom_client()`` on the
+    BOOKING_NO_SHOW_UPDATED path. Declaring it as required would force
+    the other Cal.com event types to fail when CALCOM_API_KEY is missing
+    or rotated, even though they never touch Cal.com's API.
+    """
+    assert Webhook.required_api_keys() == ["ATTIO_API_KEY"]
 
 
 def test_attio_is_valid_webhook_true_for_normal_payload() -> None:

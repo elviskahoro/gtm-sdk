@@ -19,7 +19,10 @@
 #            FathomMessageWebhook, OctolensMentionWebhook, Rb2bVisitWebhook).
 #
 # What it does:
-#   1. Refuses to start if INFISICAL_PROJECT_ID or INFISICAL_TOKEN is unset.
+#   1. Refuses to start if INFISICAL_PROJECT_ID, INFISICAL_TOKEN, or
+#      INFISICAL_ENV is unset (the last is a fail-closed gate added by
+#      ai-2aw — no default slug, since a silent default would resurrect
+#      the miss-route footgun the refactor was meant to eliminate).
 #   2. Unsets MODAL_TOKEN_ID / MODAL_TOKEN_SECRET so infisical-injected
 #      dlthub workspace tokens win over the parent shell's personal tokens.
 #   3. Refuses to start if the working tree under webhooks/ is dirty.
@@ -78,6 +81,8 @@ Usage:
 Preconditions:
   - INFISICAL_PROJECT_ID and INFISICAL_TOKEN exported in env
     (run: set -a && source .env.local && set +a)
+  - INFISICAL_ENV exported in env (dev|staging|prod) — no default; see ai-2aw
+    (export INFISICAL_ENV=prod, etc.)
   - working tree under webhooks/ is clean
   - required Modal secrets exist in the dlthub workspace
 EOF
@@ -191,6 +196,20 @@ fi
 [[ -n ${INFISICAL_PROJECT_ID-} ]] || fail "INFISICAL_PROJECT_ID is unset. Run: set -a && source .env.local && set +a"
 [[ -n ${INFISICAL_TOKEN-} ]] || fail "INFISICAL_TOKEN is unset. Run: set -a && source .env.local && set +a"
 
+# INFISICAL_ENV is the slug each deployed function will use to fetch its
+# per-domain API keys (ATTIO_API_KEY, CALCOM_API_KEY, …) at request time
+# via `libs.infisical.fetch_all`. We require it explicitly here so an
+# operator who forgets ``export INFISICAL_ENV=prod`` doesn't silently
+# land production webhook traffic in the dev Attio workspace — the exact
+# miss-route shape ai-2aw was filed to eliminate. `libs.infisical.client`
+# also fails closed at runtime if the slug is missing; this preflight
+# catches it before any image build.
+[[ -n ${INFISICAL_ENV-} ]] || fail "INFISICAL_ENV is unset. Export it explicitly before deploying (e.g. 'export INFISICAL_ENV=prod'). No default is applied — see ai-2aw."
+case "${INFISICAL_ENV}" in
+dev | staging | prod) ;;
+*) fail "INFISICAL_ENV='${INFISICAL_ENV}' not in {dev,staging,prod}. Set one of those before deploying." ;;
+esac
+
 # The parent shell's personal Modal tokens silently override infisical-injected
 # workspace tokens — deploys land in the wrong workspace. Always unset.
 unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET
@@ -229,13 +248,14 @@ fi
 # --- preflight: Modal secrets ----------------------------------------------
 
 # All five sources currently return ["devx-gcp-202605111323"] from
-# modal_get_secret_collection_names() and ["attio"] from
-# attio_get_secret_collection_names(). If a new source introduces a
-# different secret, extend this list.
+# modal_get_secret_collection_names() — the GCP service-account Modal
+# Secret used by the etl/raw handlers. The export_to_attio handler no
+# longer binds a named ``attio`` Modal Secret: it ships an inline
+# ``modal.Secret.from_dict({INFISICAL_*})`` bootstrap and fetches
+# ATTIO_API_KEY / CALCOM_API_KEY from Infisical at request boundary
+# (see ai-2aw). If a new source introduces a different named secret,
+# extend this list.
 REQUIRED_SECRETS=(devx-gcp-202605111323)
-if [[ ${HANDLER} == "export_to_attio" ]]; then
-  REQUIRED_SECRETS+=(attio)
-fi
 
 echo "Preflighting Modal secrets: ${REQUIRED_SECRETS[*]}"
 # Use --json so secret names are emitted in full. The default table renderer
