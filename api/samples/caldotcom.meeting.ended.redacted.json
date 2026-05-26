@@ -1,7 +1,7 @@
 {
   "triggerEvent": "MEETING_ENDED",
   "id": 19140502,
-  "uid": "vR6cS6aLNKNqRRcKEciviX",
+  "uid": "redacted_meeting_ended_booking_uid_01",
   "title": "dltHub exploration between Alex Host and Sam Attendee",
   "description": "",
   "customInputs": [],
@@ -50,7 +50,7 @@
   "dynamicEventSlugRef": null,
   "dynamicGroupSlugRef": null,
   "rescheduled": null,
-  "fromReschedule": "7HyZhszqGYkZhwF8mYbuJG",
+  "fromReschedule": "redacted_meeting_ended_from_reschedule_uid_01",
   "recurringEventId": null,
   "smsReminderNumber": null,
   "scheduledJobs": [],
@@ -60,7 +60,7 @@
     "company": "Example Co"
   },
   "isRecorded": false,
-  "iCalUID": "7HyZhszqGYkZhwF8mYbuJG@Cal.com",
+  "iCalUID": "redacted_meeting_ended_from_reschedule_uid_01@Cal.com",
   "iCalSequence": 1,
   "rating": null,
   "ratingFeedback": null,
@@ -128,7 +128,7 @@
     {
       "id": 29792723,
       "type": "google_meet_video",
-      "uid": "vR6cS6aLNKNqRRcKEciviX",
+      "uid": "redacted_meeting_ended_booking_uid_01",
       "meetingId": null,
       "meetingUrl": "https://meet.google.com/xxx-xxxx-xxx",
       "bookingId": 19140502
