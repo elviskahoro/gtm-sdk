@@ -15,7 +15,6 @@ Workflow:
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -24,8 +23,7 @@ from pydantic import BaseModel
 from libs.attio import people as attio_people
 from libs.attio.models import PersonInput
 from libs.harvest import client as harvest_client
-
-logger = logging.getLogger(__name__)
+from libs.logging.structured import log
 
 
 class HarvestProfile(BaseModel):
@@ -139,7 +137,11 @@ def build_enrichment_tasks(
             linkedin_url = f"https://www.linkedin.com/in/{row['linkedin_slug']}"
 
         if not linkedin_url:
-            logger.warning(f"Skipping record {row.get('record_id')}: no LinkedIn URL")
+            log(
+                "enrichment.skip",
+                reason="no_linkedin_url",
+                record_id=row.get("record_id"),
+            )
             continue
 
         task = EnrichmentTask(
@@ -162,7 +164,11 @@ def harvest_profile_from_task(task: EnrichmentTask) -> HarvestProfile | None:
     """
     raw = harvest_client.fetch_profile(task.linkedin_url)
     if not raw:
-        logger.warning(f"Harvest API returned no data for {task.linkedin_url}")
+        log(
+            "enrichment.harvest_empty",
+            record_id=task.record_id,
+            linkedin_url=task.linkedin_url,
+        )
         return None
 
     profile = HarvestProfile()
@@ -204,8 +210,14 @@ def enrich_record(task: EnrichmentTask) -> EnrichmentResult:
             attio_record_id=task.record_id,
         )
 
-    except Exception as e:
-        logger.error(f"Failed to enrich record {task.record_id}: {e}")
+    except Exception as e:  # noqa: BLE001 — record the failure on the result; let caller continue
+        log(
+            "enrichment.failed",
+            record_id=task.record_id,
+            enrichment_type=task.enrichment_type,
+            error_type=type(e).__name__,
+            error_msg=str(e),
+        )
         return EnrichmentResult(
             task=task,
             success=False,
@@ -273,6 +285,10 @@ async def enrich_batch(
     for task in tasks:
         result = enrich_record(task)
         results.append(result)
-        logger.info(f"Enriched {task.record_id}: {result.success}")
+        log(
+            "enrichment.completed",
+            record_id=task.record_id,
+            success=result.success,
+        )
 
     return results
