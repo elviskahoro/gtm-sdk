@@ -52,7 +52,7 @@ Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
 
 ## Deploying
 
-Use `scripts/redeploy_webhook.py` — never `modal deploy webhooks/<file>.py`
+Use `scripts/webhooks-redeploy.py` — never `modal deploy webhooks/<file>.py`
 directly. Handler files live in source control with a `WebhookModelToReplace`
 placeholder so the working tree stays source-agnostic; the script substitutes
 the placeholder, deploys via a Dagger-wrapped `modal deploy`, and restores
@@ -63,13 +63,13 @@ set -a && source .env.local && set +a   # once per shell
 export INFISICAL_ENV=dev                 # explicit; no default
 
 # Deploy one source to one handler.
-scripts/redeploy_webhook.py export_to_attio   CaldotcomBookingWebhook
-scripts/redeploy_webhook.py export_to_gcp_etl Rb2bVisitWebhook
+scripts/webhooks-redeploy.py export_to_attio   CaldotcomBookingWebhook
+scripts/webhooks-redeploy.py export_to_gcp_etl Rb2bVisitWebhook
 
 # Deploy every source imported by the handler (one Modal app per source).
-scripts/redeploy_webhook.py export_to_attio   --all
-scripts/redeploy_webhook.py export_to_gcp_etl --all
-scripts/redeploy_webhook.py export_to_gcp_raw --all
+scripts/webhooks-redeploy.py export_to_attio   --all
+scripts/webhooks-redeploy.py export_to_gcp_etl --all
+scripts/webhooks-redeploy.py export_to_gcp_raw --all
 ```
 
 The deploy itself runs inside a Dagger container (`uv sync --frozen && uv run
@@ -151,7 +151,7 @@ App names are deterministic per handler family: `export_to_attio` uses
 Either way, redeploys are name-stable and the registry usually only needs
 a refresh:
 
-1. Redeploy via `scripts/redeploy_webhook.py` (see [Deploying](#deploying)).
+1. Redeploy via `scripts/webhooks-redeploy.py` (see [Deploying](#deploying)).
 2. Run `gtm webhook sync` to refresh `generated_at`.
 
 If you change the wiring inside Hookdeck (rerouting a source to a different
