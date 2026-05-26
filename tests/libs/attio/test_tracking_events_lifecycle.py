@@ -312,6 +312,91 @@ def test_stale_arrival_appends_details_only(
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
+def test_substring_match_does_not_count_as_duplicate(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """A new details_line that is a SUBSTRING of an existing line must NOT
+    trigger the duplicate-retry guard — that would silently drop a real
+    transition. Line equality, not substring containment, is the rule.
+    """
+    client = MagicMock()
+    existing = MagicMock()
+    existing.id.record_id = "te_existing"
+    # Long existing line that happens to contain the short new line as a
+    # substring (e.g. a fuller details entry that quotes the short variant).
+    existing.model_dump.return_value = {
+        "values": {
+            "details": [
+                {
+                    "value": (
+                        "2026-05-14T00:00:00Z cancelled — by host@dlthub.com: "
+                        "rescheduling conflict with another meeting that "
+                        "matters more"
+                    ),
+                },
+            ],
+            "timestamp": [{"value": "2026-05-14T00:00:00+00:00"}],
+        },
+    }
+    client.records.post_v2_objects_object_records_query.return_value.data = [existing]
+    patch_resp = MagicMock()
+    patch_resp.data.id.record_id = "te_existing"
+    client.records.patch_v2_objects_object_records_record_id_.return_value = patch_resp
+    mock_get_client.return_value.__enter__.return_value = client
+
+    # New line is a strict substring of the existing line but NOT a full-line
+    # match.
+    env = find_or_create_meeting_lifecycle_event(
+        _valid_input(
+            details_line="2026-05-14T00:00:00Z cancelled — by host@dlthub.com: rescheduling",
+        ),
+    )
+
+    # Must NOT noop. PATCH should fire and details should grow.
+    assert env.action == "updated"
+    values = _values_from_call(
+        client.records.patch_v2_objects_object_records_record_id_.call_args,
+    )
+    assert "details" in values
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
+def test_naive_existing_timestamp_does_not_crash_stale_check(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """Attio's date attribute may emit naive ISO strings (no offset / date-only).
+    The helper must normalize to tz-aware UTC before comparing to the
+    tz-aware input timestamp; the prior implementation raised TypeError
+    on the naive-vs-aware comparison.
+    """
+    client = MagicMock()
+    existing = MagicMock()
+    existing.id.record_id = "te_existing"
+    # Date-only string — fromisoformat returns a NAIVE datetime.
+    existing.model_dump.return_value = {
+        "values": {
+            "details": [{"value": "prior line"}],
+            "timestamp": [{"value": "2026-05-14"}],
+        },
+    }
+    client.records.post_v2_objects_object_records_query.return_value.data = [existing]
+    patch_resp = MagicMock()
+    patch_resp.data.id.record_id = "te_existing"
+    client.records.patch_v2_objects_object_records_record_id_.return_value = patch_resp
+    mock_get_client.return_value.__enter__.return_value = client
+
+    # tz-aware input — the comparison must not raise.
+    env = find_or_create_meeting_lifecycle_event(
+        _valid_input(timestamp=datetime(2026, 5, 15, tzinfo=timezone.utc)),
+    )
+    assert env.success is True
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
 def test_sdk_failure_returns_failed_envelope(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001

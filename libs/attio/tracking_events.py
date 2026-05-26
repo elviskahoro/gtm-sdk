@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from libs.attio.attributes import ensure_select_options
@@ -167,10 +167,12 @@ def find_or_create_meeting_lifecycle_event(
                 existing_details = _extract_text_slug(existing[0], "details")
                 existing_timestamp = _extract_date_slug(existing[0], "timestamp")
 
-            # Duplicate retry: exact same transition line already present in
-            # the cumulative details → no-op. Hookdeck retries on 4xx/5xx are
-            # the main source of these.
-            if existing_details and input.details_line in existing_details:
+            # Duplicate retry: an existing line in the cumulative details
+            # already EQUALS this transition (full-line match, not substring)
+            # → no-op. Hookdeck retries on 4xx/5xx are the main source of
+            # these. Line-equality avoids the false-positive where a new
+            # line happens to be a substring of an older entry.
+            if existing_details and input.details_line in existing_details.splitlines():
                 return ReliabilityEnvelope(
                     success=True,
                     partial_success=False,
@@ -282,20 +284,29 @@ def _extract_text_slug(record: Any, slug: str) -> str:
 
 
 def _extract_date_slug(record: Any, slug: str) -> datetime | None:
-    """Return the date/timestamp value of ``slug`` parsed as a UTC datetime.
+    """Return the date/timestamp value of ``slug`` parsed as a tz-aware UTC datetime.
 
     Attio's ``date`` attribute on the live ``tracking_events`` schema stores
-    values as ISO-8601 strings (with or without time). Returns ``None`` for
-    missing slug / empty list / unparseable input — the caller falls back to
-    treating the row as having no recorded timestamp.
+    values as ISO-8601 strings. The wire format can be date-only (``YYYY-MM-DD``)
+    or datetime (with or without timezone offset). We normalize all three to
+    tz-aware UTC so comparisons against ``input.timestamp`` (always tz-aware)
+    don't raise ``TypeError`` for the naive-vs-aware case.
+
+    Returns ``None`` for missing slug / empty list / unparseable input — the
+    caller falls back to treating the row as having no recorded timestamp.
     """
     raw = _extract_text_slug(record, slug)
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         return None
+    # Date-only ISO strings parse as naive; same for datetime strings without an
+    # offset. Force UTC so the caller can compare against tz-aware input.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _error_envelope(error: Exception) -> ReliabilityEnvelope:
