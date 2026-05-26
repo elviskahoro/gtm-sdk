@@ -1,16 +1,21 @@
 """Per-trigger dispatch tests against the recorded Cal.com fixtures.
 
-Plan-02 contract:
+Spec at
+``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``.
 
-- ``BOOKING_CREATED`` -> ``[UpsertMeeting]`` (one find-or-create per webhook)
-- ``BOOKING_CANCELLED`` / ``BOOKING_RESCHEDULED`` / ``MEETING_ENDED`` ->
-  one ``EmitMeetingLifecycleEvent`` per attendee
-- ``BOOKING_NO_SHOW_UPDATED`` -> one ``EmitMeetingLifecycleEvent`` per attendee
-  with ``noShow=true``, after a Cal.com API fetch (mocked in tests)
-- ``MEETING_STARTED`` / ``PING`` -> ``[]`` (typed no-ops, valid=False)
+Each cal.com webhook produces:
 
-Attio Meeting API is append-only (see plan-02 — PATCH/DELETE return 404), so
-lifecycle events go to ``tracking_events`` linked to each attendee's Person.
+1. ``UpsertCompany`` for the host's email domain.
+2. ``UpsertPerson`` for the host (the lifecycle dispatcher's LookupTable
+   resolves the host PersonRef on EmitMeetingLifecycleEvent from this op).
+3. ``UpsertMeeting`` — ONLY on ``BOOKING_CREATED``.
+4. ``EmitMeetingLifecycleEvent`` — ONE per meeting (NOT per attendee). The
+   row's ``external_id`` is ``canonical_meeting_uid(host, start)``; the same
+   row is PATCHed by every subsequent webhook for the same meeting,
+   advancing ``event_subtype`` and appending to cumulative ``details``.
+
+Departure from plan-02: no more per-attendee rows. Attendee identity lives
+in the row's ``body`` (raw JSON) and ``details`` (one-line summary).
 """
 
 from __future__ import annotations
@@ -25,7 +30,13 @@ import pytest
 
 from libs.caldotcom.models import BookingCreatedPayload
 from libs.meetings import canonical_meeting_uid
-from src.attio.ops import EmitMeetingLifecycleEvent, UpsertMeeting
+from src.attio.ops import (
+    AttioOp,
+    EmitMeetingLifecycleEvent,
+    UpsertCompany,
+    UpsertMeeting,
+    UpsertPerson,
+)
 from src.caldotcom.webhook.booking import Webhook
 
 _HERE = Path(__file__).resolve().parent
@@ -35,6 +46,29 @@ _REPO_ROOT = _HERE.parents[2]
 def _load(fixture_path: str) -> Webhook:
     payload = orjson.loads((_REPO_ROOT / fixture_path).read_bytes())
     return Webhook.model_validate(payload)
+
+
+def _find_lifecycle(ops: list[AttioOp]) -> EmitMeetingLifecycleEvent:
+    matches = [o for o in ops if isinstance(o, EmitMeetingLifecycleEvent)]
+    assert len(matches) == 1, (
+        f"expected exactly 1 EmitMeetingLifecycleEvent in plan; got "
+        f"{len(matches)} in {[type(o).__name__ for o in ops]}"
+    )
+    return matches[0]
+
+
+def _assert_host_upsert_present(ops: list[AttioOp], host_email: str) -> None:
+    """Every lifecycle plan must include UpsertCompany + UpsertPerson for the host."""
+    company_ops = [o for o in ops if isinstance(o, UpsertCompany)]
+    person_ops = [o for o in ops if isinstance(o, UpsertPerson)]
+    assert any(o.domain == host_email.split("@")[-1] for o in company_ops), (
+        f"expected UpsertCompany for domain of {host_email} in plan; got "
+        f"domains {[o.domain for o in company_ops]}"
+    )
+    assert any(o.email == host_email for o in person_ops), (
+        f"expected UpsertPerson for {host_email} in plan; got "
+        f"emails {[o.email for o in person_ops]}"
+    )
 
 
 class _FakeCalcomClient:
@@ -96,7 +130,7 @@ class TestGateSweepAcrossFixtures:
             ("api/samples/caldotcom.booking.rescheduled.redacted.json", True),
             ("api/samples/caldotcom.booking.no_show_updated.redacted.json", True),
             ("api/samples/caldotcom.meeting.ended.redacted.json", True),
-            # Plan-02: MEETING_STARTED and PING are typed no-ops.
+            # MEETING_STARTED and PING remain typed no-ops.
             ("api/samples/caldotcom.meeting.started.redacted.json", False),
             ("api/samples/caldotcom.ping.redacted.json", False),
         ],
@@ -119,68 +153,79 @@ class TestGateSweepAcrossFixtures:
 
 
 class TestOperationDispatch:
-    def test_created_emits_upsert_meeting(self) -> None:
+    def test_created_emits_host_upsert_meeting_and_lifecycle(self) -> None:
         w = _load("api/samples/caldotcom.booking.created.redacted.json")
         ops = w.attio_get_operations()
-        assert len(ops) == 1
-        assert isinstance(ops[0], UpsertMeeting)
-        # Canonical ical_uid derived from host email + start.
-        expected = canonical_meeting_uid(
+
+        _assert_host_upsert_present(ops, "host@dlthub.com")
+
+        meeting_ops = [o for o in ops if isinstance(o, UpsertMeeting)]
+        assert len(meeting_ops) == 1
+        expected_ical = canonical_meeting_uid(
             host_email="host@dlthub.com",
             start=datetime(2026, 5, 20, 15, 0, 0, tzinfo=UTC),
         )
-        assert ops[0].external_ref.ical_uid == expected
+        assert meeting_ops[0].external_ref.ical_uid == expected_ical
 
-    def test_cancelled_emits_lifecycle_event_per_attendee(self) -> None:
+        lifecycle = _find_lifecycle(ops)
+        assert lifecycle.event_subtype == "scheduled"
+        # external_id == the Meeting's ical_uid: the cross-reference.
+        assert lifecycle.external_id == expected_ical
+        # The "scheduled" details line names the host and attendees.
+        assert "host@dlthub.com" in lifecycle.details_line
+        assert "external@example.com" in lifecycle.details_line
+
+    def test_cancelled_emits_one_lifecycle_per_meeting(self) -> None:
+        """Per-meeting model: one EmitMeetingLifecycleEvent regardless of attendee count."""
         w = _load("api/samples/caldotcom.booking.cancelled.redacted.json")
         ops = w.attio_get_operations()
-        # One attendee in fixture -> exactly one lifecycle op.
-        assert len(ops) == 1
-        op = ops[0]
-        assert isinstance(op, EmitMeetingLifecycleEvent)
-        assert op.event_type == "meeting_cancelled"
-        # source is pinned via the Literal default — caldotcom callers don't
-        # set it explicitly. Lock the invariant so a future refactor of the
-        # default doesn't silently land caldotcom rows in the wrong Attio
-        # source bucket. ai-ztm.
-        assert op.source == "caldotcom"
-        assert op.attendee_email == "sam@example.com"
-        # ical_uid derived from organizer.email + startTime (== OLD time).
+
+        _assert_host_upsert_present(ops, "alex@example.com")
+        # No UpsertMeeting on the cancelled path.
+        assert not any(isinstance(o, UpsertMeeting) for o in ops)
+
+        lifecycle = _find_lifecycle(ops)
+        assert lifecycle.event_subtype == "cancelled"
+        # external_id derived from organizer.email + startTime (== OLD time
+        # per cal.com semantics, which is what addresses the existing row).
         expected = canonical_meeting_uid(
             host_email="alex@example.com",
             start=datetime(2026, 5, 6, 10, 30, 0, tzinfo=UTC),
         )
-        assert op.meeting_ical_uid == expected
-        body = json.loads(op.body_json)
-        assert body["reason"] == "redacted"
-        assert body["cancelled_by"] == "alex@example.com"
+        assert lifecycle.external_id == expected
+        # Cancellation context surfaces in both body (raw JSON) and details (summary).
+        body = json.loads(lifecycle.body_json)
+        assert body["cancellationReason"] == "redacted"
+        assert body["cancelledBy"] == "alex@example.com"
+        assert "alex@example.com" in lifecycle.details_line
+        assert "redacted" in lifecycle.details_line
 
-    def test_rescheduled_emits_lifecycle_event_with_old_and_new_times(self) -> None:
+    def test_rescheduled_emits_lifecycle_with_old_and_new_times_in_details(
+        self,
+    ) -> None:
         w = _load("api/samples/caldotcom.booking.rescheduled.redacted.json")
         ops = w.attio_get_operations()
-        assert len(ops) == 1
-        op = ops[0]
-        assert isinstance(op, EmitMeetingLifecycleEvent)
-        assert op.event_type == "meeting_rescheduled"
-        # ical_uid uses startTime (OLD pre-reschedule time) per Cal.com semantics.
+
+        _assert_host_upsert_present(ops, "alex@example.com")
+        # No UpsertMeeting on reschedule — the existing Meeting record at the
+        # OLD ical_uid stays put.
+        assert not any(isinstance(o, UpsertMeeting) for o in ops)
+
+        lifecycle = _find_lifecycle(ops)
+        assert lifecycle.event_subtype == "rescheduled"
+        # external_id pinned to OLD start so this row patches the
+        # already-existing tracking_events row (scheduled-state row).
         expected = canonical_meeting_uid(
             host_email="alex@example.com",
             start=datetime(2026, 5, 14, 10, 0, 0, tzinfo=UTC),
         )
-        assert op.meeting_ical_uid == expected
-        body = json.loads(op.body_json)
-        # Both times present and distinct.
-        assert body["old_start"].startswith("2026-05-14T10:00:00")
-        assert body["new_start"].startswith("2026-05-14T11:00:00")
-        assert body["rescheduled_by"] == "sam@example.com"
+        assert lifecycle.external_id == expected
+        # Old + new start times appear in details_line.
+        assert "2026-05-14T10:00:00" in lifecycle.details_line
+        assert "2026-05-14T11:00:00" in lifecycle.details_line
 
     def test_cancelled_resolves_organizerless_payload_via_user_email(self) -> None:
-        """Hostless CANCELLED (no organizer) falls back through user/userPrimaryEmail.
-
-        Regression guard from roborev job 144 medium #2: requiring
-        ``payload.organizer.email`` rejects otherwise-valid CANCELLED events
-        from older Cal.com versions or specific webhook configs.
-        """
+        """Hostless CANCELLED falls back through user/userPrimaryEmail."""
         envelope = orjson.loads(
             (
                 _REPO_ROOT / "api/samples/caldotcom.booking.cancelled.redacted.json"
@@ -190,16 +235,15 @@ class TestOperationDispatch:
         envelope["payload"]["userPrimaryEmail"] = "alex@example.com"
         w = Webhook.model_validate(envelope)
         assert w.attio_is_valid_webhook() is True
+
         ops = w.attio_get_operations()
-        assert len(ops) == 1
-        op = ops[0]
-        assert isinstance(op, EmitMeetingLifecycleEvent)
-        # ical_uid still resolves via the fallback chain.
+        _assert_host_upsert_present(ops, "alex@example.com")
+        lifecycle = _find_lifecycle(ops)
         expected = canonical_meeting_uid(
             host_email="alex@example.com",
             start=datetime(2026, 5, 6, 10, 30, 0, tzinfo=UTC),
         )
-        assert op.meeting_ical_uid == expected
+        assert lifecycle.external_id == expected
 
     def test_rescheduled_does_not_emit_upsert_meeting(self) -> None:
         """Critical: reschedule must NOT create a duplicate at the new ical_uid."""
@@ -207,7 +251,7 @@ class TestOperationDispatch:
         ops = w.attio_get_operations()
         assert not any(isinstance(o, UpsertMeeting) for o in ops)
 
-    def test_no_show_fetches_booking_then_emits_per_no_show_attendee(
+    def test_no_show_fetches_booking_then_emits_one_lifecycle(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -219,28 +263,25 @@ class TestOperationDispatch:
         )
         w = _load("api/samples/caldotcom.booking.no_show_updated.redacted.json")
         ops = w.attio_get_operations()
-        # Fixture has one attendee with noShow=true.
-        assert len(ops) == 1
-        op = ops[0]
-        assert isinstance(op, EmitMeetingLifecycleEvent)
-        assert op.event_type == "meeting_no_show"
-        assert op.attendee_email == "sam@example.com"
-        # ical_uid resolved from the fetched booking (alex@example.com + start).
+
+        _assert_host_upsert_present(ops, "alex@example.com")
+        lifecycle = _find_lifecycle(ops)
+        assert lifecycle.event_subtype == "no_show_attendee"
+        # external_id resolved from the fetched booking (alex@example.com + start).
         expected = canonical_meeting_uid(
             host_email="alex@example.com",
             start=fake_booking.start,
         )
-        assert op.meeting_ical_uid == expected
-        body = json.loads(op.body_json)
-        assert body["booking_lookup_succeeded"] is True
+        assert lifecycle.external_id == expected
+        # No-show attendee email appears in details_line.
+        assert "sam@example.com" in lifecycle.details_line
 
     def test_no_show_with_transient_api_failure_propagates(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Transient Cal.com failures (network/5xx) must propagate so Hookdeck
-        retries the webhook. Writing a partial audit row would mask the
-        failure and orphan the lifecycle event from its meeting."""
+        retries the webhook."""
 
         class _FailingClient:
             def get_booking(self, _uid: str) -> BookingCreatedPayload | None:
@@ -261,17 +302,17 @@ class TestOperationDispatch:
         with pytest.raises(RuntimeError, match="calcom unreachable"):
             w.attio_get_operations()
 
-    def test_no_show_with_deleted_booking_emits_partial_row(
+    def test_no_show_with_deleted_booking_emits_nothing(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """404 (booking deleted) is a terminal outcome — retrying won't bring
-        the booking back. Emit a partial audit row so the no-show signal
-        isn't lost."""
+        """404 (booking deleted) → no host email + no start time → can't compute
+        external_id, so skip the whole lifecycle path. Better than writing a
+        divergent row that no future webhook for the same meeting will patch."""
 
         class _NotFoundClient:
             def get_booking(self, _uid: str) -> BookingCreatedPayload | None:
-                return None  # 404 path in CalcomClient
+                return None
 
             def __enter__(self) -> _NotFoundClient:
                 return self
@@ -286,21 +327,19 @@ class TestOperationDispatch:
         )
         w = _load("api/samples/caldotcom.booking.no_show_updated.redacted.json")
         ops = w.attio_get_operations()
-        assert len(ops) == 1
-        op = ops[0]
-        assert isinstance(op, EmitMeetingLifecycleEvent)
-        assert op.meeting_ical_uid is None
-        body = json.loads(op.body_json)
-        assert body["booking_lookup_succeeded"] is False
+        assert ops == []
 
-    def test_meeting_ended_without_no_show_emits_meeting_ended(self) -> None:
+    def test_meeting_ended_without_no_show_emits_completed(self) -> None:
         w = _load("api/samples/caldotcom.meeting.ended.redacted.json")
         ops = w.attio_get_operations()
-        # Two attendees in the fixture -> two lifecycle ops.
-        assert len(ops) == 2
-        assert all(isinstance(o, EmitMeetingLifecycleEvent) for o in ops)
-        types = {o.event_type for o in ops if isinstance(o, EmitMeetingLifecycleEvent)}
-        assert types == {"meeting_ended"}
+
+        _assert_host_upsert_present(ops, "alex@example.com")
+        lifecycle = _find_lifecycle(ops)
+        # noShowHost=False on this fixture, so event_subtype=completed.
+        assert lifecycle.event_subtype == "completed"
+        # rating/feedback summary lives in details_line; raw values in body.
+        body = json.loads(lifecycle.body_json)
+        assert "rating" in body
 
     def test_meeting_started_emits_nothing(self) -> None:
         w = _load("api/samples/caldotcom.meeting.started.redacted.json")
@@ -313,16 +352,17 @@ class TestOperationDispatch:
 
 class TestCrossTriggerInvariant:
     """The audit story only works if CREATED and a later CANCELLED for the same
-    logical meeting (same host email + start) produce the SAME ``meeting_ical_uid``.
+    logical meeting (same host email + start) produce the SAME
+    ``external_id`` on the lifecycle event — that's how the cancelled-state
+    webhook PATCHes the row the scheduled-state webhook created.
     """
 
-    def test_created_and_cancelled_share_ical_uid_when_host_and_start_match(
+    def test_created_and_cancelled_share_external_id_when_host_and_start_match(
         self,
     ) -> None:
         host = "alex@example.com"
         start = datetime(2026, 6, 1, 15, 0, 0, tzinfo=UTC)
 
-        # Synthesize a CREATED webhook with the same host + start as a later CANCELLED.
         created_envelope = {
             "triggerEvent": "BOOKING_CREATED",
             "createdAt": "2026-05-25T10:00:00.000Z",
@@ -367,9 +407,11 @@ class TestCrossTriggerInvariant:
             },
         }
 
-        created = Webhook.model_validate(created_envelope).attio_get_operations()
-        cancelled = Webhook.model_validate(cancelled_envelope).attio_get_operations()
+        created_ops = Webhook.model_validate(created_envelope).attio_get_operations()
+        cancelled_ops = Webhook.model_validate(
+            cancelled_envelope,
+        ).attio_get_operations()
 
-        assert isinstance(created[0], UpsertMeeting)
-        assert isinstance(cancelled[0], EmitMeetingLifecycleEvent)
-        assert created[0].external_ref.ical_uid == cancelled[0].meeting_ical_uid
+        created_lifecycle = _find_lifecycle(created_ops)
+        cancelled_lifecycle = _find_lifecycle(cancelled_ops)
+        assert created_lifecycle.external_id == cancelled_lifecycle.external_id

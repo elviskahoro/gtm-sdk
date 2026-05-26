@@ -4,12 +4,31 @@ Cal.com ships 7 trigger types across 4 payload shapes. The
 ``libs.caldotcom.models`` discriminated union parses each into a typed payload
 variant; this module dispatches on the variant and emits the right Attio op.
 
-Attio constraint (probed 2026-05-25 — see plan-02): the ``/v2/meetings/``
-resource is append-only. PATCH / PUT / DELETE all return 404. Only
-``BOOKING_CREATED`` results in a meeting record write (``UpsertMeeting``); all
-state-change triggers (CANCELLED / RESCHEDULED / NO_SHOW / MEETING_ENDED) emit
-``EmitMeetingLifecycleEvent`` audit rows on ``tracking_events`` linked to each
-attendee's Person record.
+Attio constraints (probed 2026-05-25 — see plan-02): ``/v2/meetings/`` is
+append-only. Meeting state changes (cancel / reschedule / no-show / rating)
+have nowhere to land on the Meeting record itself.
+
+Per the spec at
+``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``
+each webhook produces:
+
+1. ``UpsertCompany`` for the host's email domain.
+2. ``UpsertPerson`` for the host (matching by email; the libs adapter links
+   to the company auto-created in step 1).
+3. ``UpsertMeeting`` (only on ``BOOKING_CREATED`` — the Meeting record itself
+   is still created once and never mutated).
+4. ``EmitMeetingLifecycleEvent`` — ONE per meeting (NOT per attendee). The
+   dispatcher's ``LookupTable`` resolves the ``host`` PersonRef from step 2,
+   and a single ``tracking_events`` row per meeting is PATCHed in place as
+   the meeting transitions through states (scheduled → cancelled, etc.). The
+   row's ``details`` field accrues a one-line history of every transition;
+   the ``body`` field always holds the latest raw webhook payload.
+
+This is a deliberate departure from plan-02, which wrote one row per
+(meeting × attendee) linked to each attendee. The new per-meeting model uses
+fewer rows, makes status filterable as a typed field, and is what the user
+wants the Attio UI to surface. Attendee identity is preserved in
+``body`` (raw payload) and ``details`` (e.g. "attendees: alice, bob").
 """
 
 from __future__ import annotations
@@ -45,7 +64,10 @@ from src.attio.ops import (
     EmitMeetingLifecycleEvent,
     MeetingExternalRef,
     MeetingParticipant,
+    PersonRef,
+    UpsertCompany,
     UpsertMeeting,
+    UpsertPerson,
 )
 from src.caldotcom.utils import (
     generate_gcs_filename,
@@ -79,60 +101,68 @@ def _caldotcom_status_to_attio(
     return _CALCOM_BOOKING_STATUS_TO_ATTIO.get(normalized, "accepted")
 
 
-# --- ical_uid derivation ---
-
-
-def _ical_uid_for_old_state(
-    payload: (
-        BookingCreatedPayload
-        | BookingCancelledPayload
-        | BookingRescheduledPayload
-        | MeetingStartedPayload
-        | MeetingEndedPayload
-    ),
-) -> str | None:
-    """Return the canonical_meeting_uid of the EXISTING Attio meeting record.
-
-    For CREATED that's the new meeting we're about to upsert. For mutation
-    triggers it's the record the original booking was upserted as. Returns
-    None when the payload lacks the fields needed (host email + start time).
-
-    Cal.com semantics confirmed 2026-05-25:
-        BookingRescheduledPayload.startTime = OLD pre-reschedule time.
-        BookingRescheduledPayload.rescheduleStartTime = NEW post-reschedule time.
-    So both CANCELLED and RESCHEDULED can use ``startTime`` to address the
-    existing record.
-    """
-    if isinstance(payload, BookingCreatedPayload):
-        host_email = payload.creator_email()
-        if host_email is None:
-            return None
-        return canonical_meeting_uid(host_email=host_email, start=payload.start)
-
-    if isinstance(payload, (BookingCancelledPayload, BookingRescheduledPayload)):
-        host_email = payload.creator_email()
-        if host_email is None:
-            return None
-        return canonical_meeting_uid(
-            host_email=host_email,
-            start=payload.startTime,
-        )
-
-    # MEETING_STARTED / MEETING_ENDED carry the host email as userPrimaryEmail.
-    return canonical_meeting_uid(
-        host_email=payload.userPrimaryEmail,
-        start=payload.startTime,
-    )
-
-
 # --- Per-trigger op builders ---
+#
+# Cal.com semantics confirmed 2026-05-25:
+#     BookingRescheduledPayload.startTime = OLD pre-reschedule time.
+#     BookingRescheduledPayload.rescheduleStartTime = NEW post-reschedule time.
+# Both CANCELLED and RESCHEDULED therefore use ``startTime`` to compute the
+# row's external_id (the OLD ical_uid that matches the row the scheduled-state
+# webhook created).
+
+
+def _host_upsert_ops(host_email: str) -> list[AttioOp]:
+    """Emit UpsertCompany + UpsertPerson for the meeting host.
+
+    These run BEFORE EmitMeetingLifecycleEvent in the plan so the dispatcher's
+    LookupTable can resolve the lifecycle event's ``host`` PersonRef. Both ops
+    are idempotent — they no-op when the records already exist.
+
+    Returns ``[]`` when ``host_email`` is empty so the caller can skip the
+    whole lifecycle path cleanly.
+    """
+    if not host_email:
+        return []
+    domain = host_email.split("@")[-1] if "@" in host_email else ""
+    ops: list[AttioOp] = []
+    if domain:
+        ops.append(UpsertCompany(domain=domain))
+    ops.append(
+        UpsertPerson(
+            matching_attribute="email",
+            email=host_email,
+            company_domain=domain or None,
+        ),
+    )
+    return ops
+
+
+def _host_person_ref(host_email: str) -> PersonRef:
+    return PersonRef(attribute="email", value=host_email)
+
+
+def _details_line(timestamp: datetime, event_subtype: str, summary: str) -> str:
+    """Single-line transition entry for the cumulative ``details`` field.
+
+    Format: ``"<ISO-Z timestamp> <event_subtype> — <summary>"``. ``summary`` is
+    variant-specific (see per-_ops_for_* helpers). Stable string format so the
+    Attio UI shows a readable history.
+    """
+    iso = timestamp.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return f"{iso} {event_subtype} — {summary}"
 
 
 def _ops_for_created(
     payload: BookingCreatedPayload,
-    _created_at: datetime,
+    created_at: datetime,
 ) -> list[AttioOp]:
-    """Find-or-create the Attio Meeting record. Unchanged semantics."""
+    """Emit UpsertCompany + UpsertPerson (host) + UpsertMeeting + lifecycle event.
+
+    ``BOOKING_CREATED`` is the only variant that still emits ``UpsertMeeting`` —
+    the Attio Meeting record is created once on first arrival and never
+    mutated (Attio's /v2/meetings/ is append-only). The new lifecycle row
+    sits alongside it.
+    """
     host_email = payload.creator_email()
     if host_email is None:
         # Gate should have caught this; defensive fallback to avoid silent failure.
@@ -179,7 +209,11 @@ def _ops_for_created(
             ),
         )
 
+    attendee_summary = ", ".join(_attendee_emails(payload.attendees)) or "(none)"
+    summary = f"host: {host_email}; attendees: {attendee_summary}"
+
     return [
+        *_host_upsert_ops(host_email),
         UpsertMeeting(
             external_ref=MeetingExternalRef(
                 ical_uid=ical_uid,
@@ -193,6 +227,17 @@ def _ops_for_created(
             is_all_day=False,
             participants=participants,
         ),
+        EmitMeetingLifecycleEvent(
+            external_id=ical_uid,
+            meeting_title=title,
+            event_subtype="scheduled",
+            timestamp=created_at,
+            body_json=json.dumps(
+                payload.model_dump(mode="json"), default=str, sort_keys=True
+            ),
+            details_line=_details_line(created_at, "scheduled", summary),
+            host=_host_person_ref(host_email),
+        ),
     ]
 
 
@@ -202,60 +247,39 @@ def _attendee_emails(
     return [a.email for a in attendees if getattr(a, "email", None)]
 
 
-def _lifecycle_event(
-    *,
-    event_type: Literal[
-        "meeting_cancelled",
-        "meeting_rescheduled",
-        "meeting_no_show",
-        "meeting_no_show_host",
-        "meeting_ended",
-    ],
-    name: str,
-    timestamp: datetime,
-    booking_uid: str,
-    attendee_email: str,
-    ical_uid: str | None,
-    body: dict[str, Any],
-) -> EmitMeetingLifecycleEvent:
-    # Include ical_uid in the body for cross-reference even though Attio has
-    # no foreign key to link the tracking_events row to the Meeting record.
-    body_with_uid = {"meeting_ical_uid": ical_uid, **body}
-    return EmitMeetingLifecycleEvent(
-        external_id=f"caldotcom:{event_type}:{booking_uid}:{attendee_email}",
-        event_type=event_type,
-        name=name,
-        timestamp=timestamp,
-        body_json=json.dumps(body_with_uid, default=str, sort_keys=True),
-        attendee_email=attendee_email,
-        meeting_ical_uid=ical_uid,
-    )
+def _payload_title(payload: Any) -> str:
+    """Pull a cal.com title off any variant; fall back to a generic label.
+
+    The various payload shapes carry ``title`` on most paths; the no-show slim
+    payload doesn't, and the meeting-ended flat shape also lacks it. The
+    fallback is fine — the row's `name` slug still scans cleanly with
+    "<event_subtype> Cal.com meeting".
+    """
+    return getattr(payload, "title", None) or "Cal.com meeting"
 
 
 def _ops_for_cancelled(
     payload: BookingCancelledPayload,
     created_at: datetime,
 ) -> list[AttioOp]:
-    ical_uid = _ical_uid_for_old_state(payload)
-    body = {
-        "reason": payload.cancellationReason,
-        "cancelled_by": payload.cancelledBy,
-        "original_start": payload.startTime.isoformat(),
-        "original_end": payload.endTime.isoformat(),
-        "calcom_ical_uid": payload.iCalUID,
-        "organizer_email": payload.creator_email(),
-    }
+    host_email = payload.creator_email()
+    if host_email is None:
+        return []
+    ical_uid = canonical_meeting_uid(host_email=host_email, start=payload.startTime)
+    summary = f"by {payload.cancelledBy}: {payload.cancellationReason}"
     return [
-        _lifecycle_event(
-            event_type="meeting_cancelled",
-            name="CALCOM Booking cancelled",
+        *_host_upsert_ops(host_email),
+        EmitMeetingLifecycleEvent(
+            external_id=ical_uid,
+            meeting_title=_payload_title(payload),
+            event_subtype="cancelled",
             timestamp=created_at,
-            booking_uid=payload.uid,
-            attendee_email=email,
-            ical_uid=ical_uid,
-            body=body,
-        )
-        for email in _attendee_emails(payload.attendees)
+            body_json=json.dumps(
+                payload.model_dump(mode="json"), default=str, sort_keys=True
+            ),
+            details_line=_details_line(created_at, "cancelled", summary),
+            host=_host_person_ref(host_email),
+        ),
     ]
 
 
@@ -263,43 +287,41 @@ def _ops_for_rescheduled(
     payload: BookingRescheduledPayload,
     created_at: datetime,
 ) -> list[AttioOp]:
-    """Emit lifecycle events; do NOT re-upsert the meeting.
+    """Emit lifecycle event; do NOT re-upsert the meeting.
 
-    Re-POSTing with the new start would produce a duplicate Attio Meeting
+    Re-POSTing with the new start would create a duplicate Attio Meeting
     record at ``canonical_meeting_uid(host, rescheduleStartTime)``. Since Attio
     has no PATCH on meetings, the only honest behavior is to leave the original
-    record at its old time and capture the reschedule in the audit log.
+    record at its old time and capture the reschedule in the lifecycle row.
+    The row's ``external_id`` is keyed off the OLD start so the same row that
+    captured the scheduled-state is now patched with the rescheduled-state.
     """
-    ical_uid = _ical_uid_for_old_state(payload)
-    body = {
-        "old_start": payload.startTime.isoformat(),
-        "old_end": payload.endTime.isoformat(),
-        "new_start": (
-            payload.rescheduleStartTime.isoformat()
-            if payload.rescheduleStartTime is not None
-            else None
-        ),
-        "new_end": (
-            payload.rescheduleEndTime.isoformat()
-            if payload.rescheduleEndTime is not None
-            else None
-        ),
-        "rescheduled_by": payload.rescheduledBy,
-        "reschedule_uid": payload.rescheduleUid,
-        "calcom_ical_uid": payload.iCalUID,
-        "organizer_email": payload.creator_email(),
-    }
+    host_email = payload.creator_email()
+    if host_email is None:
+        return []
+    ical_uid = canonical_meeting_uid(host_email=host_email, start=payload.startTime)
+    new_start = (
+        payload.rescheduleStartTime.isoformat()
+        if payload.rescheduleStartTime is not None
+        else "?"
+    )
+    summary = (
+        f"old start {payload.startTime.isoformat()}; "
+        f"new start {new_start}; by {payload.rescheduledBy}"
+    )
     return [
-        _lifecycle_event(
-            event_type="meeting_rescheduled",
-            name="CALCOM Booking rescheduled",
+        *_host_upsert_ops(host_email),
+        EmitMeetingLifecycleEvent(
+            external_id=ical_uid,
+            meeting_title=_payload_title(payload),
+            event_subtype="rescheduled",
             timestamp=created_at,
-            booking_uid=payload.uid,
-            attendee_email=email,
-            ical_uid=ical_uid,
-            body=body,
-        )
-        for email in _attendee_emails(payload.attendees)
+            body_json=json.dumps(
+                payload.model_dump(mode="json"), default=str, sort_keys=True
+            ),
+            details_line=_details_line(created_at, "rescheduled", summary),
+            host=_host_person_ref(host_email),
+        ),
     ]
 
 
@@ -310,54 +332,44 @@ def _ops_for_no_show(
 ) -> list[AttioOp]:
     """Fetch the underlying booking to learn host email + start, then emit.
 
-    The webhook payload only carries ``bookingUid`` + ``attendees[email,
-    noShow]``; insufficient for canonical_meeting_uid.
+    The no-show webhook payload only carries ``bookingUid`` + ``attendees[email,
+    noShow]``; insufficient for ``canonical_meeting_uid``.
 
     Failure modes:
-      * 404 (booking deleted) → ``get_booking`` returns ``None``. Emit a
-        partial lifecycle row anyway — there's no way to "retry to success"
-        for a deleted booking, and the audit value (someone marked an
-        attendee no-show) is what we care about.
-      * 5xx / network / parse error → let the exception propagate so the
-        webhook returns a failure and Hookdeck retries. Better to retry a
-        transient outage than to write a partial row that can never be
-        re-linked to its meeting.
+      * 404 (booking deleted) → ``get_booking`` returns ``None``. We can't
+        compute the row's ``external_id`` without host + start, so we skip
+        emission entirely. Loss is preferable to writing a divergent row that
+        no future webhook for the same meeting will patch.
+      * 5xx / network / parse error → exception propagates so Hookdeck retries
+        the webhook on a transient outage.
     """
     no_show_emails = [a.email for a in payload.attendees if a.noShow]
     if not no_show_emails:
         return []
 
-    # Errors propagate by design — see docstring. The only non-error "miss" is
-    # a 404, which ``get_booking`` returns as ``None``.
     booking = client.get_booking(payload.bookingUid)
+    if booking is None:
+        # 404'd. Skip — see docstring.
+        return []
+    host_email = booking.creator_email()
+    if host_email is None:
+        return []
 
-    if booking is not None:
-        ical_uid = _ical_uid_for_old_state(booking)
-        # Use the same fallback chain as BOOKING_CREATED so meetings booked
-        # without ``hosts[]`` still resolve to the organizer's email in the
-        # audit row body.
-        organizer_email = booking.creator_email()
-        start_iso = booking.start.isoformat()
-    else:
-        ical_uid = None
-        organizer_email = None
-        start_iso = None
-
+    ical_uid = canonical_meeting_uid(host_email=host_email, start=booking.start)
+    summary = f"attendees marked no-show: {', '.join(no_show_emails)}"
     return [
-        _lifecycle_event(
-            event_type="meeting_no_show",
-            name="CALCOM Booking attendee no-show",
+        *_host_upsert_ops(host_email),
+        EmitMeetingLifecycleEvent(
+            external_id=ical_uid,
+            meeting_title=_payload_title(booking),
+            event_subtype="no_show_attendee",
             timestamp=created_at,
-            booking_uid=payload.bookingUid,
-            attendee_email=email,
-            ical_uid=ical_uid,
-            body={
-                "original_start": start_iso,
-                "organizer_email": organizer_email,
-                "booking_lookup_succeeded": booking is not None,
-            },
-        )
-        for email in no_show_emails
+            body_json=json.dumps(
+                payload.model_dump(mode="json"), default=str, sort_keys=True
+            ),
+            details_line=_details_line(created_at, "no_show_attendee", summary),
+            host=_host_person_ref(host_email),
+        ),
     ]
 
 
@@ -365,34 +377,32 @@ def _ops_for_meeting_ended(
     payload: MeetingEndedPayload,
     created_at: datetime,
 ) -> list[AttioOp]:
-    """Emit ``meeting_no_show_host`` when ``noShowHost`` else ``meeting_ended``."""
-    ical_uid = _ical_uid_for_old_state(payload)
-    event_type: Literal["meeting_no_show_host", "meeting_ended"] = (
-        "meeting_no_show_host" if payload.noShowHost else "meeting_ended"
-    )
-    name = (
-        "CALCOM Booking ended — host no-show"
-        if payload.noShowHost
-        else "CALCOM Booking ended"
-    )
-    body = {
-        "noShowHost": payload.noShowHost,
-        "rating": payload.rating,
-        "ratingFeedback": payload.ratingFeedback,
-        "original_start": payload.startTime.isoformat(),
-        "organizer_email": payload.userPrimaryEmail,
-    }
+    """Emit ``no_show_host`` when ``noShowHost`` else ``completed`` (with rating)."""
+    host_email = payload.userPrimaryEmail
+    if not host_email:
+        return []
+    ical_uid = canonical_meeting_uid(host_email=host_email, start=payload.startTime)
+    if payload.noShowHost:
+        event_subtype: Literal["no_show_host", "completed"] = "no_show_host"
+        summary = "host did not attend"
+    else:
+        event_subtype = "completed"
+        rating = payload.rating if payload.rating is not None else "?"
+        feedback = payload.ratingFeedback or "(no feedback)"
+        summary = f"rating {rating}: {feedback}"
     return [
-        _lifecycle_event(
-            event_type=event_type,
-            name=name,
+        *_host_upsert_ops(host_email),
+        EmitMeetingLifecycleEvent(
+            external_id=ical_uid,
+            meeting_title=_payload_title(payload),
+            event_subtype=event_subtype,
             timestamp=created_at,
-            booking_uid=payload.uid,
-            attendee_email=email,
-            ical_uid=ical_uid,
-            body=body,
-        )
-        for email in _attendee_emails(payload.attendees)
+            body_json=json.dumps(
+                payload.model_dump(mode="json"), default=str, sort_keys=True
+            ),
+            details_line=_details_line(created_at, event_subtype, summary),
+            host=_host_person_ref(host_email),
+        ),
     ]
 
 

@@ -1,8 +1,12 @@
-"""Tests for the meeting-lifecycle ``tracking_events`` helper.
+"""Tests for the per-meeting ``tracking_events`` lifecycle helper.
 
 Mirrors the mocking pattern in ``test_tracking_events.py`` so the SDK client
-boundary is fully stubbed and we test the narrow value-builder + query-then-
-patch logic, not the network.
+boundary is fully stubbed and we test the value-builder + query-then-patch
+logic, not the network. Per the spec at
+``design/backlog-202605251625-meeting_state_attrs_on_tracking_events-spec-01.md``
+the helper writes ONE row per meeting (keyed by ``external_id =
+canonical_meeting_uid(host, start)``), advances ``event_subtype`` on each
+transition, and appends a line to the cumulative ``details`` text.
 """
 
 from __future__ import annotations
@@ -19,12 +23,13 @@ from libs.attio.tracking_events import find_or_create_meeting_lifecycle_event
 
 def _valid_input(**overrides: object) -> MeetingLifecycleEventInput:
     base: dict[str, object] = dict(
-        external_id="caldotcom:meeting_cancelled:bk_1:attendee@example.com",
-        name="CALCOM Booking cancelled",
-        event_type="meeting_cancelled",
+        external_id="ical-uid-abc",
+        meeting_title="Acme × dlt pricing call",
+        event_subtype="cancelled",
         timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
         body_json='{"reason":"redacted"}',
-        contact_person_record_id="pe_attendee_1",
+        details_line="2026-05-14T00:00:00Z cancelled — by host@dlthub.com: reason",
+        host_person_record_id="pe_host_1",
     )
     base.update(overrides)
     return MeetingLifecycleEventInput(**base)  # type: ignore[arg-type]
@@ -34,31 +39,44 @@ def test_input_forbids_extra_fields() -> None:
     with pytest.raises(ValidationError):
         MeetingLifecycleEventInput(  # pyright: ignore[reportCallIssue]
             external_id="x",
-            name="x",
-            event_type="meeting_cancelled",
+            meeting_title="x",
+            event_subtype="cancelled",
             timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
             body_json="{}",
+            details_line="x",
+            host_person_record_id="pe_x",
             bogus="nope",  # type: ignore[call-arg]  # pyrefly: ignore[unexpected-keyword]
         )
 
 
-def test_input_rejects_unknown_event_type() -> None:
+def test_input_rejects_unknown_event_subtype() -> None:
     with pytest.raises(ValidationError):
         MeetingLifecycleEventInput(
             external_id="x",
-            name="x",
-            event_type="meeting_invented",  # type: ignore[arg-type]
+            meeting_title="x",
+            event_subtype="meeting_invented",  # type: ignore[arg-type]
             timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
             body_json="{}",
+            details_line="x",
+            host_person_record_id="pe_x",
         )
+
+
+def _values_from_call(call: MagicMock) -> dict[str, object]:
+    """Reach through the SDK request wrapper to get the underlying values dict."""
+    request_obj = call.kwargs["data"]
+    values = getattr(request_obj, "values", None) or request_obj.__dict__.get("values")
+    assert values is not None
+    return values  # type: ignore[no-any-return]
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
-def test_miss_then_create_seeds_option_and_writes(
+def test_miss_then_create_writes_full_value_set(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,
 ) -> None:
+    """First arrival for a meeting → CREATE with every slug populated."""
     client = MagicMock()
     client.records.post_v2_objects_object_records_query.return_value.data = []
     create_resp = MagicMock()
@@ -72,38 +90,76 @@ def test_miss_then_create_seeds_option_and_writes(
     assert env.action == "created"
     assert env.record_id == "te_new"
 
-    # Both vocabularies seeded JIT — source so caldotcom rows join the same
-    # filterable select as rb2b/form/etc (ai-ztm), and event_type so the
-    # specific lifecycle option exists before write.
-    seeded = [c.kwargs for c in mock_ensure_options.call_args_list]
-    assert {
-        "target_object": "tracking_events",
-        "attribute_slug": "source",
-        "options": ["caldotcom"],
-    } in seeded
-    assert {
-        "target_object": "tracking_events",
-        "attribute_slug": "event_type",
-        "options": ["meeting_cancelled"],
-    } in seeded
+    # event_type AND event_subtype select options were seeded JIT.
+    seeded = {
+        c.kwargs.get("attribute_slug") for c in mock_ensure_options.call_args_list
+    }
+    assert seeded == {"event_type", "event_subtype"}
 
-    # Query was scoped to the right object + external_id.
+    # Query scoped to the right object + external_id.
     q_args = client.records.post_v2_objects_object_records_query.call_args
     assert q_args.kwargs["object"] == "tracking_events"
-    assert q_args.kwargs["filter_"] == {
-        "external_id": "caldotcom:meeting_cancelled:bk_1:attendee@example.com",
-    }
+    assert q_args.kwargs["filter_"] == {"external_id": "ical-uid-abc"}
+
+    # Every required slug present.
+    values = _values_from_call(client.records.post_v2_objects_object_records.call_args)
+    for slug in (
+        "external_id",
+        "name",
+        "event_type",
+        "event_subtype",
+        "body",
+        "details",
+        "no_show",
+        "timestamp",
+        "people",
+        "owner",
+    ):
+        assert slug in values, f"missing slug: {slug}"
+
+    # event_type pinned to the namespace value.
+    assert values["event_type"] == [{"option": "calcom_meeting"}]
+    assert values["event_subtype"] == [{"option": "cancelled"}]
+    # name prepends event_subtype.
+    assert values["name"] == [{"value": "cancelled Acme × dlt pricing call"}]
+    # people slug points at the host record (NOT the legacy `contact` slug).
+    assert values["people"] == [
+        {"target_object": "people", "target_record_id": "pe_host_1"},
+    ]
+    assert "contact" not in values
+    # no_show false for non-no_show variants.
+    assert values["no_show"] == [{"value": False}]
+    # owner carries the hardcoded actor UUID.
+    assert values["owner"] == [
+        {
+            "referenced_actor_type": "workspace-member",
+            "referenced_actor_id": "663f9ad9-6704-5aff-be6d-48edb58bd12c",
+        },
+    ]
+    # First arrival → details starts with this transition's line, no prefix.
+    assert values["details"] == [
+        {"value": "2026-05-14T00:00:00Z cancelled — by host@dlthub.com: reason"},
+    ]
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
-def test_hit_then_patch_returns_updated(
+def test_hit_then_patch_appends_details_cumulatively(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001
 ) -> None:
+    """Existing row → PATCH with appended details (existing + "\\n" + new line)."""
     client = MagicMock()
     existing = MagicMock()
     existing.id.record_id = "te_existing"
+    # Existing details from prior scheduled-state webhook.
+    existing.model_dump.return_value = {
+        "values": {
+            "details": [
+                {"value": "2026-05-10T12:00:00Z scheduled — host: a; attendees: b"},
+            ],
+        },
+    }
     client.records.post_v2_objects_object_records_query.return_value.data = [existing]
     patch_resp = MagicMock()
     patch_resp.data.id.record_id = "te_existing"
@@ -116,16 +172,25 @@ def test_hit_then_patch_returns_updated(
     assert env.action == "updated"
     assert env.record_id == "te_existing"
     client.records.post_v2_objects_object_records.assert_not_called()
-    client.records.patch_v2_objects_object_records_record_id_.assert_called_once()
+
+    values = _values_from_call(
+        client.records.patch_v2_objects_object_records_record_id_.call_args,
+    )
+    # Cumulative: prior line newlined to new transition line.
+    expected_details = (
+        "2026-05-10T12:00:00Z scheduled — host: a; attendees: b"
+        "\n2026-05-14T00:00:00Z cancelled — by host@dlthub.com: reason"
+    )
+    assert values["details"] == [{"value": expected_details}]
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
-def test_contact_none_writes_without_contact_field(
+def test_no_show_variants_set_no_show_true(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001
 ) -> None:
-    """Attendee not in Attio → write the audit row with contact omitted."""
+    """``event_subtype`` ∈ {no_show_attendee, no_show_host} → no_show=True."""
     client = MagicMock()
     client.records.post_v2_objects_object_records_query.return_value.data = []
     create_resp = MagicMock()
@@ -133,26 +198,15 @@ def test_contact_none_writes_without_contact_field(
     client.records.post_v2_objects_object_records.return_value = create_resp
     mock_get_client.return_value.__enter__.return_value = client
 
-    env = find_or_create_meeting_lifecycle_event(
-        _valid_input(contact_person_record_id=None),
-    )
-
-    assert env.success is True
-
-    # The create call carries values WITHOUT a "contact" key.
-    create_call = client.records.post_v2_objects_object_records.call_args
-    request_obj = create_call.kwargs["data"]
-    # The SDK wraps values in a request type — reach through to the underlying
-    # values dict. Real SDK object exposes ``.values`` as kwarg-mirroring attr.
-    values = getattr(request_obj, "values", None) or request_obj.__dict__.get("values")
-    assert values is not None
-    assert "contact" not in values
-    # And the other slugs are present.
-    for slug in ("name", "source", "event_type", "external_id", "body", "timestamp"):
-        assert slug in values, f"missing slug: {slug}"
-    # source is pinned to the caldotcom literal so all lifecycle rows land
-    # in the same Attio source bucket.
-    assert values["source"] == [{"option": "caldotcom"}]
+    for subtype in ("no_show_attendee", "no_show_host"):
+        client.records.post_v2_objects_object_records.reset_mock()
+        find_or_create_meeting_lifecycle_event(_valid_input(event_subtype=subtype))
+        values = _values_from_call(
+            client.records.post_v2_objects_object_records.call_args,
+        )
+        assert values["no_show"] == [{"value": True}], (
+            f"no_show should be True for event_subtype={subtype}"
+        )
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")
