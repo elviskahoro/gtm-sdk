@@ -52,6 +52,12 @@ WEBHOOKS_DIR = REPO_ROOT / "webhooks"
 BACKUP_DIR = REPO_ROOT / "tmp" / "webhook-deploy-bak"
 LOCK_DIR = REPO_ROOT / "tmp" / "webhook-deploy.lock"
 
+HANDLER_ALIASES: dict[str, str] = {
+    "attio": "export_to_attio",
+    "etl": "export_to_gcp_etl",
+    "raw": "export_to_gcp_raw",
+}
+
 PLACEHOLDER = "WebhookModelToReplace"
 REQUIRED_MODAL_SECRETS: tuple[str, ...] = ("devx-gcp-202605260000",)
 VALID_INFISICAL_ENVS: tuple[str, ...] = ("dev", "staging", "prod")
@@ -815,7 +821,11 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
             f"\nDiscovered handlers: {' '.join(handlers)}"
         ),
     )
-    parser.add_argument("handler", help=f"one of: {' '.join(handlers)}")
+    aliases = ", ".join(f"{a}={t}" for a, t in HANDLER_ALIASES.items())
+    parser.add_argument(
+        "handler",
+        help=f"one of: {' '.join(handlers)} (aliases: {aliases})",
+    )
     parser.add_argument(
         "source",
         nargs="?",
@@ -842,6 +852,7 @@ def main() -> int:
 
     handlers = _discover_handlers()
     handler, source_or_all = _parse_args(handlers)
+    handler = HANDLER_ALIASES.get(handler, handler)
     if handler not in handlers:
         print(
             f"ERROR: Unknown handler: {handler}\n"
