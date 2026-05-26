@@ -1,4 +1,4 @@
-"""Smoke tests for scripts/redeploy_webhook.py.
+"""Smoke tests for scripts/webhooks-redeploy.py.
 
 Verifies the substitute -> deploy -> restore loop preserves the working tree,
 even when the deploy fails mid-iteration. Stubs modal / infisical / uv / gcloud
@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "redeploy_webhook.py"
+SCRIPT = REPO_ROOT / "scripts" / "webhooks-redeploy.py"
 HANDLER_FILE = REPO_ROOT / "webhooks" / "export_to_attio.py"
 HANDLER_NAME = "export_to_attio"
 SOURCE_NAME = "CaldotcomBookingWebhook"
@@ -181,7 +181,7 @@ def ensure_handler_restored() -> Iterator[None]:
     original_bytes = HANDLER_FILE.read_bytes()
     LOCK_DIR.parent.mkdir(parents=True, exist_ok=True)
     # Never remove an existing lock — it may belong to a concurrent real
-    # `scripts/redeploy_webhook.py` invocation, and that lock is the script's
+    # `scripts/webhooks-redeploy.py` invocation, and that lock is the script's
     # only serialization guard. Skip rather than racing the live deploy.
     if LOCK_DIR.exists():
         pytest.skip(
@@ -243,7 +243,7 @@ def _run_deploy(
 
 
 def test_substitution_and_restore(stub_bin: Path) -> None:
-    """AC1: CI runs redeploy_webhook.py against stubs; working tree ends clean."""
+    """AC1: CI runs webhooks-redeploy.py against stubs; working tree ends clean."""
     original = HANDLER_FILE.read_bytes()
 
     result = _run_deploy(stub_bin)
@@ -362,7 +362,7 @@ def test_modal_token_isolation(stub_bin: Path, tmp_path: Path) -> None:
     recorded = env_record.read_text().strip()
     assert recorded == "MODAL_TOKEN_ID=infisical-injected-id", (
         f"Parent shell's MODAL_TOKEN_ID leaked through to modal — the "
-        f"`os.environ.pop(...)` call in redeploy_webhook.py is missing or "
+        f"`os.environ.pop(...)` call in webhooks-redeploy.py is missing or "
         f"ineffective. Got: {recorded}"
     )
 
