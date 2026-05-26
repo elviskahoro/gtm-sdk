@@ -8,7 +8,7 @@ should require no change here.
 
 from __future__ import annotations
 
-import logging
+import traceback
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -49,6 +49,7 @@ from libs.attio.tracking_events import (
     find_or_create_meeting_lifecycle_event,
     find_or_create_tracking_event,
 )
+from libs.logging.structured import log
 from src.attio.ops import (
     AttioOp,
     CompanyRef,
@@ -62,9 +63,6 @@ from src.attio.ops import (
     UpsertPerson,
     UpsertTrackingEvent,
 )
-
-logger = logging.getLogger(__name__)
-
 
 # ---------- LookupTable ----------
 
@@ -634,10 +632,13 @@ def execute(plan: Iterable[AttioOp]) -> ExecutionResult:
         try:
             envelope = handler(op, table)
         except Exception as exc:  # noqa: BLE001 — turn any handler crash into a failed outcome
-            logger.exception(
-                "attio handler raised for op_index=%d op_type=%s",
-                i,
-                type(op).__name__,
+            log(
+                "attio.handler_exception",
+                op_index=i,
+                op_type=type(op).__name__,
+                error_type=type(exc).__name__,
+                error_msg=str(exc),
+                traceback=traceback.format_exc(),
             )
             envelope = _exception_envelope(exc)
         outcomes.append(
