@@ -418,16 +418,16 @@ motherduck = [
 
 [[package]]
 name = "dlthub"
-version = "0.22.1"
+version = "0.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-jose" },
     { name = "ruamel-yaml" },
     { name = "sqlglot" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/c2/d8ed5739c387052f18d8635c40890f7579588432f87788dc95e69f454832/dlthub-0.22.1.tar.gz", hash = "sha256:8d27dd632cb5b81e79df8215b61204592019513501f9c5e991675629f7609171", size = 169660, upload-time = "2026-02-23T22:40:36.252Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/f1/16f1c80212f46d244bf71de6ea4a97a89abd8b5c04e847d398ba094a7495/dlthub-0.27.0.tar.gz", hash = "sha256:60ac1cf07956efcc5115f84e858416c266facf95bfd17ca8b5c6d3bb11891aeb", size = 170995, upload-time = "2026-05-18T15:57:20.955Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/50/6d98321d3eb2c4f0a77b1ea2261fc49bc5b19f768764c35f11f711c3f573/dlthub-0.22.1-py3-none-any.whl", hash = "sha256:57e4febb3bbfeff733d005a90842d1376cc4e81483ae56760037cc6863379f65", size = 226759, upload-time = "2026-02-23T22:40:33.402Z" },
+    { url = "https://files.pythonhosted.org/packages/47/44/0841ea6b10191bc6338bdf51e600563ad56e95a61d08e03fb4d1f84e9d18/dlthub-0.27.0-py3-none-any.whl", hash = "sha256:f5b156afdb5240fbace44461fb099fa64557ca19a30aeb55a0f21ba655720667", size = 228555, upload-time = "2026-05-18T15:57:18.813Z" },
 ]
 
 [[package]]
@@ -1002,7 +1002,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.42.95" },
     { name = "dagger-io", specifier = ">=0.20.8" },
     { name = "dlt", extras = ["duckdb", "motherduck"], specifier = ">=1.0" },
-    { name = "dlthub", specifier = ">=0.22.1" },
+    { name = "dlthub", specifier = ">=0.27.0" },
     { name = "emoji", specifier = ">=2.15.0" },
     { name = "fastapi", extras = ["standard"] },
     { name = "flatsplode", specifier = ">=0.2.0" },
