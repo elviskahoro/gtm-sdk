@@ -174,6 +174,24 @@ def test_backfill_domains_rejects_invalid_ext_tam_filter_json() -> None:
     assert "invalid" in (result.stdout + result.stderr).lower()
 
 
+def test_backfill_domains_rejects_non_object_ext_tam_filter() -> None:
+    """Regression (roborev): JSON arrays/strings parse cleanly but aren't filter objects."""
+    runner = CliRunner()
+    for payload in ("[]", '"foo"', "42", "true"):
+        result = runner.invoke(
+            app,
+            [
+                "attio",
+                "enrichment",
+                "backfill-domains",
+                "--ext-tam-filter",
+                payload,
+            ],
+        )
+        assert result.exit_code != 0, f"payload {payload!r} should be rejected"
+        assert "non-empty JSON object" in (result.stdout + result.stderr)
+
+
 def test_backfill_domains_json_override(monkeypatch) -> None:
     import cli.attio.enrichment as enrichment_mod
 

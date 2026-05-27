@@ -73,7 +73,7 @@ def backfill_domains(
             except json.JSONDecodeError as e:
                 print(f"Error: invalid --ext-tam-filter JSON: {e}", file=sys.stderr)
                 raise typer.Exit(code=1)
-            if not parsed_filter:
+            if not isinstance(parsed_filter, dict) or not parsed_filter:
                 print(
                     "Error: --ext-tam-filter must be a non-empty JSON object",
                     file=sys.stderr,
