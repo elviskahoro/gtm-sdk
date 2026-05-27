@@ -48,7 +48,7 @@ def exa_find_companies(
             raise
         except ExaAPIKeyMissingError as exc:
             raise ValueError(
-                f"{exc!s} Set EXA_API_KEY in Infisical — the bootstrap "
+                f"{exc!s} Set EXA_API_KEY in Infisical (env=dev|staging|prod) — the bootstrap "
                 "pattern fetches it at function entry.",
             ) from None
         except ValueError:

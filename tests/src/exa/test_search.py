@@ -253,6 +253,28 @@ def test_api_key_missing_error_triggers_infisical_hint(monkeypatch) -> None:
         fn.local(payload={"query": "x"}, api_keys={"exa_api_key": "exa_test"})
 
 
+def test_find_companies_api_key_missing_error_triggers_infisical_hint(monkeypatch) -> None:
+    def boom(_query, **_kwargs):
+        raise ExaAPIKeyMissingError("Exa API key not resolved.")
+
+    monkeypatch.setattr("src.exa.companies.find_companies", boom)
+
+    fn = cast(modal.Function, exa_find_companies)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Infisical"):
+        fn.local(payload={"query": "x"}, api_keys={"exa_api_key": "exa_test"})
+
+
+def test_find_people_api_key_missing_error_triggers_infisical_hint(monkeypatch) -> None:
+    def boom(_query, **_kwargs):
+        raise ExaAPIKeyMissingError("Exa API key not resolved.")
+
+    monkeypatch.setattr("src.exa.people.find_people", boom)
+
+    fn = cast(modal.Function, exa_find_people)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Infisical"):
+        fn.local(payload={"query": "x"}, api_keys={"exa_api_key": "exa_test"})
+
+
 def test_typed_exa_errors_propagate_through_modal_wrapper(monkeypatch) -> None:
     """Regression (roborev): typed ExaError subclasses carry status/request_id
     that callers need for retry decisions. They must NOT be wrapped as

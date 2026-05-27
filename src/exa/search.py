@@ -28,9 +28,9 @@ def _decorate_exa_key_error(exc: ValueError) -> ValueError:
     the underlying error message wording. Falls back to a substring match
     for legacy ``ValueError`` shapes.
     """
-    is_missing_key = isinstance(exc, ExaAPIKeyMissingError) or "EXA_API_KEY" in str(
+    is_missing_key = isinstance(exc, ExaAPIKeyMissingError) or "EXA API key not resolved" in str(
         exc,
-    )
+    ) or "EXA_API_KEY" in str(exc)
     if not is_missing_key:
         return exc
     return ValueError(
