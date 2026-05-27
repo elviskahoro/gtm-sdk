@@ -142,6 +142,21 @@ def test_looks_like_domain_handles_non_string_input():
     assert looks_like_domain("  acme.com  ") is True
 
 
+def test_looks_like_domain_rejects_invalid_label_shapes():
+    """Regression: reject malformed host labels, not just whole-string junk."""
+    from libs.attio.values import looks_like_domain
+
+    for bad in (
+        "acme-.com",
+        "acme.-com",
+        "-acme.com",
+        "acme..com",
+        "a" * 64 + ".com",
+        "com.-",
+    ):
+        assert looks_like_domain(bad) is False, bad
+
+
 def test_set_company_domain_if_empty_malformed_domain_is_domain_invalid_noop():
     """Regression (roborev): a malformed-but-truthy domain (whitespace, URL
     scheme, no dot) must trip the ``domain_invalid`` noop branch instead of

@@ -254,8 +254,8 @@ def format_company_name(name: str) -> list[dict[str, str]]:
     return [{"value": name}]
 
 
-_DOMAIN_LABEL_CHARS = set(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
+_DOMAIN_LABEL_RE = re.compile(
+    r"^(?=.{1,63}\Z)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\Z"
 )
 
 
@@ -290,12 +290,8 @@ def looks_like_domain(value: object) -> bool:
     labels = value.split(".")
     has_alpha = False
     for label in labels:
-        if not label:
-            return False  # empty label (e.g. leading/trailing dot, ``a..b``)
-        if label.startswith("-") or label.endswith("-"):
-            return False  # invalid per RFC 1035 (e.g. ``acme-`` or ``-acme``)
-        if any(ch not in _DOMAIN_LABEL_CHARS for ch in label):
-            return False  # any non-hostname character: whitespace, /, ?, etc.
+        if not _DOMAIN_LABEL_RE.match(label):
+            return False  # empty label, invalid chars, or leading/trailing hyphen
         if any(ch.isalpha() for ch in label):
             has_alpha = True
     # Reject IPv4 literals and other purely-numeric hostnames. Real
