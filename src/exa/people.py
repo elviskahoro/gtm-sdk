@@ -35,7 +35,9 @@ def exa_find_people(
             # Normalize to ValueError so the wrapper surface is consistent
             # with ``exa_search`` and Pydantic tracebacks don't leak across
             # the remote Modal boundary (roborev finding).
-            raise ValueError(f"Invalid Exa payload: {exc}") from exc
+            raise ValueError(
+                f"Invalid Exa payload for exa_find_people: {payload!r}; {exc}"
+            ) from exc
         try:
             return find_people(
                 query.query,

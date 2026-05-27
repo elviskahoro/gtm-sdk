@@ -35,7 +35,9 @@ def exa_find_companies(
             # Normalize to ValueError so the wrapper surface is consistent
             # with ``exa_search`` and Pydantic tracebacks don't leak across
             # the remote Modal boundary (roborev finding).
-            raise ValueError(f"Invalid Exa payload: {exc}") from exc
+            raise ValueError(
+                f"Invalid Exa payload for exa_find_companies: {payload!r}; {exc}"
+            ) from exc
         try:
             return find_companies(
                 query.query,
