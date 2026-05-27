@@ -45,6 +45,7 @@ image = (
     modal.Image.debian_slim(python_version="3.13")
     .pip_install(
         "attio>=0.21.2",
+        "exa-py>=1.0",
         "fastapi[standard]",
         "flatsplode>=0.2.0",
         "gcsfs>=2024.10.0",
@@ -89,8 +90,12 @@ import src.accounts.research as src_gtm_research  # noqa: E402
 import src.apollo.organizations as src_apollo_organizations  # noqa: E402
 import src.apollo.people as src_apollo_people  # noqa: E402
 import src.attio.companies as src_attio_companies  # noqa: E402
+import src.attio.enrichment as src_attio_enrichment  # noqa: E402
 import src.attio.notes as src_attio_notes  # noqa: E402
 import src.attio.people as src_attio_people  # noqa: E402
+import src.exa.companies as src_exa_companies  # noqa: E402
+import src.exa.people as src_exa_people  # noqa: E402
+import src.exa.search as src_exa_search  # noqa: E402
 import src.parallel.extract as src_parallel_extract  # noqa: E402
 import src.parallel.findall as src_parallel_findall  # noqa: E402
 import src.parallel.search as src_parallel_search  # noqa: E402
@@ -99,8 +104,12 @@ _ENDPOINT_MODULES = (
     src_apollo_organizations,
     src_apollo_people,
     src_attio_companies,
+    src_attio_enrichment,
     src_attio_notes,
     src_attio_people,
+    src_exa_companies,
+    src_exa_people,
+    src_exa_search,
     src_gtm_accounts,
     src_gtm_batch,
     src_gtm_people,

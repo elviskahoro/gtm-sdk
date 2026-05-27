@@ -38,6 +38,7 @@ from libs import infisical
 from libs.apollo import client as apollo_client
 from libs.attio import client as attio_client
 from libs.caldotcom import client as caldotcom_client
+from libs.exa import client as exa_client
 from libs.linear import client as linear_client
 from libs.parallel import client as parallel_client
 
@@ -45,6 +46,7 @@ KEY_SCOPES: dict[str, Callable[[str], AbstractContextManager[None]]] = {
     "APOLLO_API_KEY": apollo_client.api_key_scope,
     "ATTIO_API_KEY": attio_client.api_key_scope,
     "CALCOM_API_KEY": caldotcom_client.api_key_scope,
+    "EXA_API_KEY": exa_client.api_key_scope,
     "LINEAR_API_KEY": linear_client.api_key_scope,
     "PARALLEL_API_KEY": parallel_client.api_key_scope,
 }

@@ -254,8 +254,59 @@ def format_company_name(name: str) -> list[dict[str, str]]:
     return [{"value": name}]
 
 
+_DOMAIN_LABEL_CHARS = set(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
+)
+
+
+def looks_like_domain(value: object) -> bool:
+    """Cheap shape check: does ``value`` plausibly look like a bare hostname?
+
+    Validates per-label (RFC 1035-ish): each dot-separated label must be
+    non-empty, contain only ASCII letters/digits/hyphens, and must not start
+    or end with a hyphen. Rejects URL fragments (``acme.com?q=…``,
+    ``acme.com#x``), comma-separated lists, schemes, paths, leading/trailing
+    dots, and labels like ``acme-`` / ``-acme`` / ``acme.-foo``.
+
+    Also rejects IPv4-literal values (``0.0.0.0``, ``123.45.67.89``) and any
+    fully-numeric hostname — a website domain must contain at least one
+    label with a non-digit character (roborev finding).
+
+    The goal is to keep the orchestrator's row outcome classification
+    accurate — anything that gets through here is what Attio actually has
+    to validate.
+
+    Non-string inputs (e.g. ``None``, integers, lists) are rejected without
+    raising, so callers can pass raw values from external responses safely
+    (roborev finding).
+    """
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    if not value:
+        return False
+    if "." not in value:
+        return False
+    labels = value.split(".")
+    has_alpha = False
+    for label in labels:
+        if not label:
+            return False  # empty label (e.g. leading/trailing dot, ``a..b``)
+        if label.startswith("-") or label.endswith("-"):
+            return False  # invalid per RFC 1035 (e.g. ``acme-`` or ``-acme``)
+        if any(ch not in _DOMAIN_LABEL_CHARS for ch in label):
+            return False  # any non-hostname character: whitespace, /, ?, etc.
+        if any(ch.isalpha() for ch in label):
+            has_alpha = True
+    # Reject IPv4 literals and other purely-numeric hostnames. Real
+    # company website domains always contain at least one alphabetic char.
+    return has_alpha
+
+
 def format_company_domains(domain: str | None) -> list[dict[str, str]] | None:
     if not domain:
+        return None
+    if not looks_like_domain(domain):
         return None
     return [{"domain": domain}]
 
