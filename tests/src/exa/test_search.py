@@ -36,6 +36,26 @@ def test_search_query_rejects_unknown_fields() -> None:
         SearchQuery.model_validate({"query": "x", "useAutoprompt": True})
 
 
+def test_exa_search_rejects_invalid_num_results_at_boundary(monkeypatch) -> None:
+    called = False
+
+    def fake_search(_input):
+        nonlocal called
+        called = True
+        return _stub_response()
+
+    monkeypatch.setattr("src.exa.search.search", fake_search)
+
+    fn = cast(modal.Function, exa_search)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="num_results"):
+        fn.local(
+            payload={"query": "snowflake", "num_results": 0},
+            api_keys={"exa_api_key": "exa_test"},
+        )
+
+    assert called is False
+
+
 def test_find_companies_query_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         FindCompaniesQuery.model_validate({"query": "x", "category": "company"})

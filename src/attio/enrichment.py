@@ -373,7 +373,8 @@ def _process_one_company(
         # ``set_company_domain_if_empty``'s ``domain_invalid`` noop path;
         # we mirror that classification here instead of marking it as
         # ``would_patch`` and silently disagreeing.
-        if not format_company_domains(domain):
+        formatted_domains = format_company_domains(domain)
+        if not formatted_domains:
             report.outcomes.append(
                 CompanyDomainOutcome(
                     company_record_id=company_record_id,

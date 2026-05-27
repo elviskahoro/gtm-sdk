@@ -245,6 +245,50 @@ def test_apply_false_does_not_call_set_domain() -> None:
     assert report.total_exa_cost_dollars > 0
 
 
+def test_apply_false_invalid_domain_is_unresolved() -> None:
+    """Preview mode should mirror the write path's domain formatter."""
+    with _patched_pipeline(
+        company_records={"rec_1": ("Acme", False)},
+        exa_response=_search_response_hit("bad-domain-format"),
+    ) as mocks:
+        report = backfill_company_domains_via_exa(
+            company_ids=["rec_1"],
+            apply=False,
+        )
+
+    mocks["set_domain"].assert_not_called()
+    assert report.unresolved == 1
+    assert report.outcomes[0].action == "unresolved"
+    assert report.outcomes[0].resolved_domain is None
+
+
+def test_limit_zero_short_circuits_before_iteration() -> None:
+    """limit=0 should not consume the iterator or touch any collaborators."""
+    with _patched_pipeline(
+        company_records={"rec_1": ("Acme", False)},
+        exa_response=_search_response_hit("acme.com"),
+        company_id_iter=["rec_1"],
+    ) as mocks:
+        report = backfill_company_domains_via_exa(
+            ext_tam_filter={"foo": "bar"},
+            limit=0,
+            apply=False,
+        )
+
+    assert report.model_dump() == {
+        "patched": 0,
+        "would_patch": 0,
+        "noop_had_domain": 0,
+        "unresolved": 0,
+        "skipped_race": 0,
+        "failed": 0,
+        "outcomes": [],
+        "total_exa_cost_dollars": 0.0,
+    }
+    mocks["search"].assert_not_called()
+    mocks["set_domain"].assert_not_called()
+
+
 def test_empty_ext_tam_filter_raises_at_function_boundary() -> None:
     """Regression (roborev): the function itself must reject empty selectors,
     not just the ``BackfillCompanyDomainsQuery`` Modal-boundary wrapper.
