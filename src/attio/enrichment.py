@@ -410,8 +410,8 @@ def _process_one_company(
 
     # Translate envelope to outcome. ``noop`` covers three distinct paths in
     # set_company_domain_if_empty; the meta flag disambiguates:
-    #   domain_invalid       → unresolved (Exa returned garbage)
-    #   domains_already_set  → noop_had_domain (read-after-resolve race)
+    #   domain_invalid       → unresolved (invalid Exa result, not a race)
+    #   domains_already_set  → noop_had_domain (concurrent writer won)
     #   (none of the above)  → skipped_race fallback
     if envelope.action == "updated":
         action = "patched"

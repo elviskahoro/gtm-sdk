@@ -545,10 +545,11 @@ def set_company_domain_if_empty(
     """Fill ``domains`` on a Company only when currently empty (fill-only).
 
     Re-reads the Company immediately before writing and skips when ``domains``
-    is non-empty. This narrows but does NOT eliminate the GET→PATCH race —
-    Attio has no conditional-update primitive, so a concurrent writer between
-    our read and our PATCH can still get clobbered. Callers that need strict
-    "do not overwrite" semantics must serialize externally.
+    is non-empty. This is a best-effort fill-only write, not an atomic
+    compare-and-swap: Attio does not expose a conditional-update primitive
+    here, so a concurrent writer between our read and PATCH can still be
+    clobbered. Callers that need strict "do not overwrite" semantics must
+    serialize externally.
 
     Returns ``action="noop"`` with disambiguating meta on the three skip paths:
     - ``meta["preview"]=True`` — ``apply=False`` was passed
