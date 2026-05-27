@@ -7,6 +7,7 @@ Mirrors tests/src/parallel/test_modal_wrappers.py: validate the payload-validati
 from __future__ import annotations
 
 from typing import cast
+import importlib
 
 import modal
 import pytest
@@ -67,6 +68,44 @@ def test_exa_search_passes_payload_to_libs_search(monkeypatch) -> None:
     assert captured["input"].query == "snowflake"  # type: ignore[union-attr]
     assert captured["input"].type == "auto"  # type: ignore[union-attr]
     assert captured["input"].num_results == 3  # type: ignore[union-attr]
+
+
+def test_exa_search_honors_contents_false(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    search_module = importlib.import_module("libs.exa.search")
+
+    def fake_search(**kwargs):
+        captured["method"] = "search"
+        captured["kwargs"] = kwargs
+        return _stub_response()
+
+    def fake_search_and_contents(**kwargs):
+        captured["method"] = "search_and_contents"
+        captured["kwargs"] = kwargs
+        return _stub_response()
+
+    monkeypatch.setattr(
+        search_module,
+        "_get_client",
+        lambda _api_key=None: type(
+            "Client",
+            (),
+            {
+                "search": staticmethod(fake_search),
+                "search_and_contents": staticmethod(fake_search_and_contents),
+            },
+        )(),
+    )
+
+    result = SearchQuery.model_validate(
+        {"query": "snowflake", "contents": False},
+    )
+    from libs.exa.search import search as libs_search
+
+    libs_search(result)
+
+    assert captured["method"] == "search"
+    assert "contents" not in captured["kwargs"]  # type: ignore[index]
 
 
 def test_exa_find_companies_pins_category(monkeypatch) -> None:

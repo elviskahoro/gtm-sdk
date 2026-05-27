@@ -466,8 +466,8 @@ class BackfillCompanyDomainsQuery(BaseModel):
     @field_validator("limit")
     @classmethod
     def validate_limit(cls, v: int | None) -> int | None:
-        if v is not None and v < 0:
-            raise ValueError("limit must be a non-negative integer or None")
+        if v is not None and v <= 0:
+            raise ValueError("limit must be a positive integer or None")
         return v
 
     @model_validator(mode="after")

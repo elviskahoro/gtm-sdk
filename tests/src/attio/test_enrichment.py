@@ -337,6 +337,16 @@ def test_query_model_rejects_empty_ext_tam_filter() -> None:
         BackfillCompanyDomainsQuery.model_validate({"ext_tam_filter": {}})
 
 
+def test_query_model_rejects_limit_zero() -> None:
+    """Regression: ``limit=0`` must not be treated as an unlimited backfill."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="limit must be a positive integer"):
+        BackfillCompanyDomainsQuery.model_validate(
+            {"company_ids": ["rec_1"], "limit": 0},
+        )
+
+
 def test_query_model_rejects_empty_filter_combined_with_company_ids() -> None:
     """Regression (roborev): a payload like
     ``{"ext_tam_filter": {}, "company_ids": ["x"]}`` would have silently passed
