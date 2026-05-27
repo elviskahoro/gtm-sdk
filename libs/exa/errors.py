@@ -47,7 +47,7 @@ class ExaServerError(ExaError):
 
 def from_http_status(
     status: int,
-    body: dict[str, Any] | None = None,
+    body: Any = None,
     request_id: str | None = None,
 ) -> ExaError:
     """Map HTTP status code to typed exception.

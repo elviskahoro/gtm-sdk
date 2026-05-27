@@ -116,6 +116,38 @@ def test_sdk_error_with_status_on_exc_still_reads_response_metadata():
             raise AssertionError("expected ExaRateLimitError")
 
 
+def test_sdk_error_with_non_dict_response_body_is_tolerated():
+    """Regression: a non-dict ``response.json()`` result must not crash the
+    translation path or mask the original HTTP failure."""
+    from libs.exa.errors import ExaBadRequestError
+
+    class _FakeResponse:
+        headers = {"x-request-id": "req_non_dict"}
+
+        def json(self):
+            return ["error", "details"]
+
+    class _FakeSDKError(Exception):
+        def __init__(self):
+            super().__init__("bad request")
+            self.status_code = 400
+            self.response = _FakeResponse()
+
+    mock_client = MagicMock()
+    mock_client.search.side_effect = _FakeSDKError()
+
+    with patch("libs.exa.search._get_client", return_value=mock_client):
+        try:
+            search(SearchInput(query="x"))
+        except ExaBadRequestError as exc:
+            assert exc.status == 400
+            assert exc.request_id == "req_non_dict"
+            assert exc.body == ["error", "details"]
+            assert "Bad Request" in str(exc)
+        else:
+            raise AssertionError("expected ExaBadRequestError")
+
+
 def test_sdk_non_http_error_is_not_translated():
     """SDK exceptions without an HTTP status (e.g. connection errors) pass
     through unwrapped so we don't mask the original failure shape."""
