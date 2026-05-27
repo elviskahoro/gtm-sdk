@@ -195,10 +195,10 @@ class SearchOutput(BaseModel):
 
     # ``content`` is whatever the caller's ``output_schema`` declares — a
     # string (free-text), object/dict, array/list, number, or boolean (per
-    # JSON Schema). Modeling it as ``Any`` so the adapter never silently
-    # discards valid structured output that doesn't happen to be ``str``
-    # or ``dict`` (roborev finding).
-    content: Any = None
+    # JSON Schema). Keep the field as a full JSON-value union so the adapter
+    # never narrows or drops valid structured output that happens to be
+    # falsey (roborev finding).
+    content: str | int | float | bool | list[Any] | dict[str, Any] | None = None
     grounding: OutputGrounding | None = None
 
 

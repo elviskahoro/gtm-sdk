@@ -208,6 +208,38 @@ def test_output_content_preserves_string_value():
     assert result.output.content == "Snowflake is a cloud data platform."
 
 
+def test_output_content_preserves_falsey_json_values():
+    """Regression (roborev): valid structured output can be falsey.
+
+    The adapter must preserve these payloads exactly instead of treating them
+    as missing / unresolved.
+    """
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.request_id = "req-falsy"
+    mock_response.search_type = "auto"
+    mock_response.results = []
+    mock_response.cost_dollars = 0.0
+
+    with patch("libs.exa.search._get_client", return_value=mock_client):
+        for value in ("", 0, False, []):
+            mock_output = MagicMock()
+            mock_output.content = value
+            mock_output.grounding = None
+            mock_response.output = mock_output
+            mock_client.search_and_contents.return_value = mock_response
+
+            result = search(
+                SearchInput(
+                    query="x",
+                    output_schema={"type": "string"},
+                ),
+            )
+
+            assert result.output is not None
+            assert result.output.content == value
+
+
 def test_output_with_falsy_grounding_list_preserved():
     """Regression (roborev): the mapper used to drop ``output`` whenever
     ``output_obj.grounding`` was falsy (e.g. ``[]``). Now we use ``is not None``
