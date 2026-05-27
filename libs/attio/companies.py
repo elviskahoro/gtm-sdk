@@ -26,6 +26,7 @@ from libs.attio.values import (
     format_company_domains,
     format_company_linkedin,
     format_company_name,
+    looks_like_domain,
     normalize_company_name,
 )
 
@@ -591,10 +592,24 @@ def set_company_domain_if_empty(
                 meta={"output_schema_version": "v1", "domains_already_set": True},
             )
 
-        # Domains empty, PATCH with the new domain
+        # Domains empty, PATCH with the new domain only when it looks like a
+        # real hostname-shaped domain. ``format_company_domains`` already
+        # performs the same normalization, but validating here keeps the
+        # noop path explicit at the write boundary and avoids depending on the
+        # formatter's internal shape checks for control flow.
+        if not looks_like_domain(domain):
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "domain_invalid": True},
+            )
         formatted_domains = format_company_domains(domain)
         if not formatted_domains:
-            # Domain couldn't be formatted, return noop
             return ReliabilityEnvelope(
                 success=True,
                 partial_success=False,
