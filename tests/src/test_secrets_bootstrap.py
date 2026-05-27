@@ -10,7 +10,13 @@ import pytest
 def test_key_scopes_covers_known_libs() -> None:
     from src.secrets_bootstrap import KEY_SCOPES
 
-    expected = {"APOLLO_API_KEY", "ATTIO_API_KEY", "CALCOM_API_KEY", "PARALLEL_API_KEY"}
+    expected = {
+        "APOLLO_API_KEY",
+        "ATTIO_API_KEY",
+        "CALCOM_API_KEY",
+        "LINEAR_API_KEY",
+        "PARALLEL_API_KEY",
+    }
     assert expected.issubset(KEY_SCOPES.keys())
 
 

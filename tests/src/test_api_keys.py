@@ -36,6 +36,13 @@ def test_inject_multiple_keys():
     assert "PARALLEL_API_KEY" not in os.environ
 
 
+def test_inject_linear_api_key():
+    os.environ.pop("LINEAR_API_KEY", None)
+    with inject_api_keys({"linear_api_key": "sk-linear"}):
+        assert os.environ["LINEAR_API_KEY"] == "sk-linear"
+    assert "LINEAR_API_KEY" not in os.environ
+
+
 def test_inject_restores_on_exception():
     os.environ["ATTIO_API_KEY"] = "sk-original"
     try:
