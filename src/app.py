@@ -49,6 +49,7 @@ image = (
         "flatsplode>=0.2.0",
         "gcsfs>=2024.10.0",
         "gtm-apollo>=0.0.2",
+        "gtm-linear @ git+https://github.com/elviskahoro/sdk-python-linear@6d8f37c09eabec76be41fb5b07727e7972e0bed0",
         "infisicalsdk>=1.0.16",
         "orjson>=3.10.0",
         "parallel-web",
