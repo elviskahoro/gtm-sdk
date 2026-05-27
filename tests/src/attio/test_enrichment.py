@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from libs.attio.contracts import ReliabilityEnvelope
+from libs.attio.errors import AttioValidationError
 from libs.exa.client import ExaAPIKeyMissingError
 from libs.exa.errors import ExaAuthError, ExaBadRequestError, ExaRateLimitError
 from libs.exa.models import (
@@ -498,6 +499,27 @@ def test_domain_with_scheme_treated_as_unresolved() -> None:
 
     assert report.unresolved == 1
     mocks["set_domain"].assert_not_called()
+
+
+def test_attio_validation_error_treated_as_unresolved() -> None:
+    """Regression for malformed Exa output that slips past upstream checks:
+    the live PATCH path must map Attio validation failures back to the
+    unresolved/domain_invalid classification instead of surfacing a generic
+    row failure."""
+    with _patched_pipeline(
+        company_records={"rec_1": ("Acme", False)},
+        exa_response=_search_response_hit("acme.com"),
+    ) as mocks:
+        mocks["set_domain"].side_effect = AttioValidationError("invalid domain")
+        report = backfill_company_domains_via_exa(
+            company_ids=["rec_1"],
+            apply=True,
+        )
+
+    assert report.unresolved == 1
+    assert report.failed == 0
+    assert report.outcomes[0].action == "unresolved"
+    assert report.outcomes[0].resolved_domain == "acme.com"
 
 
 def test_non_string_domain_treated_as_unresolved() -> None:

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from libs.attio.client import get_client
 from libs.attio.companies import set_company_domain_if_empty
+from libs.attio.errors import AttioValidationError
 from libs.attio.ext_tam import iter_company_ids_by_filter
 from libs.attio.values import format_company_domains, looks_like_domain
 from libs.exa.client import ExaAPIKeyMissingError
@@ -405,11 +406,26 @@ def _process_one_company(
         report.would_patch += 1
         return
 
-    envelope = set_company_domain_if_empty(
-        record_id=company_record_id,
-        domain=domain,
-        apply=True,
-    )
+    try:
+        envelope = set_company_domain_if_empty(
+            record_id=company_record_id,
+            domain=domain,
+            apply=True,
+        )
+    except AttioValidationError:
+        report.outcomes.append(
+            CompanyDomainOutcome(
+                company_record_id=company_record_id,
+                company_name=company_name,
+                action="unresolved",
+                resolved_domain=domain,
+                exa_grounding_url=grounding_url,
+                exa_confidence=confidence,
+                exa_cost_dollars=exa_cost,
+            ),
+        )
+        report.unresolved += 1
+        return
 
     # Translate envelope to outcome. ``noop`` covers three distinct paths in
     # set_company_domain_if_empty; the meta flag disambiguates:

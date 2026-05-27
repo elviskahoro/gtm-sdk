@@ -606,11 +606,26 @@ def set_company_domain_if_empty(
                 meta={"output_schema_version": "v1", "domain_invalid": True},
             )
 
-        client.records.patch_v2_objects_object_records_record_id_(
-            object="companies",
-            record_id=record_id,
-            data=build_patch_record_request({"domains": formatted_domains}),
-        )
+        try:
+            client.records.patch_v2_objects_object_records_record_id_(
+                object="companies",
+                record_id=record_id,
+                data=build_patch_record_request({"domains": formatted_domains}),
+            )
+        except AttioValidationError:
+            # Some malformed domains can still get past upstream callers if the
+            # structured response shape is unexpected. Keep the contract stable
+            # by surfacing the same noop classification the formatter path uses.
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "domain_invalid": True},
+            )
         return ReliabilityEnvelope(
             success=True,
             partial_success=False,
