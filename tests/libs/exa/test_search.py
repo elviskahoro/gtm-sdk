@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from libs.exa.models import (
     ContentsOptions,
     SearchInput,
@@ -31,6 +33,15 @@ def test_search_basic():
         assert result.search_type == "auto"
         assert result.cost_dollars == 0.05
         assert result.results == []
+
+
+def test_search_input_strips_and_rejects_blank_query():
+    """Regression: whitespace-only queries must be rejected centrally."""
+    from pydantic import ValidationError
+
+    assert SearchInput(query="  test query  ").query == "test query"
+    with pytest.raises(ValidationError, match="non-empty / non-whitespace"):
+        SearchInput(query="   ")
 
 
 def test_contents_false_routes_to_plain_search():

@@ -207,17 +207,18 @@ def backfill_company_domains_via_exa(
     Raises:
         ValueError: If neither or both selectors are set, or either is empty.
     """
-    # Validate selectors here too — not just at the ``BackfillCompanyDomainsQuery``
-    # Modal boundary. Direct programmatic callers (tests, scripts, library
-    # users) bypass the wrapper validation, so an ``ext_tam_filter={}`` here
-    # would otherwise silently page through the entire ext_tam table
-    # (roborev finding). Same non-empty + exactly-one rules as the query model.
-    has_filter = bool(ext_tam_filter)  # rejects None and {}
-    has_ids = bool(company_ids)  # rejects None and []
+    # Validate selectors here too, not just at the Modal boundary. Direct
+    # callers can bypass ``BackfillCompanyDomainsQuery`` and pass raw kwargs,
+    # so we must reject empty selectors before building the ext_tam iterator.
+    if ext_tam_filter is not None and not ext_tam_filter:
+        raise ValueError("ext_tam_filter must be a non-empty dict")
+    if company_ids is not None and not company_ids:
+        raise ValueError("company_ids must be a non-empty list")
+
+    has_filter = ext_tam_filter is not None
+    has_ids = company_ids is not None
     if has_filter == has_ids:
-        raise ValueError(
-            "Exactly one of ext_tam_filter or company_ids must be set (and non-empty)",
-        )
+        raise ValueError("Exactly one of ext_tam_filter or company_ids must be set")
 
     # Build company ID iterator. Both selector paths must dedupe — the
     # ext_tam pivot dedupes per-page; the explicit ``company_ids`` list is

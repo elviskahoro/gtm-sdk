@@ -291,16 +291,13 @@ def test_limit_zero_short_circuits_before_iteration() -> None:
 
 
 def test_empty_ext_tam_filter_raises_at_function_boundary() -> None:
-    """Regression (roborev): the function itself must reject empty selectors,
-    not just the ``BackfillCompanyDomainsQuery`` Modal-boundary wrapper.
-    Otherwise direct programmatic callers (tests, scripts) can pass
-    ``ext_tam_filter={}`` and trigger a full ext_tam table scan."""
-    with pytest.raises(ValueError, match="Exactly one of"):
+    """Regression: the public function must reject empty selectors directly."""
+    with pytest.raises(ValueError, match="ext_tam_filter must be a non-empty"):
         backfill_company_domains_via_exa(ext_tam_filter={}, apply=False)
 
 
 def test_empty_company_ids_raises_at_function_boundary() -> None:
-    with pytest.raises(ValueError, match="Exactly one of"):
+    with pytest.raises(ValueError, match="company_ids must be a non-empty"):
         backfill_company_domains_via_exa(company_ids=[], apply=False)
 
 
