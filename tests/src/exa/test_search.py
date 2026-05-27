@@ -84,17 +84,20 @@ def test_exa_search_honors_contents_false(monkeypatch) -> None:
         captured["kwargs"] = kwargs
         return _stub_response()
 
-    monkeypatch.setattr(
-        search_module,
-        "_get_client",
-        lambda _api_key=None: type(
+    def fake_get_client(_api_key: str | None = None):
+        return type(
             "Client",
             (),
             {
                 "search": staticmethod(fake_search),
                 "search_and_contents": staticmethod(fake_search_and_contents),
             },
-        )(),
+        )()
+
+    monkeypatch.setattr(
+        search_module,
+        "_get_client",
+        fake_get_client,
     )
 
     result = SearchQuery.model_validate(
@@ -246,6 +249,34 @@ def test_typed_exa_errors_propagate_through_modal_wrapper(monkeypatch) -> None:
 
     assert excinfo.value.status == 429
     assert excinfo.value.request_id == "req_test"
+
+
+def test_find_companies_propagates_typed_exa_errors(monkeypatch) -> None:
+    def raise_auth(_query, **_kwargs):
+        raise ExaAuthError("bad token", status=401, request_id="req_auth")
+
+    monkeypatch.setattr("src.exa.companies.find_companies", raise_auth)
+
+    fn = cast(modal.Function, exa_find_companies)  # type: ignore[arg-type]
+    with pytest.raises(ExaAuthError) as excinfo:
+        fn.local(payload={"query": "x"}, api_keys={"exa_api_key": "exa_test"})
+
+    assert excinfo.value.status == 401
+    assert excinfo.value.request_id == "req_auth"
+
+
+def test_find_people_propagates_typed_exa_errors(monkeypatch) -> None:
+    def raise_server(_query, **_kwargs):
+        raise ExaRateLimitError("slow down", status=429, request_id="req_rl")
+
+    monkeypatch.setattr("src.exa.people.find_people", raise_server)
+
+    fn = cast(modal.Function, exa_find_people)  # type: ignore[arg-type]
+    with pytest.raises(ExaRateLimitError) as excinfo:
+        fn.local(payload={"query": "x"}, api_keys={"exa_api_key": "exa_test"})
+
+    assert excinfo.value.status == 429
+    assert excinfo.value.request_id == "req_rl"
 
 
 def test_find_companies_validation_error_normalized_to_value_error() -> None:
