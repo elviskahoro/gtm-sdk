@@ -67,6 +67,19 @@ def backfill_domains(
         filter_supplied = ext_tam_filter is not None
         ids_supplied = company_ids is not None
 
+        if filter_supplied:
+            try:
+                parsed_filter = json.loads(ext_tam_filter or "")
+            except json.JSONDecodeError as e:
+                print(f"Error: invalid --ext-tam-filter JSON: {e}", file=sys.stderr)
+                raise typer.Exit(code=1)
+            if not parsed_filter:
+                print(
+                    "Error: --ext-tam-filter must be a non-empty JSON object",
+                    file=sys.stderr,
+                )
+                raise typer.Exit(code=1)
+
         if filter_supplied and ids_supplied:
             print(
                 "Error: --ext-tam-filter and --company-ids are mutually exclusive",
@@ -82,11 +95,7 @@ def backfill_domains(
             raise typer.Exit(code=1)
 
         if filter_supplied:
-            try:
-                payload["ext_tam_filter"] = json.loads(ext_tam_filter or "")
-            except json.JSONDecodeError as e:
-                print(f"Error: invalid --ext-tam-filter JSON: {e}", file=sys.stderr)
-                raise typer.Exit(code=1)
+            payload["ext_tam_filter"] = parsed_filter
 
         if ids_supplied:
             payload["company_ids"] = [

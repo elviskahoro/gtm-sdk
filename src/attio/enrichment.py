@@ -14,7 +14,7 @@ from libs.attio.companies import set_company_domain_if_empty
 from libs.attio.ext_tam import iter_company_ids_by_filter
 from libs.attio.values import format_company_domains, looks_like_domain
 from libs.exa.client import ExaAPIKeyMissingError
-from libs.exa.errors import ExaError
+from libs.exa.errors import ExaBadRequestError, ExaError
 from libs.exa.models import SearchInput
 from libs.exa.search import search
 from src.api_keys import inject_api_keys
@@ -294,7 +294,7 @@ def backfill_company_domains_via_exa(
                     report=report,
                 )
                 outcome_recorded = True
-            except (ExaAPIKeyMissingError, ExaError):
+            except (ExaAPIKeyMissingError, ExaBadRequestError, ExaError):
                 # Non-recoverable failures from Exa (missing credential, auth,
                 # bad-request, rate limit, server error, AND any other typed
                 # HTTP status that ``from_http_status`` mapped to the base
@@ -302,10 +302,12 @@ def backfill_company_domains_via_exa(
                 # record and just burn cost / credentials. Short-circuit so
                 # the operator sees the real failure instead of N false
                 # "failed" outcomes (roborev finding).
-                #
                 # ``ExaAPIKeyMissingError`` is a ``ValueError`` subclass (not
                 # an ``ExaError``) so it must be listed explicitly to avoid
                 # being swallowed by the generic per-row handler below.
+                # ``ExaBadRequestError`` is also short-circuited here because
+                # malformed prompts or invalid structured-output schemas are
+                # unrecoverable run-level failures, not per-company issues.
                 raise
             except Exception as exc:
                 outcome = CompanyDomainOutcome(

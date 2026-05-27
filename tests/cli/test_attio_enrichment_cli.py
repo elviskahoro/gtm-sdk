@@ -140,8 +140,7 @@ def test_backfill_domains_requires_a_selector() -> None:
 
 
 def test_backfill_domains_rejects_empty_filter_combined_with_company_ids() -> None:
-    """Regression (roborev): ``--ext-tam-filter '{}'`` is presence, not absence.
-    Combined with ``--company-ids``, must be rejected as mutually exclusive."""
+    """Regression: empty filter JSON must be rejected before selector routing."""
     runner = CliRunner()
     result = runner.invoke(
         app,
@@ -153,10 +152,10 @@ def test_backfill_domains_rejects_empty_filter_combined_with_company_ids() -> No
             "{}",
             "--company-ids",
             "rec_1",
-        ],
+    ],
     )
     assert result.exit_code != 0
-    assert "mutually exclusive" in (result.stdout + result.stderr)
+    assert "non-empty JSON object" in (result.stdout + result.stderr)
 
 
 def test_backfill_domains_rejects_invalid_ext_tam_filter_json() -> None:
