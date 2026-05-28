@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import gcsfs
 
 from libs.dlt.filesystem_local import to_filesystem_local
 from libs.filesystem.files import DestinationFileData
+from libs.filesystem.refs import GCSObjectRef
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -235,6 +236,117 @@ class CloudGoogle:
                 f.write(
                     file_data.string,
                 )
+
+    @staticmethod
+    def to_filesystem_gcs_with_refs(
+        destination_file_data: Iterator[DestinationFileData],
+        metadata: dict[str, str] | None = None,
+        refs_out: list[GCSObjectRef] | None = None,
+    ) -> list[GCSObjectRef]:
+        """Write to GCS like `to_filesystem_gcs`, but stamp provenance metadata
+        on each object and return typed `GCSObjectRef` handles for the writes.
+
+        Used by the ETL webhook path so structured logs and tests have a
+        verifiable pointer (md5_hash, generation) to what landed. The raw
+        webhook path keeps using `to_filesystem_gcs` — no behavior change there.
+
+        `metadata` is forwarded to gcsfs as GCS custom object metadata; pass
+        only string-typed values (GCS rejects non-strings) and keep individual
+        values under ~1 KiB. When `metadata` is None, the kwarg is omitted
+        entirely to match the un-stamped write path byte-for-byte.
+
+        `refs_out`, when provided, is the SAME list that gets returned — refs
+        are appended as each write completes, so a caller wrapping this in
+        try/finally can read partial-success state after a mid-batch failure
+        and still emit lineage for the objects that landed. Bytes already on
+        GCS carry their custom metadata stamps independently, but `refs_out`
+        is the only path to the structured-log echo on partial failure.
+
+        After each write, `fs.info(path)` is called to read back the GCS
+        Object resource (generation, md5Hash, etag, size, timeCreated) — one
+        extra round trip per file vs. `to_filesystem_gcs`.
+        """
+        credentials: GCPCredentials = GCPCredentials.from_env_required()
+        fs: gcsfs.GCSFileSystem = gcsfs.GCSFileSystem(
+            project=credentials.project_id,
+            token=credentials.to_service_account_token(),
+        )
+
+        open_kwargs: dict[str, Any] = {"mode": "w"}
+        if metadata is not None:
+            open_kwargs["metadata"] = metadata
+
+        refs: list[GCSObjectRef] = refs_out if refs_out is not None else []
+        for file_data in destination_file_data:
+            with fs.open(
+                path=file_data.path,
+                **open_kwargs,
+            ) as f:
+                f.write(
+                    file_data.string,
+                )
+
+            # `fs.info` is a SEPARATE GCS API call after the upload. It can
+            # fail (rate limit, transient network) even when the write
+            # succeeded — the bytes are already on GCS with their custom
+            # metadata stamp. Treat the readback as best-effort: on failure,
+            # record a minimal ref (gs_uri / bucket / path only) so the
+            # caller still sees that this object landed.
+            try:
+                info: dict[str, Any] = fs.info(file_data.path)
+            except Exception:  # noqa: BLE001 — best-effort readback by design
+                info = {}
+            refs.append(
+                GCSObjectRef.from_gcsfs_info(
+                    info=info,
+                    source_path=file_data.path,
+                ),
+            )
+
+        return refs
+
+    @staticmethod
+    def to_filesystem_with_refs(
+        destination_file_data: Iterator[DestinationFileData],
+        bucket_url: str | None,
+        metadata: dict[str, str] | None = None,
+        refs_out: list[GCSObjectRef] | None = None,
+    ) -> list[GCSObjectRef]:
+        """Ref-returning sibling of `to_filesystem`. GCS path stamps `metadata`
+        and returns `GCSObjectRef`s; local path writes files (for the
+        `local()` dev entrypoint) and returns an empty list — refs are
+        GCS-specific.
+
+        `refs_out`, when provided, is mutated in-place as each GCS write
+        completes — callers wrapping this in try/finally see partial state
+        after a mid-batch failure. See `to_filesystem_gcs_with_refs`.
+
+        Used only by `webhooks/export_to_gcp_etl.py`. The raw webhook handler
+        keeps calling `to_filesystem`, which intentionally has no metadata
+        stamping and no extra `fs.info` round trip.
+        """
+        match bucket_url:
+            case str() as url if url.startswith("gs://"):
+                return CloudGoogle.to_filesystem_gcs_with_refs(
+                    destination_file_data=destination_file_data,
+                    metadata=metadata,
+                    refs_out=refs_out,
+                )
+
+            case str():
+                bucket_url_path: Path = Path(bucket_url)
+                bucket_url_path.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+                to_filesystem_local(
+                    destination_file_data=destination_file_data,
+                )
+                return refs_out if refs_out is not None else []
+
+            case _:
+                error_msg: str = f"Invalid bucket url: {bucket_url}"
+                raise ValueError(error_msg)
 
     @staticmethod
     def export_to_filesystem(

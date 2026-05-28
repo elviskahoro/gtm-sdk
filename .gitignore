@@ -46,3 +46,12 @@ api/samples/**/evt_*.json
 # Contains personal Modal URLs and Hookdeck IDs that don't belong in OSS.
 webhooks/registry.yaml
 
+# Force-track the shared helper package under scripts/lib/. Some operators have
+# a `lib/` rule in their global gitignore that would otherwise exclude this
+# repo-internal package and silently break script imports (see roborev finding).
+!scripts/lib/
+!scripts/lib/**
+# Re-exclude generated artifacts inside the force-tracked directory.
+scripts/lib/__pycache__/
+scripts/lib/**/*.pyc
+

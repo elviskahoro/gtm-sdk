@@ -82,6 +82,13 @@ infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --e
 
 Conductor workspaces get `.env.local` copied in at provisioning; the parent `ai/` repo's `.env*` files are not copied. Never fall back to 1Password unless the user explicitly asks.
 
+## Script Entrypoints
+
+- Repo-local scripts that are meant to run under `infisical run -- <cmd>` should be directly executable and use a uv shebang when practical.
+- Put the canonical Infisical example string in `scripts/lib/env.py` and reuse it from script docstrings and error messages instead of hand-writing variants.
+- If a script cannot be made directly executable, say why in the usage text. Do not silently fall back to `uv run python scripts/...` unless there is a concrete technical reason.
+- Usage examples for scripts that rely on Infisical must show `--projectId`, `--token`, and `--env`, or explicitly say the script depends on `infisical init`.
+
 ## Package management
 
 **Use `uv`. Never `pip`, `pip3`, or `python3 -m pip`.** Bare pip bypasses `uv.lock` and causes environment drift.
