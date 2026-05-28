@@ -194,14 +194,21 @@ def format_location_from_parts(
     city: str | None,
     state: str | None,
     zipcode: str | None,
-    country_code: str | None = "US",
+    country_code: str | None,
 ) -> dict[str, Any] | None:
     """Build an Attio ``location`` attribute value from structured parts.
 
-    Returns ``None`` when every locality field is empty — Attio's
-    ``location`` attribute requires at least one populated subfield, and
-    emitting a wholly-null object would still register as a write of the
-    sentinel and overwrite human-curated data on repeat visits.
+    ``country_code`` is required by contract (no default). Callers must pass
+    an ISO-3166-1 alpha-2 code (e.g. ``"US"``, ``"IN"``) or ``None``. A prior
+    version of this helper defaulted to ``"US"``, which silently misattributed
+    non-US data when the country lookup failed or the caller forgot the arg;
+    see ai-ds6.
+
+    Returns ``None`` when:
+    - every locality field (city/state/zipcode) is empty, or
+    - ``country_code`` is ``None`` — an Attio location without a country is
+      incomplete, and emitting one would still register as a write and
+      overwrite human-curated data on repeat visits.
 
     Returns the inner dict (not the ``[{...}]`` list shape) because Attio's
     ``location`` attribute is single-valued — the caller wraps it before
@@ -212,6 +219,8 @@ def format_location_from_parts(
     state_clean = (state or "").strip() or None
     zip_clean = (zipcode or "").strip() or None
     if not (city_clean or state_clean or zip_clean):
+        return None
+    if country_code is None:
         return None
     return {
         "line_1": None,

@@ -249,10 +249,13 @@ class Webhook(Rb2bWebhook):
             "repeat_visit" if self.payload.is_repeat_visit else "first_visit"
         )
         seen_at = self.payload.seen_at or self.timestamp or datetime.now(timezone.utc)
+        # rb2b's WebhookVisitPayload has no country field — the product
+        # only resolves US visitors, so "US" is correct for every row.
         location = format_location_from_parts(
             city=self.payload.city,
             state=self.payload.state,
             zipcode=self.payload.zipcode,
+            country_code="US",
         )
 
         ops.append(

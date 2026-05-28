@@ -344,6 +344,7 @@ def test_format_location_from_parts_full_address() -> None:
         city="Cape Elizabeth",
         state="ME",
         zipcode="04107",
+        country_code="US",
     )
     assert loc == {
         "line_1": None,
@@ -363,13 +364,13 @@ def test_format_location_from_parts_all_empty_returns_none() -> None:
     # Empty inputs must not produce a sentinel object — that would still
     # be a write against Attio and overwrite human-curated data on repeat
     # visits.
-    assert format_location_from_parts(None, None, None) is None
-    assert format_location_from_parts("", "", "") is None
-    assert format_location_from_parts("  ", "  ", "  ") is None
+    assert format_location_from_parts(None, None, None, country_code="US") is None
+    assert format_location_from_parts("", "", "", country_code="US") is None
+    assert format_location_from_parts("  ", "  ", "  ", country_code="US") is None
 
 
 def test_format_location_from_parts_partial_zip_only() -> None:
-    loc = format_location_from_parts(None, None, "04107")
+    loc = format_location_from_parts(None, None, "04107", country_code="US")
     assert loc is not None
     assert loc["postcode"] == "04107"
     assert loc["locality"] is None
@@ -377,7 +378,12 @@ def test_format_location_from_parts_partial_zip_only() -> None:
 
 
 def test_format_location_from_parts_strips_whitespace() -> None:
-    loc = format_location_from_parts("  Brooklyn  ", "  NY  ", "  11201  ")
+    loc = format_location_from_parts(
+        "  Brooklyn  ",
+        "  NY  ",
+        "  11201  ",
+        country_code="US",
+    )
     assert loc is not None
     assert loc["locality"] == "Brooklyn"
     assert loc["region"] == "NY"
@@ -390,6 +396,33 @@ def test_format_location_from_parts_custom_country() -> None:
     assert loc["country_code"] == "CA"
 
 
+def test_format_location_from_parts_returns_none_without_country() -> None:
+    # Acceptance from ai-ds6: a fully-populated locality with no country
+    # must skip rather than misattribute (the historical bug silently
+    # tagged these as US).
+    assert (
+        format_location_from_parts(
+            city="Bengaluru",
+            state="Karnataka",
+            zipcode=None,
+            country_code=None,
+        )
+        is None
+    )
+
+
+def test_format_location_from_parts_india_country_code() -> None:
+    loc = format_location_from_parts(
+        city="Mumbai",
+        state=None,
+        zipcode=None,
+        country_code="IN",
+    )
+    assert loc is not None
+    assert loc["country_code"] == "IN"
+    assert loc["locality"] == "Mumbai"
+
+
 def test_build_tracking_event_values_full_surface() -> None:
     """Every prod-schema slug populated end-to-end. Lock in the wire shape
     so a future schema-drift can't silently break it. See ai-0lv.
@@ -397,7 +430,12 @@ def test_build_tracking_event_values_full_surface() -> None:
     from libs.attio.models import TrackingEventInput
     from libs.attio.values import build_tracking_event_values
 
-    location = format_location_from_parts("Cape Elizabeth", "ME", "04107")
+    location = format_location_from_parts(
+        "Cape Elizabeth",
+        "ME",
+        "04107",
+        country_code="US",
+    )
     i = TrackingEventInput(
         external_id="rb2b:abc",
         source="rb2b",
