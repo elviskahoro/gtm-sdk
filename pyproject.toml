@@ -45,7 +45,7 @@ dependencies = [
 marketplace = ["polars>=1.10.0"]
 
 [tool.setuptools.packages.find]
-include = ["cli*", "libs*", "src*"]
+include = ["cli*", "libs*", "scripts*", "src*"]
 exclude = ["tests*"]
 
 [project.scripts]
