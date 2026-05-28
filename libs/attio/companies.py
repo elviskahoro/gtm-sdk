@@ -26,6 +26,7 @@ from libs.attio.values import (
     format_company_domains,
     format_company_linkedin,
     format_company_name,
+    looks_like_domain,
     normalize_company_name,
 )
 
@@ -529,6 +530,159 @@ def set_company_owner(
             partial_success=False,
             action="updated",
             record_id=company_record_id,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1"},
+        )
+
+
+def set_company_domain_if_empty(
+    *,
+    record_id: str,
+    domain: str,
+    apply: bool,
+) -> ReliabilityEnvelope:
+    """Fill ``domains`` on a Company only when currently empty (fill-only).
+
+    Re-reads the Company immediately before writing and skips when ``domains``
+    is non-empty. This is a best-effort fill-only write, not an atomic
+    compare-and-swap: Attio does not expose a conditional-update primitive
+    here, so a concurrent writer between our read and PATCH can still be
+    clobbered. Callers that need strict "do not overwrite" semantics must
+    serialize externally.
+
+    Returns ``action="noop"`` with disambiguating meta on the three skip paths:
+    - ``meta["preview"]=True`` — ``apply=False`` was passed
+    - ``meta["domains_already_set"]=True`` — read showed a populated value
+    - ``meta["domain_invalid"]=True`` — the supplied ``domain`` could not be
+      formatted (caller passed garbage; treat as a resolution failure, not a race)
+
+    Preview mode is a pure noop. Mirrors ``set_company_owner``.
+    """
+    if not apply:
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="noop",
+            record_id=record_id,
+            warnings=[],
+            skipped_fields=[],
+            errors=[],
+            meta={"output_schema_version": "v1", "preview": True},
+        )
+
+    with get_client() as client:
+        current = client.records.get_v2_objects_object_records_record_id_(
+            object="companies",
+            record_id=record_id,
+        )
+        # Check if domains already has values
+        domains_values = current.data.values.get("domains", [])
+        if domains_values:
+            # Domains already populated, don't overwrite
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "domains_already_set": True},
+            )
+
+        # Domains empty, PATCH with the new domain only when it looks like a
+        # real hostname-shaped domain. ``format_company_domains`` already
+        # performs the same normalization, but validating here keeps the
+        # noop path explicit at the write boundary and avoids depending on the
+        # formatter's internal shape checks for control flow.
+        if not looks_like_domain(domain):
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "domain_invalid": True},
+            )
+        formatted_domains = format_company_domains(domain)
+        if not formatted_domains:
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "domain_invalid": True},
+            )
+
+        try:
+            client.records.patch_v2_objects_object_records_record_id_(
+                object="companies",
+                record_id=record_id,
+                data=build_patch_record_request({"domains": formatted_domains}),
+            )
+        except AttioValidationError:
+            # Some malformed domains can still get past upstream callers if the
+            # structured response shape is unexpected. Keep the contract stable
+            # by surfacing the same noop classification the formatter path uses.
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=record_id,
+                warnings=[],
+                skipped_fields=[],
+                errors=[],
+                meta={"output_schema_version": "v1", "domain_invalid": True},
+            )
+        except Exception as exc:
+            # Any other SDK error (uniqueness conflict, transient network,
+            # schema mismatch) needs to be classified against current state
+            # before bubbling — otherwise a concurrent writer filling the
+            # domain races to a failure here instead of being recorded as
+            # the noop_had_domain it actually is (roborev finding).
+            try:
+                recheck = client.records.get_v2_objects_object_records_record_id_(
+                    object="companies",
+                    record_id=record_id,
+                )
+            except Exception:
+                # Re-read failed too — surface the original PATCH error.
+                raise exc from None
+            if recheck.data.values.get("domains", []):
+                # Concurrent writer won. Same outcome as the pre-PATCH guard.
+                return ReliabilityEnvelope(
+                    success=True,
+                    partial_success=False,
+                    action="noop",
+                    record_id=record_id,
+                    warnings=[],
+                    skipped_fields=[],
+                    errors=[],
+                    meta={
+                        "output_schema_version": "v1",
+                        "domains_already_set": True,
+                    },
+                )
+            if is_uniqueness_conflict(exc):
+                # Domains slot is still empty but the write conflicts with
+                # another record's unique value. Not a race we can resolve —
+                # raise the typed conflict so callers can classify it.
+                raise AttioConflictError(
+                    "Company domain write conflicts with an existing record.",
+                ) from exc
+            raise
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="updated",
+            record_id=record_id,
             warnings=[],
             skipped_fields=[],
             errors=[],

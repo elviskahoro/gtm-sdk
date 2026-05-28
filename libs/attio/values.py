@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Iterable
 from typing import Any, Literal
@@ -254,10 +255,69 @@ def format_company_name(name: str) -> list[dict[str, str]]:
     return [{"value": name}]
 
 
+_DOMAIN_LABEL_RE = re.compile(
+    r"^(?=.{1,63}\Z)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\Z",
+)
+
+
+def looks_like_domain(value: object) -> bool:
+    """Cheap shape check: does ``value`` plausibly look like a bare hostname?
+
+    Validates per-label (RFC 1035-ish): each dot-separated label must be
+    non-empty, contain only ASCII letters/digits/hyphens, and must not start
+    or end with a hyphen. Rejects URL fragments (``acme.com?q=…``,
+    ``acme.com#x``), comma-separated lists, schemes, paths, leading/trailing
+    dots, and labels like ``acme-`` / ``-acme`` / ``acme.-foo``.
+
+    Rejects IPv4-literal values (``0.0.0.0``, ``123.45.67.89``) explicitly
+    via ``ipaddress.IPv4Address`` rather than a coarse "must have alpha"
+    check — fully-numeric hostnames like ``123.com`` are legitimate and
+    must be accepted (roborev finding).
+
+    The goal is to keep the orchestrator's row outcome classification
+    accurate — anything that gets through here is what Attio actually has
+    to validate.
+
+    Non-string inputs (e.g. ``None``, integers, lists) are rejected without
+    raising, so callers can pass raw values from external responses safely
+    (roborev finding).
+    """
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    if not value:
+        return False
+    if "." not in value:
+        return False
+    # RFC 1035: total hostname length cannot exceed 253 octets. Enforcing this
+    # here keeps preview/apply parity — without it, an overlong-but-well-formed
+    # hostname slips past ``looks_like_domain`` in preview and then gets
+    # rejected by Attio on apply (roborev finding).
+    if len(value) > 253:
+        return False
+    try:
+        ipaddress.IPv4Address(value)
+    except ValueError:
+        pass
+    else:
+        return False  # IPv4 literal, not a hostname
+    labels = value.split(".")
+    for label in labels:
+        if not _DOMAIN_LABEL_RE.match(label):
+            return False  # empty label, invalid chars, or leading/trailing hyphen
+    return True
+
+
 def format_company_domains(domain: str | None) -> list[dict[str, str]] | None:
     if not domain:
         return None
-    return [{"domain": domain}]
+    # Normalize before validating/returning — Attio stores the domain
+    # verbatim, so trailing whitespace from upstream payloads would
+    # otherwise leak through (roborev finding).
+    normalized = domain.strip().lower()
+    if not looks_like_domain(normalized):
+        return None
+    return [{"domain": normalized}]
 
 
 def format_company_linkedin(url: str | None) -> list[str] | None:

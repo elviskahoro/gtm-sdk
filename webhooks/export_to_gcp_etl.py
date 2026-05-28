@@ -14,7 +14,6 @@ from modal import Image
 from libs.dlt.destination_type import DestinationType
 from libs.dlt.filesystem_gcp import CloudGoogle
 from libs.filesystem.files import DestinationFileData, SourceFileData
-from libs.filesystem.refs import GCSObjectRef
 from libs.logging.structured import (
     log,
     set_source,
@@ -160,42 +159,6 @@ def _get_storage_source_file_data(
     )
 
 
-def _build_provenance_metadata() -> dict[str, str]:
-    """Build the GCS custom-object-metadata dict stamped on every ETL write.
-
-    Values must be strings (GCS rejects non-string custom metadata) and are
-    read at write time so they reflect the running container, not import
-    time. Missing env vars degrade to "unknown" rather than failing the
-    write — provenance is best-effort observability, never a hard dep.
-
-    `modal_app` reads `app.name` (the webhook's own Modal app, resolved at
-    module import) rather than `os.environ["MODAL_APP"]` — webhook handlers
-    deploy as standalone Modal apps named after the bucket (see CLAUDE.md
-    `webhooks/` rules), so the env var is not authoritative and reading
-    from `app.name` works the same way locally and in deployed containers.
-    Do NOT swap in `src.modal_app.MODAL_APP` here: that constant names the
-    MAIN app (`src/app.py`), not the per-webhook standalone apps.
-
-    `AI_BUILD_GIT_SHA` and `AI_DEPLOYED_AT` are this repo's canonical
-    deploy-time env vars, populated by `Image.env(...)` in `src/app.py`.
-    The webhook image construction in this file does NOT yet stamp them,
-    so today both fields land as "unknown" — wiring the webhook image to
-    set them is a follow-up. Using the canonical names here means the
-    rewire just works without revisiting this module.
-    """
-    return {
-        "writer": "export_to_gcp_etl",
-        "source_bucket": BUCKET_NAME,
-        # `app.name` is typed as `str | None` in modal's stubs even though
-        # we explicitly pass `name=...` at construction — coerce to str
-        # with a fallback so the metadata stays string-typed for GCS.
-        "modal_app": app.name or "unknown",
-        "modal_task_id": os.environ.get("MODAL_TASK_ID", "unknown"),
-        "git_sha": os.environ.get("AI_BUILD_GIT_SHA", "unknown"),
-        "deployed_at": os.environ.get("AI_DEPLOYED_AT", "unknown"),
-    }
-
-
 def _export(webhook: WebhookModel) -> str:
     payload_bytes = len(orjson.dumps(webhook.model_dump()))
     log("webhook.received", payload_bytes=payload_bytes)
@@ -224,36 +187,10 @@ def _export(webhook: WebhookModel) -> str:
         bucket_url=bucket_url,
         storage=storage_file_data.base_model if storage_file_data else None,
     )
-    # `refs_collected` is passed to the writer as `refs_out` so it accumulates
-    # refs in-place as each write completes. The `finally` block then emits
-    # `webhook.exported` with whatever landed — even on a mid-batch failure,
-    # the structured-log lineage trail for the objects that *did* land
-    # survives. The webhook path writes one file per invocation today, but
-    # the multi-file `local()` entrypoint exercises the same code path.
-    #
-    # The event is gated on `len(refs_collected) > 0` so a hard failure
-    # before the first object lands does NOT emit `webhook.exported` with
-    # `count=0` — that would pollute dashboards and make the event
-    # indistinguishable from a real empty export. Hard failures are
-    # already captured by the `webhook.completed status=error` event
-    # emitted in `_handle`.
-    refs_collected: list[GCSObjectRef] = []
-    try:
-        CloudGoogle.to_filesystem_with_refs(
-            destination_file_data=data,
-            bucket_url=bucket_url,
-            metadata=_build_provenance_metadata(),
-            refs_out=refs_collected,
-        )
-    finally:
-        if refs_collected:
-            log(
-                "webhook.exported",
-                bucket_name=BUCKET_NAME,
-                count=len(refs_collected),
-                refs=[ref.model_dump(mode="json") for ref in refs_collected],
-            )
-    return "Successfully exported to filesystem."
+    return CloudGoogle.to_filesystem(
+        destination_file_data=data,
+        bucket_url=bucket_url,
+    )
 
 
 def _handle(webhook: WebhookModel, request: Request) -> str:
@@ -333,37 +270,8 @@ def local(
             storage=storage_file_data.base_model if storage_file_data else None,
         )
     )
-    # See _export: refs_out captures partial state so a mid-batch failure
-    # still surfaces the objects that did land. Refs are GCS-specific;
-    # the local destination writes files but the writer returns an empty
-    # list. GCS output always prints ref summary (including on partial
-    # failure, before the exception propagates); local output only prints
-    # the success message on an actual success — never gate the success
-    # message on the finally block alone, or a raised exception would
-    # still print "Successfully exported".
-    refs: list[GCSObjectRef] = []
-    is_gcs_destination = bucket_url.startswith("gs://")
-    success = False
-    try:
-        CloudGoogle.to_filesystem_with_refs(
-            destination_file_data=destination_file_data,
-            bucket_url=bucket_url,
-            metadata=_build_provenance_metadata(),
-            refs_out=refs,
-        )
-        success = True
-    finally:
-        if is_gcs_destination:
-            if refs:
-                print(f"Wrote {len(refs)} object(s):")
-                for ref in refs:
-                    print(
-                        f"  {ref.gs_uri} (generation={ref.generation}, md5={ref.md5_hash})",
-                    )
-            elif success:
-                # Empty input folder: writer succeeded with nothing to write.
-                print(f"No objects to write to {bucket_url} (empty input).")
-            else:
-                print(f"Export to {bucket_url} failed before any object landed.")
-        elif success:
-            print(f"Successfully exported to local filesystem at {bucket_url}.")
+    response: str = CloudGoogle.to_filesystem(
+        destination_file_data=destination_file_data,
+        bucket_url=bucket_url,
+    )
+    print(response)

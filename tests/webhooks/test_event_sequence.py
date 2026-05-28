@@ -323,30 +323,14 @@ def _patch_gcp_to_filesystem(
     raises: type[BaseException] | None = None,
     returns: str = "ok",
 ) -> None:
-    """Stub the GCS write methods on the handler-local import.
-
-    Both `to_filesystem` (raw handler) and `to_filesystem_with_refs` (ETL
-    handler, returns typed `GCSObjectRef` list) are stubbed so the helper
-    works for both. The raw stub returns `returns`; the ETL stub returns
-    an empty refs list. `raises`, when set, applies to both.
-    """
+    """Stub `CloudGoogle.to_filesystem` on the handler-local import."""
 
     def _impl(*_args: object, **_kwargs: object) -> str:
         if raises is not None:
             raise raises("stubbed GCS failure")
         return returns
 
-    def _impl_with_refs(*_args: object, **_kwargs: object) -> list[object]:
-        if raises is not None:
-            raise raises("stubbed GCS failure")
-        return []
-
     monkeypatch.setattr(handler.CloudGoogle, "to_filesystem", _impl)
-    monkeypatch.setattr(
-        handler.CloudGoogle,
-        "to_filesystem_with_refs",
-        _impl_with_refs,
-    )
 
 
 def test_gcp_etl_handle_emits_full_event_sequence(
@@ -374,169 +358,16 @@ def test_gcp_etl_handle_emits_full_event_sequence(
     request = _make_request({"X-Request-Id": "handle-etl"})
     capsys.readouterr()
 
-    # Make the stub append one ref to refs_out so the gated `webhook.exported`
-    # event actually fires — the handler suppresses the event when no refs
-    # were recorded to avoid polluting dashboards with count=0 entries from
-    # hard failures. Real production traffic always produces ≥1 ref because
-    # `_export` writes exactly one file per webhook invocation.
-    sentinel_ref = handler.GCSObjectRef(
-        bucket="b",
-        path="x.jsonl",
-        gs_uri="gs://b/x.jsonl",
-        generation=1,
-    )
-
-    def _writer_one_ref(*_args: object, **kwargs: object) -> list[object]:
-        refs_out = kwargs.get("refs_out")
-        if isinstance(refs_out, list):
-            refs_out.append(sentinel_ref)
-        return []
-
-    monkeypatch.setattr(
-        handler.CloudGoogle,
-        "to_filesystem_with_refs",
-        _writer_one_ref,
-    )
-
     result = handler._handle(webhook, request)
-    # ETL `_export` now returns a fixed string regardless of the writer's
-    # output; the typed GCSObjectRef list it built is emitted as structured
-    # log data on the new `webhook.exported` event instead of leaking into
-    # the HTTP response body.
-    assert result == "Successfully exported to filesystem."
+    assert result == "ok-etl"
 
     lines = _read_log_lines(capsys)
     events = [line["event"] for line in lines]
-    assert events == [
-        "webhook.received",
-        "webhook.validated",
-        "webhook.exported",
-        "webhook.completed",
-    ]
+    assert events == ["webhook.received", "webhook.validated", "webhook.completed"]
     assert all(line["request_id"] == "handle-etl" for line in lines)
-    exported = next(line for line in lines if line["event"] == "webhook.exported")
-    assert exported["bucket_name"]
-    assert exported["count"] == 1
-    assert exported["refs"][0]["gs_uri"] == "gs://b/x.jsonl"
     completed = lines[-1]
     assert completed["status"] == "ok"
     assert completed["bucket_name"]
-
-
-def test_gcp_etl_handle_emits_exported_event_on_partial_failure(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """If the writer raises mid-batch, `webhook.exported` must still fire
-    (via _export's try/finally) carrying the refs of objects that DID land,
-    so the structured-log lineage trail survives partial failure. The handler
-    then re-raises and `webhook.completed` lands with status=error.
-    """
-    handler = _load_substituted_handler(
-        "export_to_gcp_etl",
-        "CaldotcomBookingWebhook",
-        tmp_path,
-    )
-
-    def _no_storage(**_kw: object) -> None:
-        return None
-
-    monkeypatch.setattr(handler, "_get_storage_source_file_data", _no_storage)
-
-    # Stub the writer to append one partial ref to refs_out, then raise —
-    # simulates the second of two writes failing after the first persisted.
-    partial_ref = handler.GCSObjectRef(
-        bucket="b",
-        path="ok.jsonl",
-        gs_uri="gs://b/ok.jsonl",
-        generation=42,
-        size_bytes=10,
-        md5_hash="abc==",
-    )
-
-    def _writer_partial_fail(*_args: object, **kwargs: object) -> list[object]:
-        refs_out = kwargs.get("refs_out")
-        if isinstance(refs_out, list):
-            refs_out.append(partial_ref)
-        msg = "simulated mid-batch failure"
-        raise OSError(msg)
-
-    monkeypatch.setattr(
-        handler.CloudGoogle,
-        "to_filesystem_with_refs",
-        _writer_partial_fail,
-    )
-
-    payload = _load_caldotcom_payload()
-    webhook = handler.WebhookModel.model_validate(payload)
-    request = _make_request({"X-Request-Id": "handle-etl-partial"})
-    capsys.readouterr()
-
-    with pytest.raises(OSError, match="simulated mid-batch failure"):
-        handler._handle(webhook, request)
-
-    lines = _read_log_lines(capsys)
-    events = [line["event"] for line in lines]
-    # `webhook.exported` must precede `webhook.completed` even on failure.
-    assert "webhook.exported" in events
-    assert events.index("webhook.exported") < events.index("webhook.completed")
-
-    exported = next(line for line in lines if line["event"] == "webhook.exported")
-    assert exported["count"] == 1
-    assert len(exported["refs"]) == 1
-    assert exported["refs"][0]["gs_uri"] == "gs://b/ok.jsonl"
-
-    completed = next(line for line in lines if line["event"] == "webhook.completed")
-    assert completed["status"] == "error"
-    assert completed["error_type"] == "OSError"
-
-
-def test_gcp_etl_handle_suppresses_exported_event_on_hard_failure(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """If the writer raises before any object lands (e.g., credential init
-    failure), `webhook.exported` must NOT fire — otherwise dashboards
-    cannot distinguish a real empty export from a hard failure. The
-    `webhook.completed status=error` event still carries the failure
-    signal."""
-    handler = _load_substituted_handler(
-        "export_to_gcp_etl",
-        "CaldotcomBookingWebhook",
-        tmp_path,
-    )
-
-    def _no_storage(**_kw: object) -> None:
-        return None
-
-    monkeypatch.setattr(handler, "_get_storage_source_file_data", _no_storage)
-
-    def _writer_hard_fail(*_args: object, **_kwargs: object) -> list[object]:
-        msg = "credential init failure"
-        raise RuntimeError(msg)
-
-    monkeypatch.setattr(
-        handler.CloudGoogle,
-        "to_filesystem_with_refs",
-        _writer_hard_fail,
-    )
-
-    payload = _load_caldotcom_payload()
-    webhook = handler.WebhookModel.model_validate(payload)
-    request = _make_request({"X-Request-Id": "handle-etl-hard-fail"})
-    capsys.readouterr()
-
-    with pytest.raises(RuntimeError, match="credential init failure"):
-        handler._handle(webhook, request)
-
-    lines = _read_log_lines(capsys)
-    events = [line["event"] for line in lines]
-    assert "webhook.exported" not in events
-    completed = next(line for line in lines if line["event"] == "webhook.completed")
-    assert completed["status"] == "error"
-    assert completed["error_type"] == "RuntimeError"
 
 
 def test_gcp_raw_handle_records_byte_length_for_multibyte_payload(
