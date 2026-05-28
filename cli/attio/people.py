@@ -144,6 +144,12 @@ def add(
         help="LinkedIn profile URL",
     ),
     location: str | None = typer.Option(None, "--location", help="Primary location"),
+    country_code: str | None = typer.Option(
+        None,
+        "--country-code",
+        help="ISO-3166-1 alpha-2 country code paired with --location (e.g. US, IN). "
+        "Required for the location to be written; see ai-sfp.",
+    ),
     company_domain: str | None = typer.Option(None, "--company", help="Company domain"),
     notes: str | None = typer.Option(None, "--notes", help="Intake notes"),
     strict: bool = typer.Option(
@@ -207,6 +213,7 @@ def add(
             "phone": phone,
             "linkedin": linkedin,
             "location": location,
+            "country_code": country_code,
             "company_domain": company_domain,
             "notes": notes,
             "strict": strict,
@@ -353,6 +360,12 @@ def update(
         help="LinkedIn profile URL",
     ),
     location: str | None = typer.Option(None, "--location", help="Primary location"),
+    country_code: str | None = typer.Option(
+        None,
+        "--country-code",
+        help="ISO-3166-1 alpha-2 country code paired with --location (e.g. US, IN). "
+        "Required for the location to be written; see ai-sfp.",
+    ),
     company_domain: str | None = typer.Option(None, "--company", help="Company domain"),
     notes: str | None = typer.Option(None, "--notes", help="Intake notes"),
     strict: bool = typer.Option(
@@ -420,6 +433,7 @@ def update(
             "phone": phone,
             "linkedin": linkedin,
             "location": location,
+            "country_code": country_code,
             "company_domain": company_domain,
             "notes": notes,
             "strict": strict,
@@ -468,6 +482,12 @@ def upsert(
         help="LinkedIn profile URL",
     ),
     location: str | None = typer.Option(None, "--location", help="Primary location"),
+    country_code: str | None = typer.Option(
+        None,
+        "--country-code",
+        help="ISO-3166-1 alpha-2 country code paired with --location (e.g. US, IN). "
+        "Required for the location to be written; see ai-sfp.",
+    ),
     company_domain: str | None = typer.Option(None, "--company", help="Company domain"),
     notes: str | None = typer.Option(None, "--notes", help="Intake notes"),
     strict: bool = typer.Option(
@@ -532,6 +552,7 @@ def upsert(
             "phone": phone,
             "linkedin": linkedin,
             "location": location,
+            "country_code": country_code,
             "company_domain": company_domain,
             "notes": notes,
             "strict": strict,

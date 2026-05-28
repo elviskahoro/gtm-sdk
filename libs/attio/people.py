@@ -413,6 +413,7 @@ def add_person(input: PersonInput) -> ReliabilityEnvelope:
         company_domain=input.company_domain,
         notes=input.notes,
         location=input.location,
+        country_code=input.country_code,
         location_mode=input.location_mode,
     )
 
@@ -534,6 +535,7 @@ def update_person(
             company_domain=input.company_domain,
             notes=input.notes,
             location=input.location,
+            country_code=input.country_code,
             location_mode=input.location_mode,
         )
 
