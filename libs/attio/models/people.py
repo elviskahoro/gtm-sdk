@@ -14,6 +14,11 @@ class PersonInput(BaseModel):
     github_handle: str | None = None
     github_url: str | None = None
     location: str | None = None
+    # ISO-3166-1 alpha-2 country code (e.g. "US", "IN") that pairs with
+    # ``location``. Required by ``format_location`` to avoid silent
+    # misattribution (see ai-sfp). When None, the ``primary_location``
+    # write is skipped even if ``location`` is populated.
+    country_code: str | None = None
     company_domain: str | None = None
     notes: str | None = None
     strict: bool = False

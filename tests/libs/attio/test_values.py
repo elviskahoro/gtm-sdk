@@ -48,13 +48,28 @@ def test_build_optional_person_values_serializes_notes_and_company() -> None:
         company_domain="acme.com",
         notes="met at conference",
         location="San Francisco, CA",
+        country_code="US",
         location_mode="city",
     )
     assert "associated_company" in values
     assert "notes" in values
-    # PersonInput doesn't carry country today, so build_optional_person_values
-    # passes country_code=None to format_location and the primary_location
-    # write is skipped — see ai-sfp.
+    assert "primary_location" in values
+    assert values["primary_location"][0]["country_code"] == "US"
+
+
+def test_build_optional_person_values_skips_location_without_country() -> None:
+    # ai-sfp contract: when the caller can't supply a country_code, the
+    # primary_location write is skipped rather than written with a wrong
+    # default. The other optional fields still flow through.
+    values = build_optional_person_values(
+        company_domain="acme.com",
+        notes="met at conference",
+        location="Bengaluru, Karnataka, India",
+        country_code=None,
+        location_mode="city",
+    )
+    assert "associated_company" in values
+    assert "notes" in values
     assert "primary_location" not in values
 
 

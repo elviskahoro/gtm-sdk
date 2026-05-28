@@ -417,20 +417,27 @@ def build_optional_person_values(
     company_domain: str | None,
     notes: str | None,
     location: str | None,
+    country_code: str | None,
     location_mode: Literal["raw", "city"] = "city",
 ) -> dict[str, Any]:
+    """Build the optional-field subset of a person values dict.
+
+    ``country_code`` is required by contract (no default) — pairs with
+    ``location`` and is forwarded to ``format_location``. Pass an
+    ISO-3166-1 alpha-2 code or ``None``; when ``None``, the
+    ``primary_location`` write is skipped (see ai-sfp / ai-ds6).
+    """
     values: dict[str, Any] = {}
 
     company = format_company_ref(company_domain)
     if company:
         values["associated_company"] = company
 
-    # PersonInput has no country field today, so the parsed string can't be
-    # turned into a valid Attio location without misattribution. Pass
-    # country_code=None so format_location skips the write entirely. The
-    # gap (plumb country through PersonInput, or normalize country tokens
-    # parsed from the string) is tracked as the follow-up to ai-sfp.
-    location_value = format_location(location, country_code=None, mode=location_mode)
+    location_value = format_location(
+        location,
+        country_code=country_code,
+        mode=location_mode,
+    )
     if location_value:
         values["primary_location"] = location_value
 
