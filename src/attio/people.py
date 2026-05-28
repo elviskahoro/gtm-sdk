@@ -55,6 +55,7 @@ def attio_add_person(
                     phone=query.phone,
                     linkedin=query.linkedin,
                     location=query.location,
+                    country_code=query.country_code,
                     company_domain=query.company_domain,
                     notes=query.notes,
                     strict=query.strict,
@@ -112,6 +113,7 @@ def attio_update_person(
                     phone=query.phone,
                     linkedin=query.linkedin,
                     location=query.location,
+                    country_code=query.country_code,
                     company_domain=query.company_domain,
                     notes=query.notes,
                     strict=query.strict,
@@ -145,6 +147,7 @@ def attio_upsert_person(
                     phone=query.phone,
                     linkedin=query.linkedin,
                     location=query.location,
+                    country_code=query.country_code,
                     company_domain=query.company_domain,
                     notes=query.notes,
                     strict=query.strict,
@@ -172,6 +175,7 @@ class PersonAddQuery(BaseModel):
     phone: str | None = None
     linkedin: str | None = None
     location: str | None = None
+    country_code: str | None = None
     company_domain: str | None = None
     notes: str | None = None
     strict: bool = False
@@ -202,6 +206,7 @@ class PersonUpdateQuery(BaseModel):
     phone: str | None = None
     linkedin: str | None = None
     location: str | None = None
+    country_code: str | None = None
     company_domain: str | None = None
     notes: str | None = None
     strict: bool = False
@@ -219,6 +224,7 @@ class PersonUpsertQuery(BaseModel):
     phone: str | None = None
     linkedin: str | None = None
     location: str | None = None
+    country_code: str | None = None
     company_domain: str | None = None
     notes: str | None = None
     strict: bool = False

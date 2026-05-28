@@ -159,9 +159,32 @@ def format_linkedin(url: str | None) -> list[str] | None:
 
 def format_location(
     location: str | None,
+    *,
+    country_code: str | None,
     mode: Literal["raw", "city"] = "city",
 ) -> list[dict[str, Any]] | None:
+    """Build an Attio ``primary_location`` value from a free-form string.
+
+    ``country_code`` is required by contract (no default), keyword-only. Pass
+    an ISO-3166-1 alpha-2 code (e.g. ``"US"``, ``"IN"``) or ``None``. A prior
+    version of this helper defaulted to ``"US"``, which silently misattributed
+    non-US data parsed from LinkedIn/CRM strings; see ai-sfp and the sibling
+    fix in ai-ds6.
+
+    Returns ``None`` when:
+    - ``location`` is empty, or
+    - ``country_code`` is ``None`` — an Attio location without a country is
+      incomplete, and emitting one would still register as a write and
+      overwrite human-curated data on repeat visits.
+
+    ``mode="city"`` treats the first comma-separated token as locality and
+    the second as region (anything after is ignored — Attio's ``location``
+    has no free country slot, only ``country_code``). ``mode="raw"`` keeps
+    the first token as ``line_1``.
+    """
     if not location:
+        return None
+    if country_code is None:
         return None
 
     parts: list[str] = str(location).split(",")
@@ -183,7 +206,7 @@ def format_location(
         "locality": locality,
         "region": region,
         "postcode": None,
-        "country_code": "US",
+        "country_code": country_code,
         "latitude": None,
         "longitude": None,
     }
@@ -194,14 +217,21 @@ def format_location_from_parts(
     city: str | None,
     state: str | None,
     zipcode: str | None,
-    country_code: str | None = "US",
+    country_code: str | None,
 ) -> dict[str, Any] | None:
     """Build an Attio ``location`` attribute value from structured parts.
 
-    Returns ``None`` when every locality field is empty — Attio's
-    ``location`` attribute requires at least one populated subfield, and
-    emitting a wholly-null object would still register as a write of the
-    sentinel and overwrite human-curated data on repeat visits.
+    ``country_code`` is required by contract (no default). Callers must pass
+    an ISO-3166-1 alpha-2 code (e.g. ``"US"``, ``"IN"``) or ``None``. A prior
+    version of this helper defaulted to ``"US"``, which silently misattributed
+    non-US data when the country lookup failed or the caller forgot the arg;
+    see ai-ds6.
+
+    Returns ``None`` when:
+    - every locality field (city/state/zipcode) is empty, or
+    - ``country_code`` is ``None`` — an Attio location without a country is
+      incomplete, and emitting one would still register as a write and
+      overwrite human-curated data on repeat visits.
 
     Returns the inner dict (not the ``[{...}]`` list shape) because Attio's
     ``location`` attribute is single-valued — the caller wraps it before
@@ -212,6 +242,8 @@ def format_location_from_parts(
     state_clean = (state or "").strip() or None
     zip_clean = (zipcode or "").strip() or None
     if not (city_clean or state_clean or zip_clean):
+        return None
+    if country_code is None:
         return None
     return {
         "line_1": None,
@@ -385,15 +417,27 @@ def build_optional_person_values(
     company_domain: str | None,
     notes: str | None,
     location: str | None,
+    country_code: str | None,
     location_mode: Literal["raw", "city"] = "city",
 ) -> dict[str, Any]:
+    """Build the optional-field subset of a person values dict.
+
+    ``country_code`` is required by contract (no default) — pairs with
+    ``location`` and is forwarded to ``format_location``. Pass an
+    ISO-3166-1 alpha-2 code or ``None``; when ``None``, the
+    ``primary_location`` write is skipped (see ai-sfp / ai-ds6).
+    """
     values: dict[str, Any] = {}
 
     company = format_company_ref(company_domain)
     if company:
         values["associated_company"] = company
 
-    location_value = format_location(location, mode=location_mode)
+    location_value = format_location(
+        location,
+        country_code=country_code,
+        mode=location_mode,
+    )
     if location_value:
         values["primary_location"] = location_value
 

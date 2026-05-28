@@ -248,13 +248,22 @@ def profile_to_person_input(profile: HarvestProfile, email: str) -> PersonInput:
     if "location" in data:
         loc = data["location"]
         if isinstance(loc, dict):
-            parts = []
+            # Build a "city, state" string and leave country out of the
+            # text. Harvest's ``loc.get("country")`` is a free-form name
+            # (e.g. "United States", "India"), not an ISO-3166-1 alpha-2
+            # code — and ``format_location`` requires alpha-2 in
+            # ``PersonInput.country_code`` to write ``primary_location``
+            # (see ai-sfp). Until country-name → ISO-2 normalization is
+            # wired up, primary_location for enrichment-derived people
+            # will be skipped by the downstream writer rather than
+            # written with a wrong default. The locality/region tokens
+            # below are still useful to the search/lookup paths even
+            # when the location dict itself is not persisted.
+            parts: list[str] = []
             if city := loc.get("city"):
                 parts.append(city)
             if state := loc.get("state"):
                 parts.append(state)
-            if country := loc.get("country"):
-                parts.append(country)
             if parts:
                 person_input.location = ", ".join(parts)
 
