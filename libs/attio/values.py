@@ -159,9 +159,32 @@ def format_linkedin(url: str | None) -> list[str] | None:
 
 def format_location(
     location: str | None,
+    *,
+    country_code: str | None,
     mode: Literal["raw", "city"] = "city",
 ) -> list[dict[str, Any]] | None:
+    """Build an Attio ``primary_location`` value from a free-form string.
+
+    ``country_code`` is required by contract (no default), keyword-only. Pass
+    an ISO-3166-1 alpha-2 code (e.g. ``"US"``, ``"IN"``) or ``None``. A prior
+    version of this helper defaulted to ``"US"``, which silently misattributed
+    non-US data parsed from LinkedIn/CRM strings; see ai-sfp and the sibling
+    fix in ai-ds6.
+
+    Returns ``None`` when:
+    - ``location`` is empty, or
+    - ``country_code`` is ``None`` — an Attio location without a country is
+      incomplete, and emitting one would still register as a write and
+      overwrite human-curated data on repeat visits.
+
+    ``mode="city"`` treats the first comma-separated token as locality and
+    the second as region (anything after is ignored — Attio's ``location``
+    has no free country slot, only ``country_code``). ``mode="raw"`` keeps
+    the first token as ``line_1``.
+    """
     if not location:
+        return None
+    if country_code is None:
         return None
 
     parts: list[str] = str(location).split(",")
@@ -183,7 +206,7 @@ def format_location(
         "locality": locality,
         "region": region,
         "postcode": None,
-        "country_code": "US",
+        "country_code": country_code,
         "latitude": None,
         "longitude": None,
     }
@@ -402,7 +425,12 @@ def build_optional_person_values(
     if company:
         values["associated_company"] = company
 
-    location_value = format_location(location, mode=location_mode)
+    # PersonInput has no country field today, so the parsed string can't be
+    # turned into a valid Attio location without misattribution. Pass
+    # country_code=None so format_location skips the write entirely. The
+    # gap (plumb country through PersonInput, or normalize country tokens
+    # parsed from the string) is tracked as the follow-up to ai-sfp.
+    location_value = format_location(location, country_code=None, mode=location_mode)
     if location_value:
         values["primary_location"] = location_value
 

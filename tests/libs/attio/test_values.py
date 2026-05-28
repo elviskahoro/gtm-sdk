@@ -17,11 +17,30 @@ from libs.attio.values import (
 
 
 def test_format_location_city_mode_drops_street_granularity() -> None:
-    value = format_location("123 Main St, San Francisco, CA", mode="city")
+    value = format_location(
+        "123 Main St, San Francisco, CA",
+        country_code="US",
+        mode="city",
+    )
     assert value is not None
     assert value[0]["line_1"] is None
     assert value[0]["locality"] == "123 Main St"
     assert value[0]["region"] == "San Francisco"
+    assert value[0]["country_code"] == "US"
+
+
+def test_format_location_returns_none_without_country() -> None:
+    # ai-sfp: stop silently tagging non-US strings as US. When the caller
+    # can't supply a country code, the helper must skip — same contract as
+    # format_location_from_parts (ai-ds6).
+    assert format_location("Bengaluru, Karnataka, India", country_code=None) is None
+
+
+def test_format_location_passes_through_non_us_country() -> None:
+    value = format_location("Mumbai, MH", country_code="IN", mode="city")
+    assert value is not None
+    assert value[0]["locality"] == "Mumbai"
+    assert value[0]["country_code"] == "IN"
 
 
 def test_build_optional_person_values_serializes_notes_and_company() -> None:
@@ -33,7 +52,10 @@ def test_build_optional_person_values_serializes_notes_and_company() -> None:
     )
     assert "associated_company" in values
     assert "notes" in values
-    assert "primary_location" in values
+    # PersonInput doesn't carry country today, so build_optional_person_values
+    # passes country_code=None to format_location and the primary_location
+    # write is skipped — see ai-sfp.
+    assert "primary_location" not in values
 
 
 def test_build_core_person_values_combines_primary_and_additional_emails() -> None:
@@ -53,18 +75,17 @@ def test_build_core_person_values_partial_omits_emails_when_not_explicit() -> No
 
 
 def test_location_mode_raw_retains_line_1() -> None:
-    input_data = PersonInput(
-        email="a@example.com",
-        location="123 Main, SF, CA",
-        location_mode="raw",
+    # Direct unit on format_location now that build_optional_person_values
+    # no longer writes primary_location without a country (see ai-sfp).
+    value = format_location(
+        "123 Main, SF, CA",
+        country_code="US",
+        mode="raw",
     )
-    values = build_optional_person_values(
-        company_domain=input_data.company_domain,
-        notes=input_data.notes,
-        location=input_data.location,
-        location_mode=input_data.location_mode,
-    )
-    assert values["primary_location"][0]["line_1"] == "123 Main"
+    assert value is not None
+    assert value[0]["line_1"] == "123 Main"
+    assert value[0]["locality"] == "SF"
+    assert value[0]["region"] == "CA"
 
 
 # ---------- Octolens mentions ----------
