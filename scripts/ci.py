@@ -17,8 +17,9 @@ Usage:
     dagger run python scripts/ci.py --skip integration
     dagger run python scripts/ci.py --only unit
 
-Integration tests are skipped (not failed) when `INFISICAL_TOKEN` /
-`INFISICAL_PROJECT_ID` are absent. Jobs run concurrently; the script exits
+Integration tests are skipped (not failed) when any of the required credential
+env vars (`INTEGRATION_SECRET_ENV_VARS`) are absent — locally, run under
+`infisical run -- …` to populate them. Jobs run concurrently; the script exits
 non-zero if any job fails.
 """
 
@@ -106,19 +107,20 @@ async def run_unit(results: list[JobResult]) -> None:
 
 
 async def run_integration(results: list[JobResult]) -> None:
-    token = os.environ.get("INFISICAL_TOKEN")
-    project_id = os.environ.get("INFISICAL_PROJECT_ID")
-    if not token or not project_id:
+    required = pytest_integration_dagger.INTEGRATION_SECRET_ENV_VARS
+    missing = [name for name in required if not os.environ.get(name)]
+    if missing:
         results.append(
             JobResult(
                 "integration",
                 ok=True,
-                detail="skipped (INFISICAL_TOKEN/INFISICAL_PROJECT_ID not set)",
+                detail=f"skipped ({', '.join(missing)} not set)",
             ),
         )
         return
+    secret_env = {name: os.environ[name] for name in required}
     try:
-        ctr = pytest_integration_dagger.build_container(token, project_id)
+        ctr = pytest_integration_dagger.build_container(secret_env)
         await ctr.sync()
         results.append(JobResult("integration", ok=True))
     except dagger.ExecError as exc:

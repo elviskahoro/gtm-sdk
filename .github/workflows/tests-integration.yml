@@ -26,8 +26,10 @@ jobs:
 
       - name: Run integration pytest in Dagger
         env:
-          INFISICAL_TOKEN: ${{ secrets.INFISICAL_TOKEN }}
-          INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
+          ATTIO_API_KEY: ${{ secrets.ATTIO_API_KEY }}
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          PARALLEL_API_KEY: ${{ secrets.PARALLEL_API_KEY }}
         run: dagger run python .github/workflows/ci/pytest_integration_dagger.py
 
       - name: Upload Test Results to Trunk.io
