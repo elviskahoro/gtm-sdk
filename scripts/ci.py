@@ -17,8 +17,9 @@ Usage:
     dagger run python scripts/ci.py --skip integration
     dagger run python scripts/ci.py --only unit
 
-Integration tests are skipped (not failed) when `INFISICAL_TOKEN` /
-`INFISICAL_PROJECT_ID` are absent. Jobs run concurrently; the script exits
+Integration tests are skipped (not failed) when any of the required credential
+env vars (`INTEGRATION_SECRET_ENV_VARS`) are absent — locally, run under
+`infisical run -- …` to populate them. Jobs run concurrently; the script exits
 non-zero if any job fails.
 """
 
@@ -75,6 +76,48 @@ class JobResult:
     detail: str = ""
 
 
+async def _read_pytest_rc(ctr: dagger.Container) -> int:
+    """Return the pytest exit code captured at PYTEST_RC_PATH inside the container.
+
+    The pytest pipelines no longer let a failing suite abort the `with_exec`
+    (they write `$?` to `/src/pytest_rc` so `junit.xml` stays exportable), so
+    `ctr.sync()` succeeding no longer means the tests passed — the real verdict
+    lives in this file. An empty or non-integer value defaults to 1 (fail
+    closed); a failure to *read* the file (e.g. the exec itself failed) is left
+    to propagate so the caller's `ExecError`/`Exception` arms can dump the log.
+    """
+    rc_text = await ctr.file(pytest_dagger.PYTEST_RC_PATH).contents()
+    try:
+        return int(rc_text.strip())
+    except ValueError:
+        return 1
+
+
+async def _dump_pytest_logs(name: str, ctr: dagger.Container) -> Path:
+    """Snapshot the pytest exec's stdout/stderr to tmp/ci-<name>.log; return the path.
+
+    The pytest pipelines keep the `with_exec` green (the real exit code is
+    captured to /src/pytest_rc), so a failing suite no longer raises `ExecError`
+    and the `_dump_exec_error` path never fires for it. Without this, a red local
+    run would show only "pytest exit N" with no detail. `ctr.stdout()/stderr()`
+    return the last exec's output — i.e. the pytest run — so a failing suite (or
+    the preflight's ::error:: banner) stays diagnosable offline.
+    """
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = TMP_DIR / f"ci-{name}.log"
+    stdout = await ctr.stdout()
+    stderr = await ctr.stderr()
+    parts = [
+        f"=== {name} pytest stdout ===\n",
+        stdout or "",
+        f"\n=== {name} pytest stderr ===\n",
+        stderr or "",
+        "\n",
+    ]
+    log_path.write_text("".join(parts))
+    return log_path
+
+
 def _dump_exec_error(name: str, exc: dagger.ExecError) -> Path:
     """Write the failing exec's stdout/stderr to tmp/ci-<name>.log and return the path."""
     TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -94,33 +137,55 @@ def _dump_exec_error(name: str, exc: dagger.ExecError) -> Path:
 async def run_unit(results: list[JobResult]) -> None:
     try:
         ctr = pytest_dagger.build_container()
-        await ctr.sync()
-        results.append(JobResult("unit", ok=True))
+        rc = await _read_pytest_rc(ctr)
+        if rc == 0:
+            results.append(JobResult("unit", ok=True))
+        else:
+            log = await _dump_pytest_logs("unit", ctr)
+            results.append(
+                JobResult("unit", ok=False, detail=f"pytest exit {rc} (log: {log})"),
+            )
     except dagger.ExecError as exc:
         log = _dump_exec_error("unit", exc)
         results.append(
             JobResult("unit", ok=False, detail=f"exit {exc.exit_code} (log: {log})"),
         )
+    except dagger.DaggerError as exc:
+        # e.g. /src/pytest_rc unreadable when the exec itself did not raise an
+        # ExecError — surface as a controlled red result, not a traceback abort.
+        results.append(JobResult("unit", ok=False, detail=f"dagger error: {exc}"))
     except Exception as exc:  # noqa: BLE001
         results.append(JobResult("unit", ok=False, detail=str(exc)))
 
 
 async def run_integration(results: list[JobResult]) -> None:
-    token = os.environ.get("INFISICAL_TOKEN")
-    project_id = os.environ.get("INFISICAL_PROJECT_ID")
-    if not token or not project_id:
+    required = pytest_integration_dagger.INTEGRATION_SECRET_ENV_VARS
+    missing = [name for name in required if not os.environ.get(name)]
+    if missing:
         results.append(
             JobResult(
                 "integration",
                 ok=True,
-                detail="skipped (INFISICAL_TOKEN/INFISICAL_PROJECT_ID not set)",
+                detail=f"skipped ({', '.join(missing)} not set)",
             ),
         )
         return
+    secret_env = {name: os.environ[name] for name in required}
     try:
-        ctr = pytest_integration_dagger.build_container(token, project_id)
-        await ctr.sync()
-        results.append(JobResult("integration", ok=True))
+        ctr = pytest_integration_dagger.build_container(secret_env)
+        rc = await _read_pytest_rc(ctr)
+        if rc == 0:
+            results.append(JobResult("integration", ok=True))
+        else:
+            log = await _dump_pytest_logs("integration", ctr)
+            if rc == pytest_integration_dagger.PREFLIGHT_MISSING_OBJECT_RC:
+                detail = (
+                    f"preflight: required Attio object missing (exit {rc}, "
+                    f"log: {log}) — see ::error:: annotation"
+                )
+            else:
+                detail = f"pytest exit {rc} (log: {log})"
+            results.append(JobResult("integration", ok=False, detail=detail))
     except dagger.ExecError as exc:
         log = _dump_exec_error("integration", exc)
         results.append(
@@ -129,6 +194,12 @@ async def run_integration(results: list[JobResult]) -> None:
                 ok=False,
                 detail=f"exit {exc.exit_code} (log: {log})",
             ),
+        )
+    except dagger.DaggerError as exc:
+        # e.g. /src/pytest_rc unreadable when the exec itself did not raise an
+        # ExecError — surface as a controlled red result, not a traceback abort.
+        results.append(
+            JobResult("integration", ok=False, detail=f"dagger error: {exc}"),
         )
     except Exception as exc:  # noqa: BLE001
         results.append(JobResult("integration", ok=False, detail=str(exc)))
