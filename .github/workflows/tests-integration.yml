@@ -30,10 +30,15 @@ jobs:
           INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
         run: dagger run python .github/workflows/ci/pytest_integration_dagger.py
 
+      # If this step errors "Unauthorized access, your Trunk organization URL
+      # slug or token may be incorrect", it is almost always a dead/revoked
+      # TRUNK_API_TOKEN, NOT the org-slug: the analytics CLI mislabels a 404 on
+      # a bad token as an auth/slug error. Regenerate the org token at
+      # https://app.trunk.io/sanhedrin/settings and update the GHA secret. (ai-g7i)
       - name: Upload Test Results to Trunk.io
         if: ${{ !cancelled() }}
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@main
+        uses: trunk-io/analytics-uploader@1198efcc0976501147b10a7e343c3fa069527526 # v2.0.9
         with:
           junit-paths: junit.xml
           org-slug: sanhedrin
