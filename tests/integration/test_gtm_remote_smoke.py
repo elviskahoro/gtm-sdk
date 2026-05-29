@@ -9,10 +9,13 @@ from src.modal_app import MODAL_APP
 
 pytestmark = pytest.mark.integration
 
+# MODAL_ENVIRONMENT is intentionally not gated here: no call site passes
+# environment_name=, so the Modal client resolves the environment from the token's
+# default workspace environment. Requiring it would only force CI to inject a value
+# the client already infers.
 REQUIRED_ENV_VARS = [
     "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET",
-    "MODAL_ENVIRONMENT",
     "PARALLEL_API_KEY",
 ]
 
