@@ -117,6 +117,7 @@ class Webhook(FathomWebhook):
 
     def attio_get_operations(self) -> list[Any]:
         from src.attio.ops import (
+            CompanyRef,
             UpsertNote,
             MeetingExternalRef,
             MeetingParticipant,
@@ -175,6 +176,25 @@ class Webhook(FathomWebhook):
             ),
         )
         note_meeting = MeetingRef(ical_uid=ical_uid)
+        # Link the meeting to existing Attio records so it surfaces on the
+        # related people/company timelines (ai-ch3). These are *Refs*, not
+        # record_ids: the dispatcher resolves them by email/domain at write time
+        # and silently drops any that don't already exist (link-only — the
+        # /v2/meetings POST itself auto-creates participant Persons, so we never
+        # create records here). Person links cover every participant; company
+        # links cover external invitee domains only (our own org domain is not a
+        # CRM company we attach meetings to).
+        person_links = [
+            PersonRef(attribute="email", value=p.email_address) for p in participants
+        ]
+        company_domains = {
+            inv.email_domain
+            for inv in self.calendar_invitees
+            if inv.is_external and inv.email_domain
+        }
+        company_links = [
+            CompanyRef(domain=domain) for domain in sorted(company_domains)
+        ]
         ops: list[Any] = [
             UpsertMeeting(
                 external_ref=MeetingExternalRef(
@@ -188,6 +208,7 @@ class Webhook(FathomWebhook):
                 end=self.scheduled_end_time,
                 is_all_day=False,
                 participants=participants,
+                linked_records=[*person_links, *company_links],
             ),
         ]
 
