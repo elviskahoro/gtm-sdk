@@ -17,6 +17,16 @@ Re-running is safe: ``bd import`` upserts by issue ID, so existing rig copies
 are updated in place and the rig's own ``gs-*`` agent/patrol beads are left
 untouched.
 
+The rig's ``.beads/`` is deliberately gitignored in the Gas Town town repo
+(Gas Town tracks beads via Dolt's ``refs/dolt/data``, not the JSONL export).
+bd's post-write auto-export therefore can't ``git add .beads/issues.jsonl`` and
+prints a scary-but-benign ``auto-export: git add failed`` warning on every real
+import. To keep that noise from being mistaken for a sync failure, we disable
+``export.git-add`` on the rig (see ``ensure_rig_export_git_add_disabled``). That
+flips only the git-staging step — auto-export still refreshes ``issues.jsonl``
+and the Dolt commit we rely on is untouched (unlike ``--sandbox``, which would
+disable auto-sync).
+
 Usage:
     scripts/beads-sync-to-rig.py                 # export here, import into rig
     scripts/beads-sync-to-rig.py --dry-run       # show counts, change nothing
@@ -82,6 +92,28 @@ def run_bd(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def ensure_rig_export_git_add_disabled(rig_repo: Path) -> None:
+    """Turn off bd auto-export's ``git add`` on the rig (idempotent).
+
+    See the module docstring for why: the rig's gitignored ``.beads/`` makes
+    every real import emit a benign ``auto-export: git add failed`` warning.
+    Setting ``export.git-add false`` silences it without touching the Dolt
+    commit. We gate on the current value so steady-state runs stay write-free —
+    the one-time ``config set`` only fires on a freshly cloned rig (and its own
+    warning is captured, not printed).
+    """
+    current = subprocess.run(  # noqa: S603 — argv list, shell disabled
+        ["bd", "config", "get", "export.git-add"],
+        cwd=rig_repo,
+        check=False,  # unset key may exit non-zero; treat as "needs setting"
+        text=True,
+        capture_output=True,
+    )
+    if current.stdout.strip() == "false":
+        return
+    run_bd(["config", "set", "export.git-add", "false"], cwd=rig_repo)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -123,6 +155,11 @@ def main() -> int:
 
     # 2. Import into the rig DB (cwd = rig so bd targets the rig's .beads).
     rig_repo = rig_beads.parent
+    # A real import writes, which triggers the rig's auto-export git-add warning;
+    # disable it first. --dry-run writes nothing, so it never warns — skip the
+    # config write there to keep the dry run truly read-only.
+    if not opts.dry_run:
+        ensure_rig_export_git_add_disabled(rig_repo)
     import_args = ["import", str(source_export)]
     if opts.dry_run:
         import_args.append("--dry-run")
