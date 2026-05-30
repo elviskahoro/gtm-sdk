@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
 from src.attio.export import LookupTable, execute
 from src.attio.ops import (
+    CompanyRef,
     MeetingExternalRef,
     MeetingParticipant,
     MeetingRef,
@@ -566,7 +567,13 @@ def test_handle_upsert_note_resolves_parent_via_query_when_table_misses(
     )
 
     assert envelope.action == "created"
-    resolve_mock.assert_called_once_with(parent_object="people", email="buyer@acme.com")
+    # Notes keep attempts=3 (read-after-write of the just-auto-created Person).
+    # Guards against an accidental drop to the meeting path's attempts=1.
+    resolve_mock.assert_called_once_with(
+        parent_object="people",
+        email="buyer@acme.com",
+        attempts=3,
+    )
     assert add_note_mock.call_args.args[0].parent_record_id == "person-autocreated"
 
 
@@ -1279,3 +1286,355 @@ def test_handle_upsert_tracking_event_no_refs_passes_none(mock_libs) -> None:
     assert result.success is True
     input_arg = mock_libs.call_args.args[0]
     assert input_arg.related_person_record_id is None
+
+
+# ---------- UpsertMeeting.linked_records (ai-ch3) ----------
+
+
+def _meeting_with_links(
+    linked_records: list[PersonRef | CompanyRef],
+) -> UpsertMeeting:
+    return UpsertMeeting(
+        external_ref=MeetingExternalRef(ical_uid="fathom-call-links"),
+        title="t",
+        description="d",
+        start=datetime(2026, 5, 12, tzinfo=timezone.utc),
+        end=datetime(2026, 5, 12, 1, tzinfo=timezone.utc),
+        is_all_day=False,
+        participants=[
+            MeetingParticipant(email_address="a@example.com", is_organizer=True),
+        ],
+        linked_records=linked_records,
+    )
+
+
+def test_handle_upsert_meeting_resolves_links_via_live_lookup(monkeypatch) -> None:
+    """Empty table → resolve person/company refs by email/domain (Fathom path)."""
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+        if parent_object == "people" and email == "buyer@acme.com":
+            return "person-1"
+        if parent_object == "companies" and domain == "acme.com":
+            return "company-1"
+        return None
+
+    resolve_mock = MagicMock(side_effect=_resolve)
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(return_value=_ok("meet-1"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [
+                PersonRef(attribute="email", value="buyer@acme.com"),
+                CompanyRef(domain="acme.com"),
+            ],
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    # Both refs exist already → resolved in phase 1, no re-sync POST.
+    fc_mock.assert_called_once()
+    meeting_input = fc_mock.call_args.args[0]
+    linked = meeting_input.linked_records
+    assert {(lr.object, lr.record_id) for lr in linked} == {
+        ("people", "person-1"),
+        ("companies", "company-1"),
+    }
+    # Pre-existing records resolve in phase 1 with attempts=1 (no read-after-
+    # write race); phase 2's attempts=3 only fires for refs that missed.
+    for call in resolve_mock.call_args_list:
+        assert call.kwargs["attempts"] == 1
+
+
+def test_handle_upsert_meeting_skips_unresolved_links(monkeypatch) -> None:
+    """A ref that never resolves (even post-create) is dropped, NOT failed.
+
+    Contrast with notes, where an unresolved parent is a fatal error.
+    """
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    resolve_mock = MagicMock(return_value=None)
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(return_value=_ok("meet-2"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [PersonRef(attribute="email", value="ghost@nowhere.com")],
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    # Phase 1 missed and phase 2's read-after-write retry also missed, so no
+    # re-sync POST happens and the ref is dropped.
+    fc_mock.assert_called_once()
+    assert fc_mock.call_args.args[0].linked_records == []
+    attempts_used = {call.kwargs["attempts"] for call in resolve_mock.call_args_list}
+    assert attempts_used == {1, 3}
+    # The drop is observable, not silent: partial success + a warning.
+    assert envelope.partial_success is True
+    assert any(w.code == "unresolved_meeting_links" for w in envelope.warnings)
+
+
+def test_handle_upsert_meeting_unresolved_company_warns(monkeypatch) -> None:
+    """A company genuinely not in Attio survives the retry as unresolved."""
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    resolve_mock = MagicMock(return_value=None)
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(return_value=_ok("meet-c"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links([CompanyRef(domain="notin.crm")]),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    # Retried (attempts=1 then 3) but still absent → no re-sync POST, surfaced.
+    fc_mock.assert_called_once()
+    assert fc_mock.call_args.args[0].linked_records == []
+    assert {call.kwargs["attempts"] for call in resolve_mock.call_args_list} == {1, 3}
+    assert envelope.partial_success is True
+    assert any(w.code == "unresolved_meeting_links" for w in envelope.warnings)
+
+
+def test_handle_upsert_meeting_relinks_company_on_transient_miss(monkeypatch) -> None:
+    """A company that misses phase 1 but resolves on retry links via re-sync.
+
+    Covers a transient lookup miss or a company created by a concurrent pipeline
+    just before this webhook ran.
+    """
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+        if parent_object == "companies" and domain == "acme.com" and attempts == 3:
+            return "company-late"
+        return None
+
+    monkeypatch.setattr(
+        "src.attio.export.libs_resolve_record_id_for_ref",
+        MagicMock(side_effect=_resolve),
+    )
+    fc_mock = MagicMock(side_effect=[_ok("meet-tc"), _ok("meet-tc")])
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links([CompanyRef(domain="acme.com")]),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    assert envelope.partial_success is False
+    assert fc_mock.call_count == 2
+    assert fc_mock.call_args_list[0].args[0].linked_records == []
+    second_links = fc_mock.call_args_list[1].args[0].linked_records
+    assert [(lr.object, lr.record_id) for lr in second_links] == [
+        ("companies", "company-late"),
+    ]
+
+
+def test_handle_upsert_meeting_prefers_table_over_live_lookup(monkeypatch) -> None:
+    """A ref already in the plan's LookupTable short-circuits the live query."""
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    table = LookupTable()
+    table.record(
+        UpsertPerson(matching_attribute="email", email="buyer@acme.com"),
+        "person-from-table",
+    )
+
+    resolve_mock = MagicMock(return_value="should-not-be-used")
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(return_value=_ok("meet-3"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [PersonRef(attribute="email", value="buyer@acme.com")],
+        ),
+        table,
+    )
+
+    assert envelope.success is True
+    resolve_mock.assert_not_called()
+    linked = fc_mock.call_args.args[0].linked_records
+    assert [(lr.object, lr.record_id) for lr in linked] == [
+        ("people", "person-from-table"),
+    ]
+
+
+def test_handle_upsert_meeting_dedups_links(monkeypatch) -> None:
+    """Refs resolving to the same (object, record_id) collapse to one link."""
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    monkeypatch.setattr(
+        "src.attio.export.libs_resolve_record_id_for_ref",
+        MagicMock(return_value="person-dup"),
+    )
+    fc_mock = MagicMock(return_value=_ok("meet-4"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [
+                PersonRef(attribute="email", value="a@acme.com"),
+                PersonRef(attribute="email", value="b@acme.com"),
+            ],
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    linked = fc_mock.call_args.args[0].linked_records
+    assert [(lr.object, lr.record_id) for lr in linked] == [("people", "person-dup")]
+
+
+def test_handle_upsert_meeting_empty_links_makes_no_lookups(monkeypatch) -> None:
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    resolve_mock = MagicMock(return_value="x")
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(return_value=_ok("meet-5"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(_meeting_with_links([]), LookupTable())
+
+    assert envelope.success is True
+    resolve_mock.assert_not_called()
+    fc_mock.assert_called_once()
+    assert fc_mock.call_args.args[0].linked_records == []
+
+
+def test_handle_upsert_meeting_non_email_person_ref_warns(monkeypatch) -> None:
+    """A linkedin/github person ref not in the table is dropped but surfaced.
+
+    The live lookup is email-only, so these identities resolve solely via the
+    plan's LookupTable; an unresolved one must not vanish silently.
+    """
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    resolve_mock = MagicMock(return_value=None)
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(return_value=_ok("meet-li"))
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [PersonRef(attribute="linkedin", value="https://linkedin.com/in/x")],
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    fc_mock.assert_called_once()
+    assert fc_mock.call_args.args[0].linked_records == []
+    # The live lookup is email-only, so a linkedin ref never reaches it (table
+    # miss → straight to unresolved). It is counted, not silently dropped.
+    resolve_mock.assert_not_called()
+    assert envelope.partial_success is True
+    assert any(w.code == "unresolved_meeting_links" for w in envelope.warnings)
+
+
+def test_handle_upsert_meeting_relinks_autocreated_participant(monkeypatch) -> None:
+    """A first-time attendee misses phase 1, then links via a re-sync POST.
+
+    Models the roborev gap: /v2/meetings auto-creates the participant Person, so
+    the ref that missed before the write is resolvable after it. The handler
+    re-resolves (attempts=3) and re-POSTs to attach the just-created record.
+    """
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+        if parent_object == "companies" and domain == "acme.com":
+            return "company-1"  # pre-existing company, resolves in phase 1
+        if parent_object == "people" and email == "buyer@acme.com" and attempts == 3:
+            return "person-autocreated"  # only resolvable AFTER the meeting POST
+        return None
+
+    resolve_mock = MagicMock(side_effect=_resolve)
+    monkeypatch.setattr("src.attio.export.libs_resolve_record_id_for_ref", resolve_mock)
+    fc_mock = MagicMock(side_effect=[_ok("meet-6"), _ok("meet-6")])
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [
+                PersonRef(attribute="email", value="buyer@acme.com"),
+                CompanyRef(domain="acme.com"),
+            ],
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    assert fc_mock.call_count == 2
+    # Phase 1 POST carries only the pre-existing company.
+    first_links = fc_mock.call_args_list[0].args[0].linked_records
+    assert [(lr.object, lr.record_id) for lr in first_links] == [
+        ("companies", "company-1"),
+    ]
+    # Re-sync POST carries the company plus the auto-created participant Person.
+    second_links = fc_mock.call_args_list[1].args[0].linked_records
+    assert {(lr.object, lr.record_id) for lr in second_links} == {
+        ("companies", "company-1"),
+        ("people", "person-autocreated"),
+    }
+
+
+def test_handle_upsert_meeting_relink_failure_degrades_to_warning(monkeypatch) -> None:
+    """A failed re-sync keeps the (created) meeting as a partial success.
+
+    The meeting already exists from phase 1, so a failed re-link must not abort
+    the plan — downstream notes still need to run.
+    """
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
+
+    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+        if attempts == 3 and email == "buyer@acme.com":
+            return "person-autocreated"
+        return None
+
+    monkeypatch.setattr(
+        "src.attio.export.libs_resolve_record_id_for_ref",
+        MagicMock(side_effect=_resolve),
+    )
+    fc_mock = MagicMock(side_effect=[_ok("meet-7"), _fail("relink boom")])
+    monkeypatch.setattr("src.attio.export.find_or_create_meeting", fc_mock)
+
+    envelope = _handle_upsert_meeting(
+        _meeting_with_links(
+            [PersonRef(attribute="email", value="buyer@acme.com")],
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    assert envelope.partial_success is True
+    assert envelope.record_id == "meet-7"
+    assert fc_mock.call_count == 2
+    assert any(w.code == "unresolved_meeting_links" for w in envelope.warnings)

@@ -8,6 +8,7 @@ import orjson
 from libs.fathom.models import ActionItem, Assignee
 from libs.meetings import canonical_meeting_uid
 from src.attio.ops import (
+    CompanyRef,
     UpsertNote,
     MeetingExternalRef,
     MeetingRef,
@@ -73,6 +74,37 @@ def test_attio_get_operations_falls_back_to_recorder_with_no_attendees() -> None
     assert isinstance(note.parent, PersonRef)
     assert note.parent.value == "host@dlthub.com"
     assert isinstance(note.meeting, MeetingRef)
+
+
+def test_attio_get_operations_emits_linked_records() -> None:
+    """Meeting links to a Person per participant and a Company per external domain.
+
+    The fixture has recorder host@dlthub.com, an internal invitee host@dlthub.com
+    and an external invitee external@example.com / example.com (ai-ch3).
+    """
+    op = _load().attio_get_operations()[0]
+    assert isinstance(op, UpsertMeeting)
+
+    person_emails = {
+        ref.value for ref in op.linked_records if isinstance(ref, PersonRef)
+    }
+    assert person_emails == {"host@dlthub.com", "external@example.com"}
+
+    company_domains = {
+        ref.domain for ref in op.linked_records if isinstance(ref, CompanyRef)
+    }
+    # Only the EXTERNAL invitee domain is linked; our own org domain is not.
+    assert company_domains == {"example.com"}
+    assert "dlthub.com" not in company_domains
+
+
+def test_attio_get_operations_recorder_only_has_no_company_links() -> None:
+    """Ad-hoc recordings (no invitees) link the recorder Person and no company."""
+    w = _load()
+    w.calendar_invitees = []
+    op = w.attio_get_operations()[0]
+    assert isinstance(op, UpsertMeeting)
+    assert op.linked_records == [PersonRef(attribute="email", value="host@dlthub.com")]
 
 
 def test_attio_is_valid_webhook_false_with_no_recording_id() -> None:

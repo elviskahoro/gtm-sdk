@@ -30,6 +30,7 @@ from libs.attio.models import (
 from libs.attio.models import (
     MeetingInput,
     MeetingLifecycleEventInput,
+    MeetingLinkedRecord,
     MeetingParticipantInput,
     MentionInput,
     NoteInput,
@@ -322,37 +323,148 @@ def _handle_upsert_company(
     )
 
 
+def _meeting_input(
+    op: UpsertMeeting,
+    linked_records: list[MeetingLinkedRecord],
+) -> MeetingInput:
+    return MeetingInput(
+        external_ref=LibMeetingExternalRef(
+            ical_uid=op.external_ref.ical_uid,
+            provider=op.external_ref.provider,
+            is_recurring=op.external_ref.is_recurring,
+            original_start_time=op.external_ref.original_start_time,
+        ),
+        title=op.title,
+        description=op.description,
+        start=op.start,
+        end=op.end,
+        is_all_day=op.is_all_day,
+        participants=[
+            MeetingParticipantInput(
+                email_address=p.email_address,
+                is_organizer=p.is_organizer,
+                status=p.status,
+            )
+            for p in op.participants
+        ],
+        linked_records=linked_records,
+    )
+
+
 def _handle_upsert_meeting(
     op: UpsertMeeting,
-    table: LookupTable,  # noqa: ARG001 — Fathom path does not need linked_records
+    table: LookupTable,
 ) -> ReliabilityEnvelope:
-    return find_or_create_meeting(
-        MeetingInput(
-            external_ref=LibMeetingExternalRef(
-                ical_uid=op.external_ref.ical_uid,
-                provider=op.external_ref.provider,
-                is_recurring=op.external_ref.is_recurring,
-                original_start_time=op.external_ref.original_start_time,
+    """Create the meeting and link it to the people/companies it involves (ai-ch3).
+
+    Resolution runs in two phases around the write because ``/v2/meetings``
+    auto-creates a Person for each ``participant`` — a record that does not yet
+    exist when we first resolve, so a single pre-write pass would permanently
+    drop every first-time attendee (the gap roborev flagged).
+
+    Phase 1 links the records that already exist (``attempts=1`` — no read-after-
+    write race for pre-existing records) and POSTs the meeting, which creates the
+    participant Persons. Phase 2 re-resolves the refs that missed with
+    ``attempts=3`` and a repeat POST re-syncs the newly found records onto the
+    meeting. ``/v2/meetings`` is a sync endpoint — repeat POSTs sharing an
+    ``ical_uid`` converge the same record's ``linked_records`` — so the second
+    write attaches them rather than duplicating the meeting. The retry serves a
+    participant Person (just auto-created — guaranteed to resolve) and a Company
+    alike (a transient lookup miss, or one created by a concurrent pipeline).
+
+    Companies are still link-if-exists, never create: Attio does not create them
+    from participants the way it does Persons, and manufacturing a company per
+    raw email domain (e.g. ``gmail.com``) would pollute the CRM. A domain that is
+    genuinely not in Attio stays unresolved after the retry and is surfaced in
+    the ``unresolved_meeting_links`` warning rather than linked or invented.
+
+    Person identities other than ``email`` (linkedin/github_handle) resolve only
+    via the plan's LookupTable — the live lookup is email-only — so an unresolved
+    one is dropped immediately (not retriable) and likewise surfaced.
+    """
+    # (parent_object, record_id) -> link, deduped across both phases.
+    links: dict[tuple[str, str], MeetingLinkedRecord] = {}
+    retriable: list[PersonRef | CompanyRef] = []
+    unresolved_persons = 0
+    unresolved_companies = 0
+    for ref in op.linked_records:
+        parent_object = _REF_KIND_TO_PARENT_OBJECT[ref.ref_kind]
+        record_id = _resolve_ref_record_id(ref, table, attempts=1)
+        if record_id is not None:
+            links[(parent_object, record_id)] = MeetingLinkedRecord(
+                object=parent_object,
+                record_id=record_id,
+            )
+        elif isinstance(ref, CompanyRef) or ref.attribute == "email":
+            # Both resolve via the email/domain live lookup, so both can be
+            # retried after the write (read-after-write for the auto-created
+            # participant Person; transient/concurrent miss for the company).
+            retriable.append(ref)
+        else:
+            # Non-email PersonRef: the live lookup can't resolve it, so a table
+            # miss is terminal.
+            unresolved_persons += 1
+
+    envelope = find_or_create_meeting(_meeting_input(op, list(links.values())))
+    if not envelope.success:
+        return envelope
+
+    # Phase 2: re-resolve the refs that missed before the write and re-sync them.
+    newly_linked: list[PersonRef | CompanyRef] = []
+    for ref in retriable:
+        parent_object = _REF_KIND_TO_PARENT_OBJECT[ref.ref_kind]
+        record_id = _resolve_ref_record_id(ref, table, attempts=3)
+        if record_id is None:
+            if isinstance(ref, CompanyRef):
+                unresolved_companies += 1
+            else:
+                unresolved_persons += 1
+            continue
+        key = (parent_object, record_id)
+        if key not in links:
+            links[key] = MeetingLinkedRecord(
+                object=parent_object,
+                record_id=record_id,
+            )
+            newly_linked.append(ref)
+
+    if newly_linked:
+        relink = find_or_create_meeting(_meeting_input(op, list(links.values())))
+        if not relink.success:
+            # The meeting exists (phase 1 succeeded with its links attached);
+            # only the re-sync that attaches the newly found records failed. Count
+            # exactly those as unresolved so the warning below is accurate, and
+            # degrade to a partial success rather than aborting the plan's
+            # downstream notes.
+            unresolved_companies += sum(
+                1 for ref in newly_linked if isinstance(ref, CompanyRef)
+            )
+            unresolved_persons += sum(
+                1 for ref in newly_linked if isinstance(ref, PersonRef)
+            )
+
+    # Make dropped associations observable (ai-ch3): a meeting that links some
+    # but not all of its people/companies must NOT read as a clean success, or
+    # the hydration silently no-ops when Attio lookups lag or a company is not
+    # yet in the CRM. Mirrors the mention handler — the primary record wrote, but
+    # enrichment links did not fully attach -> partial_success.
+    if unresolved_persons or unresolved_companies:
+        envelope.partial_success = True
+        envelope.warnings.append(
+            WarningEntry(
+                code="unresolved_meeting_links",
+                message=(
+                    f"meeting linked, but {unresolved_persons} participant(s) and "
+                    f"{unresolved_companies} external compan(y/ies) could not be "
+                    "linked (record not in Attio, or non-email person ref); these "
+                    "link on a later touch"
+                ),
+                field="linked_records",
+                retryable=True,
             ),
-            title=op.title,
-            description=op.description,
-            start=op.start,
-            end=op.end,
-            is_all_day=op.is_all_day,
-            participants=[
-                MeetingParticipantInput(
-                    email_address=p.email_address,
-                    is_organizer=p.is_organizer,
-                    status=p.status,
-                )
-                for p in op.participants
-            ],
-            # Pass 3 will resolve op.linked_records through `table`; the Fathom
-            # path uses /v2/meetings' implicit person/company auto-creation from
-            # participants[].
-            linked_records=[],
-        ),
-    )
+        )
+
+    return envelope
 
 
 # Notes hang off a *standard object* record. Meetings are deliberately absent:
@@ -385,31 +497,40 @@ def _unresolved_ref_envelope(label: str, detail: str) -> ReliabilityEnvelope:
     )
 
 
-def _resolve_note_parent_record_id(
-    parent: PersonRef | CompanyRef,
+def _resolve_ref_record_id(
+    ref: PersonRef | CompanyRef,
     table: LookupTable,
+    *,
+    attempts: int = 3,
 ) -> str | None:
-    """Resolve a note's parent record_id, falling back to a live Attio query.
+    """Resolve a person/company Ref to a record_id, falling back to a live query.
 
     Prefer the plan's LookupTable (a prior ``UpsertPerson``/``UpsertCompany``
-    in the same plan). When the parent was not created explicitly in this plan
-    — the Fathom case, where ``/v2/meetings`` auto-creates the participant
-    Person — resolve it by email/domain. ``PersonRef`` identities other than
-    ``email`` (linkedin/github_handle) cannot be resolved this way and return
-    ``None``.
+    in the same plan). When the ref was not created explicitly in this plan
+    resolve it by email/domain. ``PersonRef`` identities other than ``email``
+    (linkedin/github_handle) cannot be resolved this way and return ``None``.
+
+    ``attempts`` tunes the live-query retry. Notes default to ``3`` (read-after-
+    write: the participant Person was just auto-created by the meeting POST, and
+    Attio's record search can lag). The meeting ``linked_records`` path passes
+    ``1``: there a miss is the expected normal case (the record genuinely does
+    not exist yet — link-only), so paying retry backoff per unknown attendee
+    would dominate the backfill (ai-ch3).
     """
-    resolved = table.resolve(parent)
+    resolved = table.resolve(ref)
     if resolved is not None:
         return resolved
-    if isinstance(parent, PersonRef) and parent.attribute == "email":
+    if isinstance(ref, PersonRef) and ref.attribute == "email":
         return libs_resolve_record_id_for_ref(
             parent_object="people",
-            email=parent.value,
+            email=ref.value,
+            attempts=attempts,
         )
-    if isinstance(parent, CompanyRef):
+    if isinstance(ref, CompanyRef):
         return libs_resolve_record_id_for_ref(
             parent_object="companies",
-            domain=parent.domain,
+            domain=ref.domain,
+            attempts=attempts,
         )
     return None
 
@@ -420,7 +541,7 @@ def _handle_upsert_note(
 ) -> ReliabilityEnvelope:
     parent_object = _REF_KIND_TO_PARENT_OBJECT[op.parent.ref_kind]
 
-    parent_record_id = _resolve_note_parent_record_id(op.parent, table)
+    parent_record_id = _resolve_ref_record_id(op.parent, table)
     if parent_record_id is None:
         return _unresolved_ref_envelope(op.parent.ref_kind, str(op.parent.model_dump()))
 
