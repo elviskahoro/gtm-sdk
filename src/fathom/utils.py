@@ -120,6 +120,52 @@ def render_action_items_markdown(items: list[ActionItem]) -> str:
     return "\n".join(rendered_lines)
 
 
+def build_meeting_description(
+    *,
+    summary_markdown: str | None,
+    fallback_title: str,
+    recording_url: str | None,
+    recording_id: int,
+    transcript_language: str | None,
+) -> str:
+    """Compose the Attio Meeting ``description`` from Fathom metadata.
+
+    Attio's Meeting object has a constrained schema — ``description`` is the
+    only free-text field, so it is where Fathom metadata without a native home
+    (the recording link, Fathom recording id, language) is surfaced.
+
+    Layout: the summary markdown (or the meeting title when no summary exists)
+    as the body, then a ``---`` rule and a one-line source footer linking back
+    to the Fathom recording. Keeping the summary in the description matters
+    while notes-on-meetings is broken (ai-gez): the description is currently the
+    only place a teammate can read the summary inside Attio.
+    """
+    body = (summary_markdown or "").strip() or fallback_title
+    footer = _recording_source_line(
+        recording_url=recording_url,
+        recording_id=recording_id,
+        transcript_language=transcript_language,
+    )
+    return f"{body}\n\n---\n{footer}"
+
+
+def _recording_source_line(
+    *,
+    recording_url: str | None,
+    recording_id: int,
+    transcript_language: str | None,
+) -> str:
+    """One-line provenance footer linking back to the Fathom recording."""
+    parts: list[str] = []
+    if recording_url and recording_url.startswith("https://"):
+        parts.append(f"🎥 [Watch the Fathom recording]({recording_url})")
+    parts.append(f"Fathom recording #{recording_id}")
+    language = (transcript_language or "").strip()
+    if language:
+        parts.append(f"language: {language}")
+    return " · ".join(parts)
+
+
 def fathom_summary_title(template_name: str | None) -> str:
     """Build the title used for the Fathom-summary UpsertNote.
 

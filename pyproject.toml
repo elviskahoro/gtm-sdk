@@ -44,6 +44,7 @@ dependencies = [
   "pyyaml>=6.0.3",
   "types-pyyaml>=6.0.12.20260510",
   "pycountry>=24.0.0",
+  "fathom-python>=0.0.30",
 ]
 
 [project.optional-dependencies]
