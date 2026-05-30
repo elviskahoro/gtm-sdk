@@ -40,11 +40,26 @@ from pathlib import Path
 # CWD is wherever the operator invoked the command, not this folder.
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-SOURCE_BEADS = REPO_ROOT / ".beads"
-SOURCE_EXPORT = SOURCE_BEADS / "issues.jsonl"
 
 DEFAULT_TOWN_ROOT = Path.home() / "Documents" / "ai" / "town"
 DEFAULT_RIG_NAME = "gtm_sdk"
+
+
+def resolve_source_beads() -> Path | None:
+    """Find the source ``.beads`` dir the same way ``bd`` itself resolves it.
+
+    In the primary gtm-sdk checkout, ``.beads`` is a symlink that sits directly
+    under the repo root. In a Conductor worktree (the common case) the worktree
+    has no local ``.beads`` at all — ``bd`` finds the shared DB by walking up
+    the directory tree (e.g. to ``ai/.beads``). Hard-coding ``REPO_ROOT/.beads``
+    breaks in every worktree, so we mirror ``bd``'s walk-up here. Starting from
+    ``REPO_ROOT`` also covers the symlink case, since ``is_dir()`` follows links.
+    """
+    for base in (REPO_ROOT, *REPO_ROOT.parents):
+        candidate = base / ".beads"
+        if candidate.is_dir():
+            return candidate.resolve()
+    return None
 
 
 def resolve_rig_beads(override: str | None) -> Path:
@@ -80,11 +95,16 @@ def main() -> int:
     )
     opts = parser.parse_args()
 
+    source_beads = resolve_source_beads()
+    if source_beads is None:
+        print(
+            f"error: no .beads dir found at or above {REPO_ROOT}",
+            file=sys.stderr,
+        )
+        return 1
+    source_export = source_beads / "issues.jsonl"
     rig_beads = resolve_rig_beads(opts.rig_beads)
 
-    if not SOURCE_BEADS.is_dir():
-        print(f"error: source beads dir not found: {SOURCE_BEADS}", file=sys.stderr)
-        return 1
     if not rig_beads.is_dir():
         print(
             f"error: rig beads dir not found: {rig_beads}\n"
@@ -94,14 +114,16 @@ def main() -> int:
         return 1
 
     # 1. Refresh the source export so issues.jsonl reflects the live DB.
-    print(f"→ exporting beads from {REPO_ROOT}")
-    run_bd(["export"], cwd=REPO_ROOT)
-    line_count = sum(1 for _ in SOURCE_EXPORT.open())
-    print(f"  {line_count} record(s) in {SOURCE_EXPORT}")
+    #    Run `bd export` from the .beads parent so bd targets this exact DB
+    #    (its own walk-up would otherwise depend on the invocation CWD).
+    print(f"→ exporting beads from {source_beads.parent}")
+    run_bd(["export"], cwd=source_beads.parent)
+    line_count = sum(1 for _ in source_export.open())
+    print(f"  {line_count} record(s) in {source_export}")
 
     # 2. Import into the rig DB (cwd = rig so bd targets the rig's .beads).
     rig_repo = rig_beads.parent
-    import_args = ["import", str(SOURCE_EXPORT)]
+    import_args = ["import", str(source_export)]
     if opts.dry_run:
         import_args.append("--dry-run")
     print(f"→ {'dry-run import into' if opts.dry_run else 'importing into'} {rig_repo}")
