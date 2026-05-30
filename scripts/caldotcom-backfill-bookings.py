@@ -35,6 +35,16 @@ Usage (dry-run is the default; nothing is POSTed until --apply):
 
 Requires ``CALCOM_API_KEY`` (cal.com fetch) and, for ``--apply``, the Modal
 workspace prefix (defaults to ``devx``; override with ``MODAL_WORKSPACE``).
+
+Meetings land in PROD only (ai-h5y). Attio's ``/v2/meetings`` feature is ALPHA
+and is provisioned only in the prod Attio workspace, so ``UpsertMeeting`` lands
+a Meeting record only when the target webhook authenticates against PROD Attio.
+The dev/prod split is the injected ``ATTIO_API_KEY`` (the Infisical env the
+Modal app was deployed under) — NOT the ``MODAL_WORKSPACE`` URL prefix. Against
+a dev-backed webhook every ``UpsertMeeting`` dead-letters with ``not_found``
+(meetings unprovisioned); that is EXPECTED, not a backfill gap, and is correctly
+non-retryable (see ``_RETRYABLE_BODY_ERROR_CODES``). Run the backfill against the
+prod-backed webhook deployment to actually create meeting records.
 """
 
 from __future__ import annotations
@@ -135,6 +145,9 @@ def _write_jsonl(
 # unreachable) and worth retrying when they surface inside a 200 body. Mirrors
 # libs/attio/errors.py — only connectivity is genuinely retryable; auth/schema/
 # not-found/validation are deterministic and must dead-letter immediately.
+# Note: against a dev-backed webhook, UpsertMeeting dead-letters here with
+# `not_found` because Attio's meetings feature is unprovisioned in dev (ai-h5y).
+# That is expected and correctly non-retryable — run against prod to land meetings.
 _RETRYABLE_BODY_ERROR_CODES = ("connectivity_error",)
 
 

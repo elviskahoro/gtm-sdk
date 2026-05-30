@@ -111,3 +111,23 @@ def test_get_person_values_linkedin_expands_url_variants(mock_get_client) -> Non
     assert filter_ == {
         "$or": [{"linkedin": v} for v in expected_variants],
     }, f"Expected $or-of-variants filter, got {filter_}"
+
+
+@patch("libs.attio.people.get_client")
+def test_update_person_missing_selector_is_validation_error(mock_get_client) -> None:
+    """A missing id+email is a client-input error (→400), not a lookup miss
+    (→404). Guards the AttioNotFoundError→AttioValidationError split (ai-h5y)."""
+    from libs.attio.errors import AttioValidationError
+    from libs.attio.models import PersonInput
+    from libs.attio.people import update_person
+
+    mock_get_client.return_value.__enter__.return_value = MagicMock()
+
+    # The selector check is on the `email` argument, not the input payload —
+    # the input still needs a valid identifier to construct.
+    with pytest.raises(AttioValidationError):
+        update_person(
+            record_id=None,
+            email=None,
+            input=PersonInput(github_handle="elviskahoro"),
+        )

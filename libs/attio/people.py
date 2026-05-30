@@ -463,7 +463,10 @@ def update_person(
     with get_client() as client:
         if not record_id:
             if not email:
-                raise AttioNotFoundError(
+                # Missing selector is a client-input error (→400), not a lookup
+                # miss (→404). Keep AttioNotFoundError for the genuine
+                # "no record matched" case below. See ai-h5y.
+                raise AttioValidationError(
                     "Provide --id or --email to identify the person.",
                 )
             query_response = client.records.post_v2_objects_object_records_query(
