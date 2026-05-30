@@ -10,6 +10,7 @@ ERROR_CODE_TO_STATUS = {
     "validation_error": 400,
     "conflict": 409,
     "schema_mismatch": 422,
+    "not_found": 404,
     "connectivity_error": 503,
     "configuration_error": 500,
     "unknown_error": 500,
