@@ -92,6 +92,13 @@ class UpsertPerson(BaseModel):
 
     op_type: Literal["upsert_person"] = "upsert_person"
     matching_attribute: Literal["email", "linkedin", "github_handle"]
+    # When True, a failed person upsert does NOT abort the rest of the plan:
+    # the dispatcher records the failure but keeps going, and any downstream
+    # ref (e.g. UpsertMention.related_person) degrades to "unresolved" instead
+    # of failing. Use for sources where the person is enrichment and some other
+    # op is the primary record (octolens social_mention). The overall execution
+    # `success` bit ignores failures of optional ops. See ai-0ex.
+    optional: bool = False
     email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
@@ -192,6 +199,13 @@ class UpsertMention(BaseModel):
     bookmarked: bool = False
     image_url: str | None = None
     related_person: PersonRef | None = None
+    # When True, an unresolvable ``related_person`` is degraded to a warning and
+    # the mention is written WITHOUT the link, rather than failing the op. Use
+    # for sources where the person link is enrichment and the mention is the
+    # primary record (octolens). Default False keeps an unresolved ref a hard
+    # failure so genuine missing-reference bugs in other plans stay loud. See
+    # ai-0ex.
+    related_person_optional: bool = False
 
 
 class UpsertTrackingEvent(BaseModel):

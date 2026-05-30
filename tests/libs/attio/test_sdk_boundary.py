@@ -154,6 +154,49 @@ def test_uniqueness_conflict_detection_falls_back_to_substring_for_non_json() ->
     assert sdk_boundary.is_uniqueness_conflict(err) is True
 
 
+def test_unknown_filter_attribute_matches_unknown_filter_attribute_slug_code() -> None:
+    err = _ErrWithBody(
+        '{"status_code": 400, "type": "invalid_request_error",'
+        ' "code": "unknown_filter_attribute_slug", "message": "unknown attribute"}',
+    )
+    assert sdk_boundary.is_unknown_filter_attribute(err) is True
+
+
+def test_unknown_filter_attribute_ignores_broader_filter_error_code() -> None:
+    # `filter_error` is the broad category (covers recoverable filter validation
+    # failures). Degrading those into a SchemaMismatchError would mask real
+    # problems, so only the specific slug marker matches.
+    err = _ErrWithBody(
+        '{"type": "invalid_request_error", "code": "filter_error",'
+        ' "message": "bad filter value"}',
+    )
+    assert sdk_boundary.is_unknown_filter_attribute(err) is False
+
+
+def test_unknown_filter_attribute_ignores_type_field() -> None:
+    # Only `code` distinguishes the filter error; matching on `type` would be a
+    # false-positive vector.
+    err = _ErrWithBody(
+        '{"type": "unknown_filter_attribute_slug", "code": "validation_type"}',
+    )
+    assert sdk_boundary.is_unknown_filter_attribute(err) is False
+
+
+def test_unknown_filter_attribute_ignores_unrelated_substring_in_json() -> None:
+    err = _ErrWithBody(
+        '{"code": "validation_type",'
+        ' "message": "the filter_error docs explain unknown attributes"}',
+    )
+    assert sdk_boundary.is_unknown_filter_attribute(err) is False
+
+
+def test_unknown_filter_attribute_falls_back_to_substring_for_non_json() -> None:
+    # ResponseValidationError stringifies the pydantic failure, which includes
+    # the offending `unknown_filter_attribute_slug` input value.
+    err = _ErrWithBody("input_value='unknown_filter_attribute_slug' ... not JSON")
+    assert sdk_boundary.is_unknown_filter_attribute(err) is True
+
+
 def test_extract_existing_record_id_from_json_body() -> None:
     body = '{"data": {"existing_record": {"id": {"record_id": "rec_existing"}}}}'
     err = _ErrWithBody(body)

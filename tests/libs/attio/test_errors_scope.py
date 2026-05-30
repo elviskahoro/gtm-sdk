@@ -7,7 +7,11 @@ The opaque "...does not exist or you do not have permission to access it." messa
 
 from __future__ import annotations
 
-from libs.attio.errors import AttioScopeError, classify_error
+from libs.attio.errors import (
+    AttioScopeError,
+    SchemaMismatchError,
+    classify_error,
+)
 
 
 class _FakeSDKError(Exception):
@@ -16,6 +20,20 @@ class _FakeSDKError(Exception):
     def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.raw_response = type("R", (), {"status_code": status_code})()
+
+
+def test_schema_mismatch_classifies_as_schema_mismatch() -> None:
+    # A missing filter attribute (github_handle pre-bootstrap) is translated to
+    # SchemaMismatchError at the lib boundary; classify_error must bucket it as
+    # `schema_mismatch` (not the catch-all `unknown_error`) and preserve the
+    # field for an actionable envelope (ai-0ex).
+    err = SchemaMismatchError(
+        "people object has no filter attribute 'github_handle'",
+        field="github_handle",
+    )
+    classified = classify_error(err)
+    assert classified.code == "schema_mismatch"
+    assert classified.field == "github_handle"
 
 
 def test_permission_message_classifies_as_insufficient_scope() -> None:

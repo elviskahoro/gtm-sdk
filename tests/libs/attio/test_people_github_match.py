@@ -1,9 +1,21 @@
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from libs.attio.errors import SchemaMismatchError
 from libs.attio.models import PersonInput
-from libs.attio.people import upsert_person
+from libs.attio.people import _search_people_raw, upsert_person
+
+
+class _ErrWithBody(Exception):
+    """Mimics the attio SDK's ResponseValidationError carrying a `.body`."""
+
+    def __init__(self, body: str) -> None:
+        super().__init__("response validation failed")
+        self.body = body
 
 
 @patch("libs.attio.people._search_people_raw")
@@ -35,3 +47,21 @@ def test_upsert_person_email_match_unchanged(mock_add, mock_search) -> None:
 
     kwargs = mock_search.call_args.kwargs
     assert kwargs.get("email") == "a@example.com"
+
+
+@patch("libs.attio.people.get_client")
+def test_search_people_raw_translates_unknown_filter_attribute(mock_get_client) -> None:
+    """Querying people by an undefined slug (github_handle pre-bootstrap) yields
+    a `filter_error` the SDK can't unmarshal; _search_people_raw must surface a
+    typed SchemaMismatchError, not a raw ResponseValidationError (ai-0ex)."""
+    client = mock_get_client.return_value.__enter__.return_value
+    client.records.post_v2_objects_object_records_query.side_effect = _ErrWithBody(
+        '{"status_code": 400, "type": "invalid_request_error",'
+        ' "code": "unknown_filter_attribute_slug", "message": "Unknown attribute'
+        ' slug: github_handle"}',
+    )
+
+    with pytest.raises(SchemaMismatchError) as exc_info:
+        _search_people_raw(github_handle="elviskahoro")
+
+    assert exc_info.value.field == "github_handle"

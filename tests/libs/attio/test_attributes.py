@@ -344,9 +344,15 @@ class _FakeReadAttributes:
         self.statuses = statuses or {}
         self.attrs_error = attrs_error
 
-    def get_v2_target_identifier_attributes(self, *, target, identifier):
+    def get_v2_target_identifier_attributes(
+        self,
+        *,
+        target,
+        identifier,
+        show_archived=False,
+    ):
         assert target == "objects"
-        del identifier
+        del identifier, show_archived
         if self.attrs_error is not None:
             raise self.attrs_error
         return _resp(self.attrs)

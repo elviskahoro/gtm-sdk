@@ -27,6 +27,7 @@ from libs.attio.sdk_boundary import (
     build_post_record_request,
     extract_exception_body_text,
     is_uniqueness_conflict,
+    is_unknown_filter_attribute,
 )
 from libs.attio.values import (
     build_core_person_values,
@@ -264,11 +265,32 @@ def _search_people_raw(
         else:
             filter_ = {"$and": conditions}
 
-        response = client.records.post_v2_objects_object_records_query(
-            object="people",
-            filter_=filter_,
-            limit=limit,
-        )
+        try:
+            response = client.records.post_v2_objects_object_records_query(
+                object="people",
+                filter_=filter_,
+                limit=limit,
+            )
+        except Exception as exc:
+            # A filter slug the people object doesn't define (e.g.
+            # `github_handle` before it is bootstrapped) makes Attio return a
+            # `filter_error` the SDK can't unmarshal, surfacing as an opaque
+            # ResponseValidationError. Translate it into a typed, classifiable
+            # SchemaMismatchError so callers see `schema_mismatch` rather than a
+            # raw handler_exception, and so an optional UpsertPerson can degrade
+            # cleanly (ai-0ex). `from None` drops the SDK pydantic chain.
+            if is_unknown_filter_attribute(exc):
+                # `github_handle` is the only filter slug among the supported
+                # search criteria that isn't a built-in people attribute, so it
+                # is the offender when this fires today. Name it explicitly for
+                # an actionable envelope; keep generic if it wasn't the input.
+                offending = "github_handle" if github_handle else None
+                raise SchemaMismatchError(
+                    "people object has no filter attribute"
+                    + (f" '{offending}'" if offending else " in the query"),
+                    field=offending,
+                ) from None
+            raise
         results = [_extract_search_result(record) for record in response.data]
 
         company_ids = {r.company for r in results if r.company}
