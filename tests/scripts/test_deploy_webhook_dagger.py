@@ -281,6 +281,7 @@ async def test_deploy_via_dagger_container_chain(script_module: ModuleType) -> N
     assert _step_methods(steps) == [
         None,  # dag.container()
         "from_",
+        "with_exec",  # apt-get update && apt-get install ... git (ai-8h3)
         "with_directory",
         "with_workdir",
         "with_exec",  # uv sync --frozen
@@ -307,11 +308,30 @@ async def test_deploy_via_dagger_container_chain(script_module: ModuleType) -> N
     assert args_by_method["from_"] == [(script_module.DAGGER_BASE_IMAGE,)]
     assert args_by_method["with_directory"] == [("/repo", src_dir)]
     assert args_by_method["with_workdir"] == [("/repo",)]
+    # git is installed (single combined update+install exec) before the source
+    # mount and the sync; without it `uv sync --frozen` cannot clone the
+    # public `gtm-linear` git dependency (ai-8h3).
+    git_install = [
+        "sh",
+        "-c",
+        "apt-get update && apt-get install -y --no-install-recommends git",
+    ]
     final_modal_deploy = ["uv", "run", "modal", "deploy", "webhooks/export_to_attio.py"]
     assert args_by_method["with_exec"] == [
+        (git_install,),
         (["uv", "sync", "--frozen"],),
         (final_modal_deploy,),
     ]
+
+    # Regression guard (ai-8h3): git must be installed BEFORE `uv sync
+    # --frozen`, otherwise uv cannot resolve the `gtm-linear` git dependency
+    # and the deploy aborts with "Git executable not found" before modal
+    # deploy runs. Pin the relative ordering explicitly so a future reorder
+    # fails loudly instead of silently regressing the fix.
+    exec_cmds = [args[0] for args in args_by_method["with_exec"]]
+    assert exec_cmds.index(git_install) < exec_cmds.index(["uv", "sync", "--frozen"]), (
+        "git install must precede `uv sync --frozen` (ai-8h3)"
+    )
 
     # Source mount excludes both worktree-shape `.git` variants plus build
     # artifacts that would inflate the upload and (for `.venv/`) break
