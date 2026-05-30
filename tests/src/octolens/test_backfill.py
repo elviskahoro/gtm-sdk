@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.octolens.backfill import (
+    is_dlthub_url,
     build_webhook_payload,
     coerce_view_id,
     include_mention,
@@ -124,6 +125,28 @@ def test_reject_incidental_dlthub_in_url() -> None:
         ),
     )
     assert keep is False
+
+
+def testis_dlthub_url_matches_owned_properties() -> None:
+    assert is_dlthub_url("https://github.com/dlt-hub/dlt/issues/4002")
+    assert is_dlthub_url("https://www.dlthub.com/docs")
+    assert is_dlthub_url("https://docs.dlthub.com/intro")
+    assert is_dlthub_url("https://twitter.com/dltHub/status/123")
+    assert is_dlthub_url("https://www.reddit.com/r/dltHub/comments/x/")
+
+
+def testis_dlthub_url_rejects_lookalikes() -> None:
+    # Host parsing (not substring scan) rejects spoofs and path/query look-alikes.
+    assert not is_dlthub_url("https://example.com/page?ref=dlthub")
+    assert not is_dlthub_url("https://evil.com/dlthub")  # /dlthub only on twitter/x
+    assert not is_dlthub_url(
+        "https://github.com/dlt-hubble/x",
+    )  # prefix is a path segment
+    assert not is_dlthub_url(
+        "https://dlthub.com.evil.com/",
+    )  # suffix must be a real label
+    assert not is_dlthub_url("")
+    assert not is_dlthub_url(None)
 
 
 # --- small helpers ---------------------------------------------------------

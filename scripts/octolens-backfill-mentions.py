@@ -263,6 +263,21 @@ def send(
                 relevance=relevance,
                 source_file=row.get("_source_file", "unknown"),
             )
+            # Identity fields must be non-empty. build_webhook_payload coerces
+            # missing values to "" and Mention accepts empty strings, so the
+            # model alone would let a blank source_id through — guard explicitly.
+            data = payload["data"]
+            missing = [
+                field
+                for field in ("url", "source", "source_id")
+                if not str(data.get(field) or "").strip()
+            ]
+            if missing:
+                print(
+                    f"  [skip] missing required {missing} url={url[:70] or '(blank)'}",
+                )
+                skipped += 1
+                continue
             try:
                 webhook = Webhook.model_validate(payload)
             except Exception as exc:  # noqa: BLE001 — log + skip any invalid row

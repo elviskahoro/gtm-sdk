@@ -7,15 +7,17 @@ Modal POST loop.
 
 Scope rationale (see the backfill plan): the raw ``dlt`` keyword Octolens
 assigned is ~99% noise (crypto "DLT", incidental string hits), while ``dlthub``
-is unambiguous. So a row is in scope iff ``dlthub`` appears in the keyword set
-*or anywhere in the post text*, OR ``dlt`` is a keyword *and* the text carries a
-dlthub-library content signal (``DLT_SIGNALS``). ``include_mention`` returns the
-reason so the build step can print an auditable table.
+is unambiguous. So a row is in scope iff ``dlthub`` appears in the keyword set,
+the title/body, or a dlthub-owned URL; OR ``dlt`` is a keyword *and* the
+title/body carries a dlthub-library content signal (``DLT_SIGNALS``).
+``include_mention`` returns the reason so the build step can print an auditable
+table.
 """
 
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 # Phrases that indicate a `dlt`-keyword mention is really about the dlthub
 # Python library (not "distributed ledger technology" or an incidental match).
@@ -33,18 +35,16 @@ DLT_SIGNALS: tuple[str, ...] = (
     "dlt source",
 )
 
-# dlthub-owned URL markers. The brand in a URL host/path is a strong, explicit
-# signal (the dltHub account, the dlt-hub GitHub org, the docs/run sites), so we
-# match it as its own rule instead of substring-scanning the whole URL as free
-# text — that keeps an incidental "dlt"/"dlthub" in some unrelated site's path
-# or query string from being admitted as a false positive. Lowercased substrings.
-_DLTHUB_URL_MARKERS: tuple[str, ...] = (
-    "dlthub.com",
-    "github.com/dlt-hub",
-    "/dlt-hub/",
-    "/dlthub",
-    "/r/dlthub",
-    "dlt.run",
+# dlthub-owned web properties, matched by *parsed* hostname (and a path prefix
+# where the host is shared, e.g. github.com). Parsing host/path — rather than
+# substring-scanning the raw URL — keeps an incidental "dlthub"/"dlt-hub" in some
+# unrelated site's path or query string from being admitted as a false positive.
+_DLTHUB_HOSTS: tuple[str, ...] = ("dlthub.com", "dlt.run")  # whole host is dlthub
+_DLTHUB_HOST_PATHS: tuple[tuple[str, str], ...] = (
+    ("github.com", "/dlt-hub"),  # the dlt-hub GitHub org
+    ("twitter.com", "/dlthub"),
+    ("x.com", "/dlthub"),
+    ("reddit.com", "/r/dlthub"),
 )
 
 # CSV column → not all map 1:1 onto Mention fields, so the mapper is explicit.
@@ -84,14 +84,30 @@ def normalize_source(value: str | None) -> str:
 
 
 def _content(row: dict[str, Any]) -> str:
-    """Lowercased title + body. The URL is matched separately by _is_dlthub_url."""
+    """Lowercased title + body. The URL is matched separately by is_dlthub_url."""
     return f"{row.get('Title') or ''} {row.get('Body') or ''}".lower()
 
 
-def _is_dlthub_url(url: str | None) -> bool:
-    """True when the URL is a dlthub-owned property (explicit markers, not free text)."""
-    lowered = (url or "").lower()
-    return any(marker in lowered for marker in _DLTHUB_URL_MARKERS)
+def is_dlthub_url(url: str | None) -> bool:
+    """True when the URL is a dlthub-owned property.
+
+    Matches the *parsed* hostname (and, for shared hosts like github.com, a path
+    prefix) against an allowlist — never a raw-substring scan — so an incidental
+    "dlthub"/"dlt-hub" elsewhere in the URL cannot admit a false positive.
+    """
+    try:
+        parts = urlsplit((url or "").strip())
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower().removeprefix("www.")
+    path = (parts.path or "").lower().rstrip("/")
+    if any(host == h or host.endswith(f".{h}") for h in _DLTHUB_HOSTS):
+        return True
+    return any(
+        (host == h or host.endswith(f".{h}"))
+        and (path == seg or path.startswith(f"{seg}/"))
+        for h, seg in _DLTHUB_HOST_PATHS
+    )
 
 
 def include_mention(row: dict[str, Any]) -> tuple[bool, str | None]:
@@ -108,7 +124,7 @@ def include_mention(row: dict[str, Any]) -> tuple[bool, str | None]:
     """
     keyword_tokens = {token.lower() for token in split_csv_list(row.get("Keyword"))}
     content = _content(row)
-    dlthub_url = _is_dlthub_url(row.get("URL"))
+    dlthub_url = is_dlthub_url(row.get("URL"))
 
     if "dlthub" in keyword_tokens or "dlthub" in content or dlthub_url:
         return True, "dlthub-anywhere"
