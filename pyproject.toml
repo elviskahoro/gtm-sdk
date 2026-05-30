@@ -15,7 +15,7 @@ dependencies = [
   "flatsplode>=0.2.0",
   "gcsfs>=2024.10.0",
   "gtm-apollo>=0.0.2",
-  "gtm-linear",
+  "gtm-linear>=0.0.2",
   "ibis-framework",
   "infisicalsdk>=1.0.16",
   "modal",
@@ -71,9 +71,6 @@ markers = [
 venvPath = "."
 venv = ".venv"
 pythonPath = ".venv/bin/python"
-
-[tool.uv.sources]
-gtm-linear = { git = "https://github.com/elviskahoro/sdk-python-linear", rev = "6d8f37c09eabec76be41fb5b07727e7972e0bed0" }
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
