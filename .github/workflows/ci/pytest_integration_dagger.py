@@ -4,34 +4,63 @@ Invoked the same way locally and in CI:
 
     dagger run python .github/workflows/ci/pytest_integration_dagger.py
 
-The pipeline runs the integration test marker inside a python:3.13 container with
-secrets injected via the Infisical CLI, then exports `junit.xml` to the host so a
-follow-up step (e.g. trunk-io/analytics-uploader) can upload it. Test failures do
-not abort the pipeline so the report always reaches the host.
+The pipeline runs the integration test marker inside a python:3.13 container, then
+exports `junit.xml` to the host so a follow-up step (e.g. trunk-io/analytics-uploader)
+can upload it.
 
-Requires `INFISICAL_TOKEN` and `INFISICAL_PROJECT_ID` to be set in the host
-environment; they are forwarded into the container as Dagger secrets.
+The pipeline *fails* (non-zero exit) when pytest exits non-zero — a real test
+failure OR the collection-time preflight in tests/integration/conftest.py
+(missing required Attio object) — while still exporting the report. This is the
+whole point of ai-eun: a previous `... || true` swallowed pytest's exit code, so
+the job went green even when zero tests ran. We instead capture pytest's exit
+code into `/src/pytest_rc` (the trailing `echo` keeps the `with_exec` itself
+green so the report stays exportable) and re-raise it after the export.
+
+The integration suite reads its credentials straight from the process environment
+(see `INTEGRATION_SECRET_ENV_VARS`); there is no in-container Infisical CLI bootstrap.
+Each required value must be present in the host environment — in CI from individual
+`secrets.*` GitHub Actions secrets (synced into the repo by Infisical's GitHub App
+integration), locally from `infisical run -- …`. They are forwarded into the container
+as Dagger secrets, never baked into an image layer.
 """
 
 from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Mapping
 
 import anyio
 import dagger
 from dagger import dag
 
+# Credentials the integration suite reads at runtime. Audited from tests/conftest.py
+# (ATTIO_API_KEY) and tests/integration/test_gtm_remote_smoke.py (the MODAL_* +
+# PARALLEL_API_KEY set). MODAL_ENVIRONMENT/MODAL_APP are intentionally absent: the
+# Modal client resolves the environment from the token's default workspace, and
+# MODAL_APP defaults to "elvis-ai-v2" in src/modal_app.py.
+INTEGRATION_SECRET_ENV_VARS = (
+    "ATTIO_API_KEY",
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
+    "PARALLEL_API_KEY",
+)
+
+# The trailing `echo $? > /src/pytest_rc` always exits 0, so the `with_exec`
+# succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
+# and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    'infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=dev -- '
-    "uv run pytest -m integration --junit-xml=junit.xml -o junit_family=xunit1 || true"
+    "uv run pytest -m integration --junit-xml=junit.xml -o junit_family=xunit1; "
+    "echo $? > /src/pytest_rc"
 )
 JUNIT_HOST_PATH = "junit.xml"
+PYTEST_RC_PATH = "/src/pytest_rc"
 
-INFISICAL_INSTALL = (
-    "curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash && "
-    "apt-get update && apt-get install -y infisical"
-)
+# Distinct exit code the conftest preflight uses when a required Attio object is
+# missing ("infra not ready"), so a green-checkmark-masking 0-test run is RED but
+# still distinguishable from a genuine regression. Keep in sync with
+# PREFLIGHT_MISSING_OBJECT_RC in tests/integration/conftest.py.
+PREFLIGHT_MISSING_OBJECT_RC = 86
 
 
 SOURCE_EXCLUDES = [
@@ -46,28 +75,33 @@ SOURCE_EXCLUDES = [
 ]
 
 
-def build_container(token: str, project_id: str) -> dagger.Container:
-    """Build the integration pytest container. Caller must be inside `dagger.connection(...)`."""
+def build_container(secret_env: Mapping[str, str]) -> dagger.Container:
+    """Build the integration pytest container. Caller must be inside `dagger.connection(...)`.
+
+    `secret_env` maps env-var names to their resolved values (typically the
+    `INTEGRATION_SECRET_ENV_VARS`). Each is forwarded into the container as a Dagger
+    secret so it lands as an env var the test suite reads, without leaking into an
+    image layer or the build log.
+    """
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     uv_cache = dag.cache_volume("uv-cache")
-    apt_cache = dag.cache_volume("apt-cache")
 
-    infisical_token = dag.set_secret("infisical-token", token)
-    infisical_project_id = dag.set_secret("infisical-project-id", project_id)
-
-    return (
+    ctr = (
         dag.container()
         .from_("python:3.13")
-        .with_mounted_cache("/var/cache/apt", apt_cache)
-        .with_exec(["bash", "-c", INFISICAL_INSTALL])
         .with_exec(
             ["bash", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"],
         )
         .with_env_variable("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
         .with_mounted_cache("/root/.cache/uv", uv_cache)
-        .with_secret_variable("INFISICAL_TOKEN", infisical_token)
-        .with_secret_variable("INFISICAL_PROJECT_ID", infisical_project_id)
-        .with_directory("/src", source)
+    )
+
+    for name, value in secret_env.items():
+        secret = dag.set_secret(name.lower().replace("_", "-"), value)
+        ctr = ctr.with_secret_variable(name, secret)
+
+    return (
+        ctr.with_directory("/src", source)
         .with_workdir("/src")
         .with_exec(["uv", "sync", "--all-extras", "--dev"])
         .with_exec(["bash", "-c", PYTEST_CMD])
@@ -75,18 +109,61 @@ def build_container(token: str, project_id: str) -> dagger.Container:
 
 
 async def main() -> None:
-    token = os.environ.get("INFISICAL_TOKEN")
-    project_id = os.environ.get("INFISICAL_PROJECT_ID")
-    if not token or not project_id:
+    secret_env = {
+        name: os.environ[name]
+        for name in INTEGRATION_SECRET_ENV_VARS
+        if os.environ.get(name)
+    }
+    missing = [name for name in INTEGRATION_SECRET_ENV_VARS if not os.environ.get(name)]
+    if missing:
+        # Fail loudly: a missing/incomplete secret sync would otherwise let every
+        # integration test silently skip and the run go green.
         sys.stderr.write(
-            "INFISICAL_TOKEN and INFISICAL_PROJECT_ID must be set in the environment\n",
+            "Missing required integration secrets in the environment: "
+            f"{', '.join(missing)}\n",
         )
         sys.exit(1)
 
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
-        ctr = build_container(token, project_id)
-        await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)
-        print(f"exported junit report to {JUNIT_HOST_PATH}")
+        ctr = build_container(secret_env)
+
+        # Read pytest's real exit code (captured in PYTEST_CMD) first so we know
+        # whether a missing report is an expected consequence of a crashed run or
+        # a genuine problem. Any failure to read or parse it (missing file from a
+        # killed/cancelled container, empty value, non-integer) fails closed at
+        # rc=1 so the job goes red with a controlled message, not a traceback.
+        try:
+            rc = int((await ctr.file(PYTEST_RC_PATH).contents()).strip())
+        except (dagger.DaggerError, ValueError) as exc:
+            sys.stderr.write(
+                f"warning: could not read pytest exit code from {PYTEST_RC_PATH} "
+                f"({exc}); failing closed at rc=1\n",
+            )
+            rc = 1
+
+        # Export the report so it reaches the host (and Trunk). A passing run
+        # MUST produce one, so an export failure there is fatal (re-raise → red).
+        # When pytest already failed, a missing junit.xml is an expected side
+        # effect of the crash — warn and keep the real rc rather than masking it.
+        try:
+            await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)
+            print(f"exported junit report to {JUNIT_HOST_PATH}")
+        except dagger.DaggerError as exc:
+            if rc == 0:
+                raise
+            sys.stderr.write(
+                f"warning: could not export {JUNIT_HOST_PATH} "
+                f"(pytest already exited {rc}): {exc}\n",
+            )
+
+    if rc == PREFLIGHT_MISSING_OBJECT_RC:
+        sys.stderr.write(
+            "integration preflight: required Attio object missing — "
+            "see the ::error:: annotation above (ai-eun / ai-0ou)\n",
+        )
+    elif rc != 0:
+        sys.stderr.write(f"integration pytest exited {rc}\n")
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
