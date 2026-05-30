@@ -6,8 +6,12 @@ from libs.attio.client import get_client
 from libs.attio.models import AttributeCreateResult, AttributeInfo
 
 
-def list_attributes(target_object: str) -> list[AttributeInfo]:
-    """Return the non-archived attributes on ``target_object``.
+def list_attributes(
+    target_object: str,
+    *,
+    show_archived: bool = False,
+) -> list[AttributeInfo]:
+    """Return the attributes on ``target_object``.
 
     Read-only. Powers live-vs-declared schema diffing (see
     ``scripts/attio-bootstrap-social_mentions.py --diff``). For
@@ -15,12 +19,18 @@ def list_attributes(target_object: str) -> list[AttributeInfo]:
     this resolves them back to api_slugs via a single ``get_v2_objects`` lookup
     so callers can compare against slug-based declarations. Returns ``[]`` when
     the object does not exist yet (404), mirroring :func:`create_attribute`.
+
+    By default Attio hides archived attributes; pass ``show_archived=True`` to
+    include them (each carries ``is_archived``). A diff that wants to tell
+    "archived" (``--apply`` will restore) from "absent" (``--apply`` creates)
+    must opt in — otherwise an archived slug looks plainly missing.
     """
     with get_client() as client:
         try:
             response = client.attributes.get_v2_target_identifier_attributes(
                 target="objects",
                 identifier=target_object,
+                show_archived=show_archived,
             )
         except SDKError as exc:
             status = getattr(getattr(exc, "raw_response", None), "status_code", None)

@@ -230,6 +230,10 @@ class Webhook(OctolensMentionWebhook):
                 ops.append(
                     UpsertPerson(
                         matching_attribute="linkedin",
+                        # The social_mention is the primary record; the person
+                        # link is enrichment. A person-upsert failure must never
+                        # drop the mention (ai-0ex).
+                        optional=True,
                         linkedin=linkedin_url,
                         first_name=first_name,
                         last_name=last_name,
@@ -243,6 +247,11 @@ class Webhook(OctolensMentionWebhook):
                 ops.append(
                     UpsertPerson(
                         matching_attribute="github_handle",
+                        # Enrichment, not the primary record — see linkedin path.
+                        # Until the people object gains a `github_handle`
+                        # attribute, this op fails (schema_mismatch); the mention
+                        # must still land (ai-0ex).
+                        optional=True,
                         github_handle=github_handle,
                         github_url=f"https://github.com/{github_handle}",
                     ),
@@ -277,6 +286,10 @@ class Webhook(OctolensMentionWebhook):
                 bookmarked=m.bookmarked,
                 image_url=m.image_url,
                 related_person=related_person_ref,
+                # The person link is enrichment; if it can't be resolved (e.g.
+                # the optional github UpsertPerson failed), write the mention
+                # unlinked rather than dropping it (ai-0ex).
+                related_person_optional=True,
             ),
         )
         return ops

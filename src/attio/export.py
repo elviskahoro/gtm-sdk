@@ -17,7 +17,8 @@ from libs.attio.companies import (
     get_company_values,
     upsert_company as libs_upsert_company,
 )
-from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
+from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope, WarningEntry
+from libs.attio.errors import SchemaMismatchError
 from libs.attio.meetings import find_or_create_meeting
 from libs.attio.mentions import upsert_mention as libs_upsert_mention
 from libs.attio.models import (
@@ -42,6 +43,7 @@ from libs.attio.notes import (
     list_notes_for_parent as libs_list_notes_for_parent,
 )
 from libs.attio.people import (
+    error_envelope,
     get_person_values,
     upsert_person as libs_upsert_person,
 )
@@ -122,6 +124,10 @@ class OpOutcome:
     success: bool
     record_id: str | None
     envelope: ReliabilityEnvelope
+    # True when this op was marked ``optional`` and failed: recorded for
+    # visibility but excluded from the overall execution ``success`` bit and
+    # not allowed to abort the plan. See ai-0ex.
+    optional: bool = False
 
 
 @dataclass
@@ -142,6 +148,21 @@ class ExecutionResult:
                     "op_type": o.op_type,
                     "success": o.success,
                     "record_id": o.record_id,
+                    # The keys below are emitted only when they carry signal, so
+                    # the common clean-success body is unchanged for existing
+                    # consumers (ai-0ex):
+                    #  - `optional`: a failed best-effort op (didn't abort).
+                    #  - `partial_success` + `warnings`: e.g. a mention written
+                    #    WITHOUT its person link — would otherwise look like a
+                    #    plain success and hide the degradation.
+                    #  - `errors`: failure detail.
+                    **({"optional": True} if o.optional else {}),
+                    **({"partial_success": True} if o.envelope.partial_success else {}),
+                    **(
+                        {"warnings": [w.model_dump() for w in o.envelope.warnings]}
+                        if o.envelope.warnings
+                        else {}
+                    ),
                     **(
                         {"errors": [e.model_dump() for e in o.envelope.errors]}
                         if not o.success
@@ -223,25 +244,34 @@ def _handle_upsert_person(
             ):
                 zipcode = None
 
-    return libs_upsert_person(
-        PersonInput(
-            email=op.email,
-            first_name=op.first_name,
-            last_name=op.last_name,
-            linkedin=op.linkedin,
-            github_handle=op.github_handle,
-            github_url=op.github_url,
-            phone=op.phone,
-            company_domain=op.company_domain,
-            title=title,
-            city=city,
-            state=state,
-            zipcode=zipcode,
-            additional_emails=[],
-            replace_emails=False,
-        ),
-        matching_attribute=op.matching_attribute,
-    )
+    try:
+        return libs_upsert_person(
+            PersonInput(
+                email=op.email,
+                first_name=op.first_name,
+                last_name=op.last_name,
+                linkedin=op.linkedin,
+                github_handle=op.github_handle,
+                github_url=op.github_url,
+                phone=op.phone,
+                company_domain=op.company_domain,
+                title=title,
+                city=city,
+                state=state,
+                zipcode=zipcode,
+                additional_emails=[],
+                replace_emails=False,
+            ),
+            matching_attribute=op.matching_attribute,
+        )
+    except SchemaMismatchError as exc:
+        # A matching attribute that the people object doesn't define (e.g.
+        # `github_handle` before the schema is bootstrapped) surfaces from the
+        # lib layer as a typed SchemaMismatchError. Classify it as a normal
+        # `schema_mismatch` failed envelope instead of letting the dispatcher's
+        # catch-all tag it `handler_exception` (ai-0ex). When this op is
+        # `optional`, execute() keeps going and the mention still lands.
+        return error_envelope(exc)
 
 
 def _handle_upsert_company(
@@ -405,31 +435,55 @@ def _handle_upsert_mention(
     table: LookupTable,
 ) -> ReliabilityEnvelope:
     related_person_record_id = None
+    degrade_warnings: list[WarningEntry] = []
     if op.related_person:
         related_person_record_id = table.resolve(op.related_person)
         if related_person_record_id is None:
-            return ReliabilityEnvelope(
-                success=False,
-                partial_success=False,
-                action="failed",
-                record_id=None,
-                errors=[
-                    ErrorEntry(
-                        code="unresolved_ref",
-                        message=(
-                            f"could not resolve {op.related_person.ref_kind}:"
-                            f"{op.related_person.model_dump()}"
+            if not op.related_person_optional:
+                # Default: an unresolved ref is a hard data-integrity error.
+                # Keeping this loud means a genuine missing-reference bug in
+                # some other plan fails fast instead of silently persisting an
+                # unlinked mention.
+                return ReliabilityEnvelope(
+                    success=False,
+                    partial_success=False,
+                    action="failed",
+                    record_id=None,
+                    errors=[
+                        ErrorEntry(
+                            code="unresolved_ref",
+                            message=(
+                                f"could not resolve {op.related_person.ref_kind}:"
+                                f"{op.related_person.model_dump()}"
+                            ),
+                            error_type="UnresolvedRefError",
+                            fatal=True,
                         ),
-                        error_type="UnresolvedRefError",
-                        fatal=True,
+                    ],
+                    warnings=[],
+                    skipped_fields=[],
+                    meta={"output_schema_version": "v1"},
+                )
+            # Opted-in best-effort link (octolens): the mention is the primary
+            # record and the person is enrichment, so when the related person
+            # could not be resolved (e.g. its optional UpsertPerson failed
+            # because the people object lacks a `github_handle` attribute) write
+            # the mention WITHOUT the link rather than dropping it — silent data
+            # loss is the bug this fixes (ai-0ex).
+            degrade_warnings.append(
+                WarningEntry(
+                    code="related_person_unresolved",
+                    message=(
+                        f"related person {op.related_person.ref_kind} did not "
+                        f"resolve ({op.related_person.model_dump()}); writing "
+                        "the mention without a person link."
                     ),
-                ],
-                warnings=[],
-                skipped_fields=[],
-                meta={"output_schema_version": "v1"},
+                    field="related_person",
+                    retryable=False,
+                ),
             )
 
-    return libs_upsert_mention(
+    envelope = libs_upsert_mention(
         MentionInput(
             mention_url=op.mention_url,
             last_action=op.last_action,
@@ -456,6 +510,14 @@ def _handle_upsert_mention(
             related_person_record_id=related_person_record_id,
         ),
     )
+    if degrade_warnings:
+        # Record the degradation context regardless of outcome, but only call
+        # it a *partial* success when the mention actually wrote — a failed
+        # mention write must keep its failed envelope, not look partial (ai-0ex).
+        envelope.warnings.extend(degrade_warnings)
+        if envelope.success:
+            envelope.partial_success = True
+    return envelope
 
 
 def _handle_upsert_tracking_event(
@@ -622,7 +684,14 @@ def _exception_envelope(error: Exception) -> ReliabilityEnvelope:
 
 
 def execute(plan: Iterable[AttioOp]) -> ExecutionResult:
-    """Execute a plan op-by-op. Fail-fast on the first failing envelope."""
+    """Execute a plan op-by-op. Fail-fast on the first failing *required* op.
+
+    Ops marked ``optional`` (see ``UpsertPerson.optional``) are best-effort: a
+    failure is recorded as an outcome but does not abort the plan and does not
+    flip the overall ``success`` bit. Their record_id is never written to the
+    LookupTable, so any downstream ref to them resolves to ``None`` and the
+    referring handler degrades gracefully (ai-0ex).
+    """
     table = LookupTable()
     outcomes: list[OpOutcome] = []
     for i, op in enumerate(plan):
@@ -646,6 +715,7 @@ def execute(plan: Iterable[AttioOp]) -> ExecutionResult:
                 traceback=traceback.format_exc(),
             )
             envelope = _exception_envelope(exc)
+        is_optional = bool(getattr(op, "optional", False))
         outcomes.append(
             OpOutcome(
                 op_index=i,
@@ -653,9 +723,20 @@ def execute(plan: Iterable[AttioOp]) -> ExecutionResult:
                 success=envelope.success,
                 record_id=envelope.record_id,
                 envelope=envelope,
+                optional=is_optional and not envelope.success,
             ),
         )
         if not envelope.success:
+            if is_optional:
+                # Best-effort op failed: log, keep going, leave it out of the
+                # LookupTable so downstream refs degrade rather than link.
+                log(
+                    "attio.optional_op_failed",
+                    op_index=i,
+                    op_type=type(op).__name__,
+                    error_codes=[e.code for e in envelope.errors],
+                )
+                continue
             return ExecutionResult(
                 success=False,
                 outcomes=outcomes,

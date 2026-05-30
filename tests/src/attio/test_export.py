@@ -171,6 +171,148 @@ def test_execute_handler_exception_becomes_failed_outcome(monkeypatch) -> None:
     assert "attio api blew up" in envelope.errors[0].message
 
 
+def test_execute_optional_op_failure_does_not_abort(monkeypatch) -> None:
+    """A failed optional op is recorded but does not abort the plan or flip
+    overall success; downstream ops still run (ai-0ex)."""
+    person = MagicMock(return_value=_fail("schema_mismatch"))
+    mention = MagicMock(return_value=_ok("mention-1"))
+    monkeypatch.setattr(
+        "src.attio.export.OP_HANDLERS",
+        {UpsertPerson: person, UpsertMention: mention},
+    )
+
+    plan = [
+        UpsertPerson(
+            matching_attribute="github_handle",
+            github_handle="ghosthandle",
+            optional=True,
+        ),
+        UpsertMention(
+            mention_url="https://github.com/dlt-hub/dlt/issues/4002",
+            last_action="mention_created",
+            source_platform="github",
+            source_id="abc",
+            mention_body="hello",
+            mention_timestamp=datetime(2026, 5, 10, tzinfo=timezone.utc),
+            author_handle="u",
+            primary_keyword="kw",
+        ),
+    ]
+    result = execute(plan)
+
+    assert result.success is True
+    assert len(result.outcomes) == 2
+    person_outcome = result.outcomes[0]
+    assert person_outcome.success is False
+    assert person_outcome.optional is True
+    assert result.outcomes[1].success is True
+    mention.assert_called_once()
+
+
+def test_execute_optional_op_failure_omitted_from_lookup_table(monkeypatch) -> None:
+    """A failed optional person op is not recorded, so a later ref to it
+    resolves to None (and the mention handler degrades) — ai-0ex."""
+    person = MagicMock(return_value=_fail("schema_mismatch"))
+    upsert_mention_mock = MagicMock(return_value=_ok("mention-1"))
+    # Use the real mention handler so the LookupTable miss → degrade path runs.
+    from src.attio.export import OP_HANDLERS as _REAL  # noqa: N811
+
+    monkeypatch.setattr(
+        "src.attio.export.OP_HANDLERS",
+        {UpsertPerson: person, UpsertMention: _REAL[UpsertMention]},
+    )
+    monkeypatch.setattr(
+        "src.attio.export.libs_upsert_mention",
+        upsert_mention_mock,
+    )
+
+    plan = [
+        UpsertPerson(
+            matching_attribute="github_handle",
+            github_handle="ghosthandle",
+            optional=True,
+        ),
+        UpsertMention(
+            mention_url="https://github.com/dlt-hub/dlt/issues/3987",
+            last_action="mention_created",
+            source_platform="github",
+            source_id="abc",
+            mention_body="hello",
+            mention_timestamp=datetime(2026, 5, 10, tzinfo=timezone.utc),
+            author_handle="u",
+            primary_keyword="kw",
+            related_person=PersonRef(attribute="github_handle", value="ghosthandle"),
+            related_person_optional=True,
+        ),
+    ]
+    result = execute(plan)
+
+    assert result.success is True
+    upsert_mention_mock.assert_called_once()
+    assert upsert_mention_mock.call_args.args[0].related_person_record_id is None
+
+
+def test_execute_required_op_failure_still_aborts(monkeypatch) -> None:
+    """Regression: a non-optional failing op keeps the fail-fast semantics."""
+    person = MagicMock(return_value=_fail("boom"))
+    mention = MagicMock(return_value=_ok("mention-1"))
+    monkeypatch.setattr(
+        "src.attio.export.OP_HANDLERS",
+        {UpsertPerson: person, UpsertMention: mention},
+    )
+    plan = [
+        UpsertPerson(
+            matching_attribute="email",
+            email="a@example.com",
+        ),  # optional=False
+        UpsertMention(
+            mention_url="https://github.com/x",
+            last_action="mention_created",
+            source_platform="github",
+            source_id="abc",
+            mention_body="hello",
+            mention_timestamp=datetime(2026, 5, 10, tzinfo=timezone.utc),
+            author_handle="u",
+            primary_keyword="kw",
+        ),
+    ]
+    result = execute(plan)
+
+    assert result.success is False
+    assert result.fail_index == 0
+    assert result.fail_reason == "op_failed"
+    mention.assert_not_called()
+
+
+def test_handle_upsert_person_schema_mismatch_is_classified(monkeypatch) -> None:
+    """A SchemaMismatchError from the lib layer becomes a `schema_mismatch`
+    failed envelope, not a `handler_exception` (ai-0ex)."""
+    from libs.attio.errors import SchemaMismatchError
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_person = OP_HANDLERS[UpsertPerson]
+
+    def boom(*_args, **_kwargs):
+        raise SchemaMismatchError(
+            "people object has no filter attribute 'github_handle'",
+            field="github_handle",
+        )
+
+    monkeypatch.setattr("src.attio.export.libs_upsert_person", boom)
+
+    envelope = _handle_upsert_person(
+        UpsertPerson(
+            matching_attribute="github_handle",
+            github_handle="ghosthandle",
+            optional=True,
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is False
+    assert envelope.errors[0].code == "schema_mismatch"
+
+
 def test_execute_unknown_op(monkeypatch) -> None:
     monkeypatch.setattr("src.attio.export.OP_HANDLERS", {})
     result = execute([UpsertPerson(matching_attribute="email", email="a@example.com")])
@@ -357,14 +499,97 @@ def test_handle_upsert_note_unresolved_ref_returns_failed_envelope(monkeypatch) 
     add_note_mock.assert_not_called()
 
 
-def test_handle_upsert_mention_unresolved_ref_returns_failed_envelope(
+def test_handle_upsert_mention_unresolved_ref_degrades_to_warning(
     monkeypatch,
 ) -> None:
+    """An unresolved related_person must NOT drop the mention (ai-0ex).
+
+    The mention is the primary record; the person link is enrichment. When the
+    ref does not resolve, the mention is written WITHOUT a person link and a
+    `related_person_unresolved` warning is attached.
+    """
     from src.attio.export import OP_HANDLERS
 
     _handle_upsert_mention = OP_HANDLERS[UpsertMention]
 
-    upsert_mention_mock = MagicMock()
+    upsert_mention_mock = MagicMock(return_value=_ok("mention-rec-1"))
+    monkeypatch.setattr(
+        "src.attio.export.libs_upsert_mention",
+        upsert_mention_mock,
+    )
+
+    envelope = _handle_upsert_mention(
+        UpsertMention(
+            mention_url="https://github.com/dlt-hub/dlt/issues/4002",
+            last_action="mention_created",
+            source_platform="github",
+            source_id="abc",
+            mention_body="hello",
+            mention_timestamp=datetime(2026, 5, 10, 11, 55, 53, tzinfo=timezone.utc),
+            author_handle="u",
+            primary_keyword="kw",
+            related_person=PersonRef(attribute="github_handle", value="ghosthandle"),
+            related_person_optional=True,
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is True
+    assert envelope.record_id == "mention-rec-1"
+    upsert_mention_mock.assert_called_once()
+    # The mention was written WITHOUT a person link.
+    assert upsert_mention_mock.call_args.args[0].related_person_record_id is None
+    warning_codes = {w.code for w in envelope.warnings}
+    assert "related_person_unresolved" in warning_codes
+    assert envelope.partial_success is True
+
+
+def test_handle_upsert_mention_unresolved_ref_failed_write_stays_failed(
+    monkeypatch,
+) -> None:
+    """If the mention write itself FAILS while the person ref was unresolved,
+    the failed envelope must not be reflagged as a partial success (ai-0ex)."""
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_mention = OP_HANDLERS[UpsertMention]
+
+    monkeypatch.setattr(
+        "src.attio.export.libs_upsert_mention",
+        MagicMock(return_value=_fail("mention write blew up")),
+    )
+
+    envelope = _handle_upsert_mention(
+        UpsertMention(
+            mention_url="https://github.com/dlt-hub/dlt/issues/4002",
+            last_action="mention_created",
+            source_platform="github",
+            source_id="abc",
+            mention_body="hello",
+            mention_timestamp=datetime(2026, 5, 10, 11, 55, 53, tzinfo=timezone.utc),
+            author_handle="u",
+            primary_keyword="kw",
+            related_person=PersonRef(attribute="github_handle", value="ghosthandle"),
+            related_person_optional=True,
+        ),
+        LookupTable(),
+    )
+
+    assert envelope.success is False
+    assert envelope.partial_success is False
+    # The degradation context is still recorded for observability.
+    assert "related_person_unresolved" in {w.code for w in envelope.warnings}
+
+
+def test_handle_upsert_mention_unresolved_ref_hard_fails_by_default(
+    monkeypatch,
+) -> None:
+    """Without opt-in best-effort, an unresolved related_person stays a hard
+    failure so genuine missing-reference bugs in other plans stay loud (ai-0ex)."""
+    from src.attio.export import OP_HANDLERS
+
+    _handle_upsert_mention = OP_HANDLERS[UpsertMention]
+
+    upsert_mention_mock = MagicMock(return_value=_ok("never"))
     monkeypatch.setattr(
         "src.attio.export.libs_upsert_mention",
         upsert_mention_mock,
@@ -381,19 +606,61 @@ def test_handle_upsert_mention_unresolved_ref_returns_failed_envelope(
             author_handle="u",
             primary_keyword="kw",
             related_person=PersonRef(attribute="email", value="missing@example.com"),
+            # related_person_optional defaults to False
         ),
         LookupTable(),
     )
 
     assert envelope.success is False
     assert envelope.action == "failed"
-    assert envelope.record_id is None
-    assert len(envelope.errors) == 1
-    err = envelope.errors[0]
-    assert err.code == "unresolved_ref"
-    assert err.error_type == "UnresolvedRefError"
-    assert err.fatal is True
+    assert envelope.errors[0].code == "unresolved_ref"
+    assert envelope.errors[0].fatal is True
     upsert_mention_mock.assert_not_called()
+
+
+def test_execution_result_body_surfaces_degradation_warning(monkeypatch) -> None:
+    """A mention written WITHOUT its person link must not look like a plain
+    success in the response body — the warning/partial_success is surfaced so
+    the degradation is visible to callers (ai-0ex)."""
+    import orjson
+
+    from src.attio.export import OP_HANDLERS as _REAL  # noqa: N811
+
+    monkeypatch.setattr(
+        "src.attio.export.OP_HANDLERS",
+        {UpsertMention: _REAL[UpsertMention]},
+    )
+    monkeypatch.setattr(
+        "src.attio.export.libs_upsert_mention",
+        MagicMock(return_value=_ok("mention-1")),
+    )
+
+    result = execute(
+        [
+            UpsertMention(
+                mention_url="https://github.com/dlt-hub/dlt/issues/4002",
+                last_action="mention_created",
+                source_platform="github",
+                source_id="abc",
+                mention_body="hello",
+                mention_timestamp=datetime(2026, 5, 10, tzinfo=timezone.utc),
+                author_handle="u",
+                primary_keyword="kw",
+                related_person=PersonRef(
+                    attribute="github_handle",
+                    value="ghosthandle",
+                ),
+                related_person_optional=True,
+            ),
+        ],
+    )
+    body = orjson.loads(result.body())
+
+    assert body["success"] is True
+    outcome = body["outcomes"][0]
+    assert outcome["success"] is True
+    assert outcome["partial_success"] is True
+    assert outcome["warnings"][0]["code"] == "related_person_unresolved"
 
 
 def test_execution_result_body_failure(monkeypatch) -> None:

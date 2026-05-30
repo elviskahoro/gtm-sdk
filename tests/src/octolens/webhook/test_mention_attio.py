@@ -75,6 +75,8 @@ def test_linkedin_sample_produces_upsert_person_and_mention() -> None:
     assert person_op.linkedin == "https://www.linkedin.com/in/linkedin-user"
     assert person_op.first_name == "Linkedin"
     assert person_op.last_name == "User"
+    # Person is enrichment; its failure must never drop the mention (ai-0ex).
+    assert person_op.optional is True
 
     # Second op: UpsertMention with related_person
     mention_op = ops[1]
@@ -87,6 +89,8 @@ def test_linkedin_sample_produces_upsert_person_and_mention() -> None:
     assert (
         mention_op.related_person.value == "https://www.linkedin.com/in/linkedin-user"
     )
+    # Person link is enrichment — best-effort so the mention always lands (ai-0ex).
+    assert mention_op.related_person_optional is True
 
 
 @pytest.mark.parametrize("filename", NON_LINKEDIN_SAMPLE_FILES)
@@ -306,6 +310,9 @@ def test_github_sample_produces_upsert_person_and_mention() -> None:
     assert person_op.github_handle == "elviskahoro"
     assert person_op.github_url == "https://github.com/elviskahoro"
     assert person_op.matching_attribute == "github_handle"
+    # Person is enrichment; until the people object has a github_handle
+    # attribute this op fails, but the mention must still land (ai-0ex).
+    assert person_op.optional is True
 
     # Second op: UpsertMention with related_person
     mention_op = ops[1]
@@ -314,6 +321,8 @@ def test_github_sample_produces_upsert_person_and_mention() -> None:
     assert mention_op.related_person is not None
     assert mention_op.related_person.attribute == "github_handle"
     assert mention_op.related_person.value == "elviskahoro"
+    # Person link is enrichment — best-effort so the mention always lands (ai-0ex).
+    assert mention_op.related_person_optional is True
 
 
 def test_github_sample_bare_handle_fallback() -> None:

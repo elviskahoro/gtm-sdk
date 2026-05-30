@@ -165,6 +165,28 @@ def is_uniqueness_conflict(exc: BaseException) -> bool:
     return "uniqueness_conflict" in body_text
 
 
+def is_unknown_filter_attribute(exc: BaseException) -> bool:
+    """True when Attio rejected a query filter referencing an unknown attribute.
+
+    Querying the ``people`` object with a filter slug the workspace schema does
+    not define (e.g. ``github_handle`` before it is bootstrapped) makes Attio
+    return ``{"status_code": 400, ..., "code": "unknown_filter_attribute_slug"}``.
+    The SDK's pydantic Code Literal does not list that value, so it raises
+    ``ResponseValidationError`` before we ever see the parsed body — we re-parse
+    here, mirroring :func:`is_uniqueness_conflict`. See ai-0ex.
+
+    Matched narrowly on the specific ``unknown_filter_attribute_slug`` marker:
+    the broader ``filter_error`` category covers other (recoverable) filter
+    validation failures we must NOT degrade into a SchemaMismatchError. The
+    substring fallback only applies when the body is not parseable JSON.
+    """
+    body_text = extract_exception_body_text(exc)
+    payload = _parse_json_object(body_text)
+    if payload is not None:
+        return payload.get("code") == "unknown_filter_attribute_slug"
+    return "unknown_filter_attribute_slug" in body_text
+
+
 def model_dump_or_empty(value: object) -> dict[str, Any]:
     if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
         return cast(_ModelDumpLike, value).model_dump()
