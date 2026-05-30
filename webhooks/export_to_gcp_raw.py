@@ -104,6 +104,10 @@ image: Image = modal.Image.debian_slim().uv_pip_install(
     # when the WebhookModelToReplace substitution pulls in any of those models.
     "flatsplode",
     "gcsfs",  # https://github.com/fsspec/gcsfs
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-sdk",
+    "opentelemetry-semantic-conventions",
     "orjson",
     "uuid7",
 )

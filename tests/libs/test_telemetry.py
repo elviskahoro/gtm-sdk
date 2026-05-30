@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 import libs.telemetry as telemetry_module
 from libs.telemetry import (
     emit_cli_event,
@@ -14,6 +16,31 @@ def test_init_tracer_noop_without_env(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     tracer = init_tracer()
     assert tracer is None
+
+
+def test_init_tracer_degrades_when_opentelemetry_missing(monkeypatch):
+    """A sink env var must not crash the CLI when ``opentelemetry`` is absent.
+
+    Same regression class as the log-exporter case: ``init_tracer`` runs at
+    CLI startup, and an environment with an OTLP sink var set but the
+    ``opentelemetry-*`` packages uninstalled must fail soft to no tracer
+    instead of crashing the entrypoint at import time.
+    """
+    monkeypatch.setenv("HYPERDX_API_KEY", "test-key")
+    monkeypatch.setattr(telemetry_module, "_tracer", None, raising=False)
+
+    real_import = builtins.__import__
+
+    def _import_without_otel(name, *args, **kwargs):
+        if name.startswith("opentelemetry"):
+            raise ModuleNotFoundError(
+                "No module named 'opentelemetry'",
+                name="opentelemetry",
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _import_without_otel)
+    assert init_tracer("rb2b-visits") is None
 
 
 def test_emit_cli_event_noop_without_init():
@@ -49,6 +76,32 @@ def test_init_log_exporter_noop_without_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     assert init_log_exporter() is None
     assert get_otlp_logger() is None
+
+
+def test_init_log_exporter_degrades_when_opentelemetry_missing(monkeypatch):
+    """A sink env var must not crash import when ``opentelemetry`` is absent.
+
+    Regression: ``export-to-attio-from-rb2b-visits`` crash-looped because its
+    Modal image never installed the ``opentelemetry-*`` packages, yet a
+    HyperDX sink var was baked into its Secret. The import must fail soft to
+    stdout-only logging instead of taking down the container.
+    """
+    _reset_log_exporter(monkeypatch)
+    monkeypatch.setenv("HYPERDX_API_KEY", "test-key")
+
+    real_import = builtins.__import__
+
+    def _import_without_otel(name, *args, **kwargs):
+        if name.startswith("opentelemetry"):
+            raise ModuleNotFoundError(
+                "No module named 'opentelemetry'",
+                name="opentelemetry",
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _import_without_otel)
+    assert init_log_exporter("rb2b-visits") is None
+    assert get_otlp_logger("rb2b-visits") is None
 
 
 def test_init_log_exporter_returns_logger_with_hyperdx_key(monkeypatch):

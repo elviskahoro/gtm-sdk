@@ -144,12 +144,30 @@ def init_tracer(service_name: str = "elvis-cli"):
     if not hyperdx_key and not otel_endpoint and not hyperdx_endpoint_env:
         return None
 
-    from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.semconv.attributes import service_attributes
+    # Telemetry must never be load-bearing for the caller. Same rationale as
+    # ``init_log_exporter``: an OTLP sink env var can be baked into a Modal
+    # Secret (or present in any CLI environment) whose image never installed
+    # the ``opentelemetry-*`` packages. Letting the ImportError propagate turns
+    # an absent optional dependency into an import-time crash — here it would
+    # take down the CLI entrypoint (``cli/main.py``) that calls ``init_tracer``.
+    # Degrade to no tracer instead.
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.semconv.attributes import service_attributes
+    except ModuleNotFoundError as exc:
+        print(  # noqa: T201 — import-time, before any logger is wired
+            "telemetry.otlp_disabled "
+            f"reason=opentelemetry_not_installed missing_module={exc.name!r} "
+            f"service_name={service_name!r}",
+            file=sys.stderr,
+        )
+        return None
 
     resource = Resource.create(
         {
@@ -296,11 +314,31 @@ def init_log_exporter(service_name: str = "elvis-cli"):
     # local collector. Pass ``endpoint=None`` so OTLPLogExporter resolves
     # it from env vars / default.
 
-    from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-    from opentelemetry.sdk._logs import LoggerProvider
-    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.semconv.attributes import service_attributes
+    # Telemetry must never be load-bearing for the caller. This function runs
+    # at container/CLI import time, and an OTLP sink env var can be present
+    # (baked into a Modal Secret by ``src.secrets_bootstrap.bootstrap_secret``
+    # from the deploy-time shell) in an environment whose image never installed
+    # the ``opentelemetry-*`` packages. Letting the ImportError propagate turns
+    # an absent optional dependency into an import-time crash that takes down
+    # the whole webhook container in a restart loop (observed on
+    # ``export-to-attio-from-rb2b-visits``). Degrade to stdout-only logging
+    # instead — the structured ``log()`` transport stays unaffected.
+    try:
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+            OTLPLogExporter,
+        )
+        from opentelemetry.sdk._logs import LoggerProvider
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.semconv.attributes import service_attributes
+    except ModuleNotFoundError as exc:
+        print(  # noqa: T201 — import-time, before any logger is wired
+            "telemetry.otlp_disabled "
+            f"reason=opentelemetry_not_installed missing_module={exc.name!r} "
+            f"service_name={service_name!r}",
+            file=sys.stderr,
+        )
+        return None
 
     resource = Resource.create(
         {
