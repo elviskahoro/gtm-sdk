@@ -168,3 +168,24 @@ def test_upsert_company_prefers_domain_over_name_for_search() -> None:
     search.assert_called_once_with(domain="acme.com", limit=50)
     assert envelope.action == "updated"
     assert envelope.record_id == "co-canonical"
+
+
+@patch("libs.attio.companies.get_client")
+def test_update_company_missing_selector_is_validation_error(get_client) -> None:
+    """A missing id+domain is a client-input error (→400), not a lookup miss
+    (→404). Guards the AttioNotFoundError→AttioValidationError split (ai-h5y)."""
+    from libs.attio.companies import update_company
+    from libs.attio.errors import AttioValidationError
+
+    # Selector check raises before the client is used; stub the context manager
+    # so entering it doesn't require a real token.
+    get_client.return_value.__enter__.return_value = MagicMock()
+    try:
+        update_company(
+            record_id=None,
+            domain=None,
+            input=CompanyInput(name="Example", domain=None),
+        )
+    except AttioValidationError:
+        return
+    raise AssertionError("expected AttioValidationError for missing selector")

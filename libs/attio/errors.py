@@ -115,6 +115,17 @@ def classify_error(error: Exception, *, strict: bool = False) -> ClassifiedError
             error_type=type(error).__name__,
             fatal=True,
         )
+    if isinstance(error, AttioNotFoundError):
+        # Deterministic: the endpoint or workspace feature does not exist, so a
+        # retry can't help. The meetings path (libs/attio/meetings.py) raises
+        # this for a 404 on POST /v2/meetings — Attio's ALPHA meetings feature
+        # is not provisioned in the dev workspace. See ai-h5y.
+        return ClassifiedError(
+            code="not_found",
+            message=str(error),
+            error_type=type(error).__name__,
+            fatal=True,
+        )
 
     return ClassifiedError(
         code="unknown_error",
