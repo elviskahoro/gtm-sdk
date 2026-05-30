@@ -93,3 +93,21 @@ def test_person_add_http_returns_non_2xx_when_envelope_failed(monkeypatch) -> No
     assert response.status_code == 400
     body = json.loads(response.body.decode("utf-8"))
     assert body["success"] is False
+
+
+def test_not_found_code_maps_to_404() -> None:
+    # AttioNotFoundError -> classify_error -> code="not_found" (ai-h5y). The
+    # message here deliberately lacks the "Status NNN" pattern, so the status is
+    # resolved from ERROR_CODE_TO_STATUS rather than the message, proving the
+    # code-to-status entry — not just message inference — yields a 404.
+    from src.attio.http_responses import status_code_from_error_payload
+
+    payload = {
+        "errors": [
+            {
+                "code": "not_found",
+                "message": "Attio POST /v2/meetings returned 404.",
+            },
+        ],
+    }
+    assert status_code_from_error_payload(payload) == 404
