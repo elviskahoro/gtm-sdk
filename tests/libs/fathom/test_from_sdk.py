@@ -52,44 +52,61 @@ def test_optional_summary_and_action_items_tolerated() -> None:
     assert webhook.calendar_invitees == []
 
 
+def _meeting_dict(**overrides: object) -> dict[str, object]:
+    """A complete valid Meeting payload as a dict.
+
+    Built and validated via ``Meeting.model_validate`` (not the typed
+    constructor) so the SDK's Pydantic coercion handles ISO strings / enum
+    values — passing those positionally to ``Meeting(...)`` trips pyright's
+    reportArgumentType since the fields are typed ``datetime`` / enum.
+    """
+    base: dict[str, object] = {
+        "title": "t",
+        "meeting_title": None,
+        "recording_id": 1,
+        "url": "https://fathom.video/calls/1",
+        "share_url": "https://fathom.video/share/1",
+        "created_at": "2026-05-12T14:00:00Z",
+        "scheduled_start_time": "2026-05-12T14:00:00Z",
+        "scheduled_end_time": "2026-05-12T15:00:00Z",
+        "recording_start_time": "2026-05-12T14:00:00Z",
+        "recording_end_time": "2026-05-12T15:00:00Z",
+        "calendar_invitees_domains_type": "only_internal",
+        "transcript_language": "en",
+        "calendar_invitees": [],
+        "recorded_by": {
+            "name": "H",
+            "email": "h@dlthub.com",
+            "email_domain": "dlthub.com",
+            "team": None,
+        },
+    }
+    base.update(overrides)
+    return base
+
+
 def test_transcript_and_crm_matches_preserved() -> None:
     # The mapper must be lossless: transcript and crm_matches share the SDK and
     # webhook shapes, so they round-trip rather than being dropped.
-    meeting = M.Meeting(
-        title="t",
-        meeting_title=None,
-        recording_id=7,
-        url="https://fathom.video/calls/7",
-        share_url="https://fathom.video/share/7",
-        created_at="2026-05-12T14:00:00Z",
-        scheduled_start_time="2026-05-12T14:00:00Z",
-        scheduled_end_time="2026-05-12T15:00:00Z",
-        recording_start_time="2026-05-12T14:00:00Z",
-        recording_end_time="2026-05-12T15:00:00Z",
-        calendar_invitees_domains_type="only_internal",
-        transcript_language="en",
-        calendar_invitees=[],
-        recorded_by=M.FathomUser(
-            name="H",
-            email="h@dlthub.com",
-            email_domain="dlthub.com",
-            team=None,
-        ),
-        transcript=[
-            M.TranscriptItem(
-                speaker=M.TranscriptItemSpeaker(
-                    display_name="H",
-                    matched_calendar_invitee_email=None,
-                ),
-                text="hi",
-                timestamp="00:01",
-            ),
-        ],
-        crm_matches=M.CRMMatches(
-            companies=[M.CRMCompanyMatch(name="Acme", record_url="https://x")],
-            contacts=[],
-            deals=[],
-            error=None,
+    meeting = M.Meeting.model_validate(
+        _meeting_dict(
+            recording_id=7,
+            transcript=[
+                {
+                    "speaker": {
+                        "display_name": "H",
+                        "matched_calendar_invitee_email": None,
+                    },
+                    "text": "hi",
+                    "timestamp": "00:01",
+                },
+            ],
+            crm_matches={
+                "companies": [{"name": "Acme", "record_url": "https://x"}],
+                "contacts": [],
+                "deals": [],
+                "error": None,
+            },
         ),
     )
     webhook = webhook_from_sdk_meeting(meeting)
@@ -100,28 +117,11 @@ def test_transcript_and_crm_matches_preserved() -> None:
 
 
 def test_null_summary_fields_coerced() -> None:
-    meeting = M.Meeting(
-        title="t",
-        meeting_title=None,
-        recording_id=1,
-        url="https://fathom.video/calls/1",
-        share_url="https://fathom.video/share/1",
-        created_at="2026-05-12T14:00:00Z",
-        scheduled_start_time="2026-05-12T14:00:00Z",
-        scheduled_end_time="2026-05-12T15:00:00Z",
-        recording_start_time="2026-05-12T14:00:00Z",
-        recording_end_time="2026-05-12T15:00:00Z",
-        calendar_invitees_domains_type="only_internal",
-        transcript_language="en",
-        calendar_invitees=[],
-        recorded_by=M.FathomUser(
-            name="H",
-            email="h@dlthub.com",
-            email_domain="dlthub.com",
-            team=None,
+    meeting = M.Meeting.model_validate(
+        _meeting_dict(
+            default_summary={"template_name": None, "markdown_formatted": None},
+            action_items=None,
         ),
-        default_summary=M.MeetingSummary(template_name=None, markdown_formatted=None),
-        action_items=None,
     )
     webhook = webhook_from_sdk_meeting(meeting)
     assert webhook.default_summary is not None
