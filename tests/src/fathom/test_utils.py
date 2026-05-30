@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from libs.fathom.models import ActionItem, Assignee
 from src.fathom.utils import (
+    build_meeting_description,
     fathom_summary_title,
     render_action_items_markdown,
 )
@@ -98,3 +99,44 @@ def test_action_items_omits_blank_items() -> None:
 
 def test_action_items_empty_list_returns_empty_string() -> None:
     assert render_action_items_markdown([]) == ""
+
+
+def test_build_meeting_description_with_summary_and_footer() -> None:
+    desc = build_meeting_description(
+        summary_markdown="## Summary\nWent well.",
+        fallback_title="Internal sync",
+        recording_url="https://fathom.video/calls/123",
+        recording_id=123,
+        transcript_language="en",
+    )
+    assert desc.startswith("## Summary\nWent well.")
+    assert "\n\n---\n" in desc
+    assert "🎥 [Watch the Fathom recording](https://fathom.video/calls/123)" in desc
+    assert "Fathom recording #123" in desc
+    assert "language: en" in desc
+
+
+def test_build_meeting_description_falls_back_to_title() -> None:
+    desc = build_meeting_description(
+        summary_markdown=None,
+        fallback_title="Internal sync",
+        recording_url="https://fathom.video/calls/123",
+        recording_id=123,
+        transcript_language="en",
+    )
+    assert desc.startswith("Internal sync")
+    assert "Fathom recording #123" in desc
+
+
+def test_build_meeting_description_blank_summary_uses_title() -> None:
+    desc = build_meeting_description(
+        summary_markdown="   ",
+        fallback_title="Internal sync",
+        recording_url=None,
+        recording_id=123,
+        transcript_language=None,
+    )
+    assert desc.startswith("Internal sync")
+    # No https url → no watch link, but the recording id still anchors it.
+    assert "🎥" not in desc
+    assert "Fathom recording #123" in desc

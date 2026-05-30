@@ -86,6 +86,13 @@ def test_attio_get_operations_returns_meeting_and_summary() -> None:
 
     assert op.title == "Internal sync"
     assert op.description.startswith("## Summary")
+    # The recording-provenance footer is appended after the summary body and
+    # prefers the shareable link over the internal /calls page.
+    assert "🎥 [Watch the Fathom recording](https://fathom.video/share/test)" in (
+        op.description
+    )
+    assert "Fathom recording #999999" in op.description
+    assert "language: en" in op.description
     assert op.is_all_day is False
 
     emails = [p.email_address for p in op.participants]
@@ -104,8 +111,10 @@ def test_attio_get_operations_falls_back_when_default_summary_missing() -> None:
     assert len(plan) == 1
     op = plan[0]
     assert isinstance(op, UpsertMeeting)
-    # description falls back to meeting_title (or title)
-    assert op.description == "Internal sync"
+    # description falls back to meeting_title (or title) as the body, then the
+    # recording footer is appended.
+    assert op.description.startswith("Internal sync")
+    assert "Fathom recording #999999" in op.description
 
 
 def test_plan_includes_summary_note() -> None:

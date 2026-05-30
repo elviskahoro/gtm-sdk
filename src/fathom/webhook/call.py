@@ -1,4 +1,13 @@
-"""Webhook ETL contract for Fathom recording ingestion."""
+"""Webhook ETL contract for Fathom recording ingestion.
+
+The same transform this class implements (``attio_get_operations``) is reused
+for *backfill* by ``scripts/fathom-backfill-attio-meetings.py``: that script
+lists recordings from the Fathom REST API (``libs/fathom/client.py``), reshapes
+each into the ``Webhook`` payload model, and runs them through this exact path.
+So a recording that predates the webhook — or a meeting missing from Attio after
+the pre-plan-02 Cal.com reschedule bug (ai-t58) — can be replayed without
+forking the Fathom → Attio mapping logic.
+"""
 
 from typing import Any
 
@@ -8,6 +17,7 @@ from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.fathom import Webhook as FathomWebhook
 from libs.meetings import canonical_meeting_uid
 from src.fathom.utils import (
+    build_meeting_description,
     fathom_summary_title,
     render_action_items_markdown,
     generate_gcs_filename,
@@ -113,10 +123,18 @@ class Webhook(FathomWebhook):
             UpsertMeeting,
         )
 
-        description: str = (
-            self.default_summary.markdown_formatted
-            if self.default_summary
-            else (self.meeting_title or self.title)
+        description: str = build_meeting_description(
+            summary_markdown=(
+                self.default_summary.markdown_formatted
+                if self.default_summary
+                else None
+            ),
+            fallback_title=self.meeting_title or self.title,
+            # Prefer the shareable link over the internal /calls page so Attio
+            # viewers without Fathom access can still open the recording.
+            recording_url=self.share_url or self.url,
+            recording_id=self.recording_id,
+            transcript_language=self.transcript_language,
         )
         # Fall back to the recorder as the sole participant for ad-hoc Fathom
         # recordings that aren't tied to a calendar invite.
