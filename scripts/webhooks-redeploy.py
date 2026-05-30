@@ -624,6 +624,12 @@ async def _deploy_via_dagger(
 ) -> None:
     """Run ``uv sync --frozen && uv run modal deploy <handler>`` in a container.
 
+    Installs ``git`` first: the ``bookworm-slim`` base lacks it, but the lock
+    file pins the public ``gtm-linear`` git dependency that ``uv sync`` must
+    clone (the repo is public, so no credentials are needed). Without git the
+    sync aborts with "Git executable not found" before ``modal deploy`` runs
+    (ai-8h3).
+
     Mounts the repo at ``/repo`` (excluding ``.venv``, ``tmp/``, bytecode
     caches, and **both** the worktree's ``.git`` file/dir — worktrees use
     a gitlink file, not a directory, and a stray gitlink inside the
@@ -692,6 +698,22 @@ async def _deploy_via_dagger(
         container = (
             dagger.dag.container()
             .from_(DAGGER_BASE_IMAGE)
+            # bookworm-slim ships no git, but pyproject pins the public
+            # `gtm-linear` git dep, so `uv sync --frozen` below shells out to
+            # git and dies with "Git executable not found" before modal
+            # deploy runs (ai-8h3). Install it here, before the source mount,
+            # so the apt layer caches on the base image alone and is not
+            # busted by source churn. `update` + `install` MUST share one
+            # exec or Dagger can reuse a stale apt index against a fresh
+            # install (the classic Debian layering pitfall). `sh` (dash) is
+            # guaranteed on Debian; `bash` may be absent on -slim.
+            .with_exec(
+                [
+                    "sh",
+                    "-c",
+                    "apt-get update && apt-get install -y --no-install-recommends git",
+                ],
+            )
             .with_directory("/repo", src)
             .with_workdir("/repo")
             .with_exec(["uv", "sync", "--frozen"])
