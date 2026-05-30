@@ -50,12 +50,16 @@ image = (
         "flatsplode>=0.2.0",
         "gcsfs>=2024.10.0",
         "gtm-apollo>=0.0.2",
-        "gtm-linear @ git+https://github.com/elviskahoro/sdk-python-linear@6d8f37c09eabec76be41fb5b07727e7972e0bed0",
+        "gtm-linear>=0.0.2",
         "infisicalsdk>=1.0.16",
         "orjson>=3.10.0",
         "parallel-web",
         "polars>=1.10.0",
         "pydantic>=2.0",
+        # Provides the `uuid_extensions` module imported by libs/logging/structured.py
+        # (pulled in at src/app.py import time). Missing it crash-loops every
+        # container on startup — masked until now because deploys were broken. (ai-8k7)
+        "uuid7>=0.1.0",
     )
     .env(
         {

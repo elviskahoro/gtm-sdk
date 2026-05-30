@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pydantic import ValidationError as PydanticValidationError
+
 from src.modal_app import MODAL_APP
 
 
@@ -185,6 +187,40 @@ def classify_error(error: Exception, *, strict: bool = False) -> ClassifiedError
             message=str(error),
             error_type=type(error).__name__,
             fatal=True,
+        )
+
+    # pydantic's own ValidationError is NOT one of the custom AttioError subclasses
+    # above, so without this branch it fell through to `unknown_error` and
+    # `str(error)` leaked pydantic internals — the `errors.pydantic.dev/...` URL and
+    # the `extra_forbidden`/`literal_error` type tags — into the user-facing
+    # envelope. Also unwrap one level of `__cause__`: a model_validate failure is
+    # sometimes re-raised wrapped (e.g. a ResponseValidationError) with the pydantic
+    # error chained, which would otherwise slip back into the leaky path. This runs
+    # BEFORE the `_looks_like_scope_error` heuristic so a validation message that
+    # happens to contain a scope substring isn't misfiled as insufficient_scope. (ai-8k7)
+    pydantic_exc = (
+        error
+        if isinstance(error, PydanticValidationError)
+        else error.__cause__
+        if isinstance(error.__cause__, PydanticValidationError)
+        else None
+    )
+    if pydantic_exc is not None:
+        field_paths = [
+            ".".join(str(part) for part in e["loc"])
+            for e in pydantic_exc.errors()
+            if e.get("loc")
+        ]
+        return ClassifiedError(
+            code="validation_error",
+            # Message lists every offending location; `field` carries a single
+            # canonical path (the first), matching how `field` is a singular path
+            # everywhere else (e.g. SchemaMismatchError) rather than an ambiguous
+            # comma-joined pseudo-field. (ai-8k7)
+            message=f"Invalid input for: {', '.join(field_paths) or 'request'}",
+            error_type=type(pydantic_exc).__name__,
+            fatal=True,
+            field=field_paths[0] if field_paths else None,
         )
 
     if _looks_like_scope_error(error):

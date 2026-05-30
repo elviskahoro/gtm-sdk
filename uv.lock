@@ -1085,7 +1085,7 @@ requires-dist = [
     { name = "flatsplode", specifier = ">=0.2.0" },
     { name = "gcsfs", specifier = ">=2024.10.0" },
     { name = "gtm-apollo", specifier = ">=0.0.2" },
-    { name = "gtm-linear", git = "https://github.com/elviskahoro/sdk-python-linear?rev=6d8f37c09eabec76be41fb5b07727e7972e0bed0" },
+    { name = "gtm-linear", specifier = ">=0.0.2" },
     { name = "ibis-framework" },
     { name = "infisicalsdk", specifier = ">=1.0.16" },
     { name = "logfire", specifier = ">=4.32.1" },
@@ -1140,10 +1140,14 @@ wheels = [
 [[package]]
 name = "gtm-linear"
 version = "0.0.2"
-source = { git = "https://github.com/elviskahoro/sdk-python-linear?rev=6d8f37c09eabec76be41fb5b07727e7972e0bed0#6d8f37c09eabec76be41fb5b07727e7972e0bed0" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "strawberry-graphql" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/04/907fbe7a0e9dd5498e167a01e20969a2177eb80dcd8881936a9739964072/gtm_linear-0.0.2.tar.gz", hash = "sha256:4a940b521570c77a93ba329755df57e6390a3d9429891c4867ce0508e908ee6b", size = 10406, upload-time = "2026-05-30T19:52:10.765Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/28/7b0d23436ececb00b9b7ae684a4f54317f95baf79e21f35ed348eab057c5/gtm_linear-0.0.2-py3-none-any.whl", hash = "sha256:3af6e0a30b8df3a8e01625a445b080802e1249d6173918efb2b0f64262d7cff0", size = 12825, upload-time = "2026-05-30T19:52:09.586Z" },
 ]
 
 [[package]]

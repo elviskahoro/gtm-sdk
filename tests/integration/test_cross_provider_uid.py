@@ -44,11 +44,19 @@ def _fathom_webhook() -> FathomCallWebhook:
     return FathomCallWebhook.model_validate(payload)
 
 
+def _meeting_op(webhook: CalcomBookingWebhook | FathomCallWebhook) -> UpsertMeeting:
+    # The meeting op is no longer guaranteed at index [0]: cal.com prepends host
+    # UpsertCompany + UpsertPerson ops (ai-65l, commit 0ce9f6d) so the dispatcher
+    # can resolve the lifecycle event's host PersonRef. Select by type instead of
+    # position so the test stays focused on the iCalUID invariant. (ai-8k7)
+    return next(
+        op for op in webhook.attio_get_operations() if isinstance(op, UpsertMeeting)
+    )
+
+
 def test_same_meeting_from_both_providers_collapses_to_one_ical_uid() -> None:
-    calcom_op = _calcom_webhook().attio_get_operations()[0]
-    fathom_op = _fathom_webhook().attio_get_operations()[0]
-    assert isinstance(calcom_op, UpsertMeeting)
-    assert isinstance(fathom_op, UpsertMeeting)
+    calcom_op = _meeting_op(_calcom_webhook())
+    fathom_op = _meeting_op(_fathom_webhook())
     assert calcom_op.external_ref.ical_uid == fathom_op.external_ref.ical_uid
 
 
@@ -56,10 +64,8 @@ def test_different_start_times_diverge() -> None:
     calcom = _calcom_webhook()
     fathom = _fathom_webhook()
     fathom.scheduled_start_time = fathom.scheduled_start_time.replace(minute=30)
-    calcom_op = calcom.attio_get_operations()[0]
-    fathom_op = fathom.attio_get_operations()[0]
-    assert isinstance(calcom_op, UpsertMeeting)
-    assert isinstance(fathom_op, UpsertMeeting)
+    calcom_op = _meeting_op(calcom)
+    fathom_op = _meeting_op(fathom)
     assert calcom_op.external_ref.ical_uid != fathom_op.external_ref.ical_uid
 
 
@@ -67,8 +73,6 @@ def test_host_email_case_does_not_diverge() -> None:
     calcom = _calcom_webhook()
     fathom = _fathom_webhook()
     fathom.recorded_by.email = HOST_EMAIL.upper()
-    calcom_op = calcom.attio_get_operations()[0]
-    fathom_op = fathom.attio_get_operations()[0]
-    assert isinstance(calcom_op, UpsertMeeting)
-    assert isinstance(fathom_op, UpsertMeeting)
+    calcom_op = _meeting_op(calcom)
+    fathom_op = _meeting_op(fathom)
     assert calcom_op.external_ref.ical_uid == fathom_op.external_ref.ical_uid
