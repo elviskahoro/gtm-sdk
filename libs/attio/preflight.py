@@ -18,7 +18,6 @@ so unit tests that mock the client don't pay a ``/v2/self`` round-trip.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 
 from libs.attio.client import get_client, resolve_api_key
@@ -42,18 +41,24 @@ RECOMMENDED_WRITE_SCOPES: frozenset[str] = frozenset(
 
 # Process-level cache of validations already performed, so backfill loops that
 # call the writer once per row don't re-hit /v2/self each time. Keyed by
-# (token fingerprint, required scopes, recommended scopes) — NOT token alone:
-# the webhook path checks `record_permission:read-write` while the bootstrap
-# checks `object_configuration:read-write`, and a lenient pass must not suppress
-# a later stricter check for the same token in a long-lived process.
+# (token, required scopes, recommended scopes) — NOT token alone: the webhook
+# path checks `record_permission:read-write` while the bootstrap checks
+# `object_configuration:read-write`, and a lenient pass must not suppress a
+# later stricter check for the same token in a long-lived process.
+#
+# The key holds the raw token. These caches are in-memory and process-local;
+# the token is never logged, persisted, or otherwise exposed by living here, and
+# it already resides in the env var / contextvar for the process lifetime. We do
+# NOT hash it for a key: a fast crypto hash adds no real protection for an
+# in-memory dict key and trips CodeQL's weak-sensitive-data-hashing rule.
 _ValidationKey = tuple[str, frozenset[str], frozenset[str]]
 _validated_fingerprints: set[_ValidationKey] = set()
 
-# Cache of token fingerprint -> the token's authorizing workspace-member id
-# (``/v2/self`` ``authorized_by_workspace_member_id``). Used to stamp the owner
-# of records the token writes. Workspace-member ids are per-workspace, so this
-# must be resolved from the live token, never hardcoded (ai-ica: a hardcoded
-# dev-era UUID broke the prod meeting-lifecycle owner write).
+# Cache of token -> the token's authorizing workspace-member id (``/v2/self``
+# ``authorized_by_workspace_member_id``). Used to stamp the owner of records the
+# token writes. Workspace-member ids are per-workspace, so this must be resolved
+# from the live token, never hardcoded (ai-ica: a hardcoded dev-era UUID broke
+# the prod meeting-lifecycle owner write).
 _owner_member_cache: dict[str, str] = {}
 
 
@@ -67,10 +72,6 @@ def reset_scope_cache() -> None:
     _owner_member_cache.clear()
 
 
-def _fingerprint(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
-
-
 def resolve_owner_member_id(api_key: str | None = None) -> str | None:
     """Return the active token's authorizing workspace-member id, or ``None``.
 
@@ -82,8 +83,7 @@ def resolve_owner_member_id(api_key: str | None = None) -> str | None:
     rather than fail the whole write.
     """
     token = resolve_api_key(api_key)
-    fingerprint = _fingerprint(token)
-    cached = _owner_member_cache.get(fingerprint)
+    cached = _owner_member_cache.get(token)
     if cached is not None:
         return cached
     try:
@@ -97,7 +97,7 @@ def resolve_owner_member_id(api_key: str | None = None) -> str | None:
         return None
     member_id = getattr(identity, "authorized_by_workspace_member_id", "") or ""
     if member_id:
-        _owner_member_cache[fingerprint] = member_id
+        _owner_member_cache[token] = member_id
         return member_id
     return None
 
@@ -135,7 +135,7 @@ def assert_attio_token_scopes(
     re-checks).
     """
     token = resolve_api_key(api_key)
-    cache_key: _ValidationKey = (_fingerprint(token), required, recommended)
+    cache_key: _ValidationKey = (token, required, recommended)
     if not force and cache_key in _validated_fingerprints:
         return
 
