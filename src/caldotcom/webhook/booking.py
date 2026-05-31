@@ -230,6 +230,7 @@ def _ops_for_created(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=title,
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype="scheduled",
             timestamp=created_at,
             body_json=json.dumps(
@@ -254,10 +255,33 @@ def _payload_title(payload: Any) -> str:
 
     The various payload shapes carry ``title`` on most paths; the no-show slim
     payload doesn't, and the meeting-ended flat shape also lacks it. The
-    fallback is fine — the row's `name` slug still scans cleanly with
-    "<event_subtype> Cal.com meeting".
+    fallback is fine — the row's `name` slug still scans cleanly as
+    "<domain> · <state> · Cal.com meeting".
     """
     return getattr(payload, "title", None) or "Cal.com meeting"
+
+
+def _external_company_domain(
+    attendees: list[BookingAttendee] | list[MutationAttendee] | list[NoShowAttendee],
+    host_email: str,
+) -> str | None:
+    """Domain of the first attendee whose email domain differs from the host's.
+
+    Cal.com ``attendees`` are the external guests; ``hosts``/creator are the
+    dlthub side. This domain leads the ``tracking_events`` row title (see
+    ``libs.attio.tracking_events._meeting_lifecycle_name``). Returns ``None``
+    when no external domain can be derived — the title then falls back to a
+    generic source label.
+    """
+    host_domain = host_email.split("@")[-1].lower() if "@" in host_email else ""
+    for a in attendees:
+        email = getattr(a, "email", None)
+        if not email or "@" not in email:
+            continue
+        domain = email.split("@")[-1].lower()
+        if domain and domain != host_domain:
+            return domain
+    return None
 
 
 def _ops_for_cancelled(
@@ -274,6 +298,7 @@ def _ops_for_cancelled(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(payload),
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype="cancelled",
             timestamp=created_at,
             body_json=json.dumps(
@@ -318,6 +343,7 @@ def _ops_for_rescheduled(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(payload),
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype="rescheduled",
             timestamp=created_at,
             body_json=json.dumps(
@@ -368,6 +394,7 @@ def _ops_for_no_show(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(booking),
+            company_domain=_external_company_domain(booking.attendees, host_email),
             event_subtype="no_show_attendee",
             timestamp=created_at,
             body_json=json.dumps(
@@ -403,6 +430,7 @@ def _ops_for_meeting_ended(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(payload),
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype=event_subtype,
             timestamp=created_at,
             body_json=json.dumps(

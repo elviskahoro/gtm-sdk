@@ -25,6 +25,7 @@ def _valid_input(**overrides: object) -> MeetingLifecycleEventInput:
     base: dict[str, object] = dict(
         external_id="ical-uid-abc",
         meeting_title="Acme × dlt pricing call",
+        company_domain="acme.com",
         event_subtype="cancelled",
         timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
         body_json='{"reason":"redacted"}',
@@ -121,8 +122,10 @@ def test_miss_then_create_writes_full_value_set(
     # event_type pinned to the namespace value.
     assert values["event_type"] == [{"option": "calcom_meeting"}]
     assert values["event_subtype"] == [{"option": "cancelled"}]
-    # name prepends event_subtype.
-    assert values["name"] == [{"value": "cancelled Acme × dlt pricing call"}]
+    # name = "{domain} · {state} · {meeting_title}".
+    assert values["name"] == [
+        {"value": "acme.com · Cancelled · Acme × dlt pricing call"},
+    ]
     # people slug points at the host record (NOT the legacy `contact` slug).
     assert values["people"] == [
         {"target_object": "people", "target_record_id": "pe_host_1"},
@@ -169,6 +172,31 @@ def test_owner_omitted_when_member_id_unresolved(
     assert "owner" not in values
     # The rest of the row is still written.
     assert values["event_type"] == [{"option": "calcom_meeting"}]
+
+
+@patch("libs.attio.tracking_events.ensure_select_options")
+@patch("libs.attio.tracking_events.get_client")
+def test_name_drops_domain_segment_without_domain(
+    mock_get_client: MagicMock,
+    mock_ensure_options: MagicMock,  # noqa: ARG001
+) -> None:
+    """company_domain=None → domain segment dropped, no empty leading segment."""
+    client = MagicMock()
+    client.records.post_v2_objects_object_records_query.return_value.data = []
+    create_resp = MagicMock()
+    create_resp.data.id.record_id = "te_new"
+    client.records.post_v2_objects_object_records.return_value = create_resp
+    mock_get_client.return_value.__enter__.return_value = client
+
+    env = find_or_create_meeting_lifecycle_event(
+        _valid_input(company_domain=None, event_subtype="scheduled"),
+    )
+
+    assert env.success is True
+    values = _values_from_call(client.records.post_v2_objects_object_records.call_args)
+    assert values["name"] == [
+        {"value": "Scheduled · Acme × dlt pricing call"},
+    ]
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")

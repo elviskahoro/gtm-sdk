@@ -80,9 +80,13 @@ class MeetingLifecycleEventInput(BaseModel):
     # Meeting record's ``external_ref.ical_uid``. Cross-reference between the
     # tracking_events row and the Meeting record without a foreign key.
     external_id: str
-    # Cal.com booking title, e.g. "Acme × dlt pricing call". Combined with
-    # ``event_subtype`` to form the row's ``name`` slug.
+    # Cal.com booking title, e.g. "Acme × dlt pricing call". The trailing
+    # segment of the row's ``name`` slug.
     meeting_title: str
+    # External company's email domain (e.g. "acme.com"), used to lead the
+    # row's ``name``. ``None`` → the domain segment is dropped and the title is
+    # just ``{state} · {meeting_title}``.
+    company_domain: str | None = None
     event_subtype: MeetingLifecycleSubtype
     # Webhook ``createdAt``. Overwritten on every transition so the row's
     # timestamp tracks the most recent state change.
