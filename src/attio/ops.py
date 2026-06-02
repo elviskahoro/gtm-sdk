@@ -272,8 +272,8 @@ class EmitMeetingLifecycleEvent(BaseModel):
     # Cal.com booking title — the trailing segment of the row ``name``.
     meeting_title: str
     # External company's email domain (e.g. "acme.com"). Leads the row title
-    # (``{domain} · {state} · {meeting_title}``); ``None`` drops the domain
-    # segment, leaving ``{state} · {meeting_title}``.
+    # (``{domain} · {state} · {meeting_title}``); ``None`` leads with the
+    # explicit ``no-domain`` placeholder instead.
     company_domain: str | None = None
     event_subtype: Literal[
         "scheduled",

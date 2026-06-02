@@ -84,8 +84,8 @@ class MeetingLifecycleEventInput(BaseModel):
     # segment of the row's ``name`` slug.
     meeting_title: str
     # External company's email domain (e.g. "acme.com"), used to lead the
-    # row's ``name``. ``None`` → the domain segment is dropped and the title is
-    # just ``{state} · {meeting_title}``.
+    # row's ``name``. ``None`` → the title leads with the explicit ``no-domain``
+    # placeholder instead.
     company_domain: str | None = None
     event_subtype: MeetingLifecycleSubtype
     # Webhook ``createdAt``. Overwritten on every transition so the row's

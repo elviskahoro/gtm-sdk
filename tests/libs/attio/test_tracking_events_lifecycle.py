@@ -176,11 +176,11 @@ def test_owner_omitted_when_member_id_unresolved(
 
 @patch("libs.attio.tracking_events.ensure_select_options")
 @patch("libs.attio.tracking_events.get_client")
-def test_name_drops_domain_segment_without_domain(
+def test_name_uses_no_domain_placeholder_without_domain(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001
 ) -> None:
-    """company_domain=None → domain segment dropped, no empty leading segment."""
+    """company_domain=None → explicit ``no-domain`` leading segment."""
     client = MagicMock()
     client.records.post_v2_objects_object_records_query.return_value.data = []
     create_resp = MagicMock()
@@ -195,7 +195,7 @@ def test_name_drops_domain_segment_without_domain(
     assert env.success is True
     values = _values_from_call(client.records.post_v2_objects_object_records.call_args)
     assert values["name"] == [
-        {"value": "Scheduled · Acme × dlt pricing call"},
+        {"value": "no-domain · Scheduled · Acme × dlt pricing call"},
     ]
 
 

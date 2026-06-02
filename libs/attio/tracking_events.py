@@ -43,6 +43,12 @@ _MEETING_STATE_LABELS: dict[str, str] = {
     "completed": "Completed",
 }
 
+# Explicit placeholder for the leading domain segment when the meeting has no
+# external attendee (internal-only). Kept as a visible prefix rather than
+# dropped so the title shape is uniform and the missing-domain case is obvious
+# at a glance in the Attio timeline.
+_NO_DOMAIN_PREFIX = "no-domain"
+
 
 def _meeting_lifecycle_name(
     company_domain: str | None,
@@ -52,13 +58,15 @@ def _meeting_lifecycle_name(
     """Build the row ``name``: ``{domain} · {state} · {meeting_title}``.
 
     Leads with the external company's domain (what the operator scans for). When
-    no domain is known the domain segment is dropped entirely, yielding
-    ``{state} · {meeting_title}``. Examples:
+    no domain is known the leading segment is the explicit ``no-domain``
+    placeholder rather than being dropped, so every title keeps the same shape
+    and the missing-domain case is obvious. Examples:
     ``"acme.com · Scheduled · Discovery call"`` /
-    ``"Scheduled · Discovery call"``.
+    ``"no-domain · Scheduled · Discovery call"``.
     """
     state = _MEETING_STATE_LABELS.get(event_subtype, event_subtype)
-    segments = [s for s in (company_domain, state, meeting_title) if s]
+    domain = company_domain or _NO_DOMAIN_PREFIX
+    segments = [s for s in (domain, state, meeting_title) if s]
     return " · ".join(segments)
 
 
