@@ -71,9 +71,13 @@ ATTRIBUTES: tuple[AttrSpec, ...] = (
     # equality filter ({"github_handle": handle}) — NOT via Attio's native
     # assert endpoint — so schema-level uniqueness is not required. This mirrors
     # the system `linkedin` attribute, which is also text + non-unique and works
-    # as a matching_attribute the same way. Attio additionally REJECTS
-    # is_unique=True here ("Cannot set attribute as unique"): you cannot add a
-    # unique attribute to the people object once it already has records.
+    # as a matching_attribute the same way. Native uniqueness is moreover
+    # UNACHIEVABLE here at EVERY Attio layer, which is why app-layer matching is
+    # the only option: Attio rejects is_unique=True ("Cannot set attribute as
+    # unique") on API attribute CREATE, on API attribute PATCH, AND in the web
+    # UI's attribute editor — you cannot add a unique attribute to the people
+    # object once it already has records. This is the canonical in-code record
+    # of that gotcha (ai-icn).
     AttrSpec(
         "GitHub handle",
         "github_handle",

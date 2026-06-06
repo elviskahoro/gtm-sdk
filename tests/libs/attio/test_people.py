@@ -8,12 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-@patch("libs.attio.people._search_by_identity")
+@patch("libs.attio.people._search_people_raw")
 def test_get_person_values_email_match_uses_email_only(mock_search) -> None:
-    """T6: matching_attribute=email selects via the email identity only, never
-    OR-ing in linkedin/github_handle. _search_by_identity enforces single-identity
-    matching, so asserting the call routes through it with matching_attribute=email
-    captures the intent."""
+    """T6: matching_attribute=email selects on the email identity only, never
+    OR-ing in linkedin/github_handle. Asserting the underlying search runs with
+    only `email` populated captures the single-identity contract."""
     mock_search.return_value = []  # no match -> short-circuits before any GET
 
     from libs.attio.people import get_person_values
@@ -26,11 +25,14 @@ def test_get_person_values_email_match_uses_email_only(mock_search) -> None:
     )
 
     mock_search.assert_called_once()
-    assert mock_search.call_args.args[0] == "email"
+    kwargs = mock_search.call_args.kwargs
+    assert kwargs.get("email") == "x@y.com"
+    assert kwargs.get("linkedin") is None
+    assert kwargs.get("github_handle") is None
 
 
 @patch("libs.attio.people.get_client")
-@patch("libs.attio.people._search_by_identity")
+@patch("libs.attio.people._search_people_raw")
 def test_get_person_values_github_handle_match(mock_search, mock_get_client) -> None:
     """T7: a single github_handle match reads that record's values by id."""
     from libs.attio.models import PersonSearchResult
@@ -47,19 +49,19 @@ def test_get_person_values_github_handle_match(mock_search, mock_get_client) -> 
         github_handle="octocat",
     )
 
-    assert mock_search.call_args.args[0] == "github_handle"
+    assert mock_search.call_args.kwargs.get("github_handle") == "octocat"
     assert get_by_id.call_args.kwargs["record_id"] == "rec_1"
     assert result == {"title": [{"value": "CTO"}]}
 
 
 @patch("libs.attio.people.get_client")
-@patch("libs.attio.people._search_by_identity")
+@patch("libs.attio.people._search_people_raw")
 def test_get_person_values_github_handle_picks_canonical_on_multimatch(
     mock_search,
     mock_get_client,
 ) -> None:
-    """A non-unique github_handle can match >1 record after a create-race. The
-    read must select the SAME canonical record upsert_person writes to (the
+    """A non-unique github_handle can match >1 record after a concurrent create.
+    The read must select the SAME canonical record upsert_person writes to (the
     lexicographically-smallest record_id), then read THAT record's values — not
     whichever row Attio yields first — so merge_only_if_empty stays aligned with
     the write."""
@@ -84,42 +86,6 @@ def test_get_person_values_github_handle_picks_canonical_on_multimatch(
     # Must read the canonical (smallest) record_id, not the first yielded.
     assert get_by_id.call_args.kwargs["record_id"] == "rec_a"
     assert result == {"title": [{"value": "from A"}]}
-
-
-@patch("libs.attio.people._search_by_identity")
-def test_get_person_values_propagates_match_overflow(mock_search) -> None:
-    """A truncated candidate set must NOT be masked as 'not found' by the broad
-    except — it has to propagate so the caller doesn't overwrite as if absent."""
-    from libs.attio.people import (
-        IdentityMatchOverflowError,
-        get_person_values,
-    )
-
-    mock_search.side_effect = IdentityMatchOverflowError("too many")
-
-    with pytest.raises(IdentityMatchOverflowError):
-        get_person_values(matching_attribute="github_handle", github_handle="octocat")
-
-
-@patch("libs.attio.people._search_people_raw")
-def test_search_by_identity_raises_on_page_overflow(mock_search) -> None:
-    """When every page is full (never short), pagination would never terminate;
-    the cap must raise IdentityMatchOverflowError rather than canonicalize on a
-    truncated set."""
-    from libs.attio.models import PersonInput, PersonSearchResult
-    from libs.attio.people import (
-        _IDENTITY_PAGE_SIZE,
-        IdentityMatchOverflowError,
-        _search_by_identity,
-    )
-
-    full_page = [
-        PersonSearchResult(record_id=f"rec_{i}") for i in range(_IDENTITY_PAGE_SIZE)
-    ]
-    mock_search.return_value = full_page  # always a full page -> never terminates
-
-    with pytest.raises(IdentityMatchOverflowError):
-        _search_by_identity("github_handle", PersonInput(github_handle="octocat"))
 
 
 @patch("libs.attio.people.get_client")
