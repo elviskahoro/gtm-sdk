@@ -23,7 +23,12 @@ import orjson
 
 from libs.caldotcom.models import BookingCreatedPayload
 from libs.meetings import canonical_meeting_uid
-from src.attio.ops import AttioOp, MeetingExternalRef, UpsertMeeting
+from src.attio.ops import (
+    AttioOp,
+    EmitMeetingLifecycleEvent,
+    MeetingExternalRef,
+    UpsertMeeting,
+)
 from src.caldotcom.webhook.booking import Webhook
 
 
@@ -31,6 +36,15 @@ def _find_upsert_meeting(ops: list[AttioOp]) -> UpsertMeeting:
     matches = [o for o in ops if isinstance(o, UpsertMeeting)]
     assert len(matches) == 1, (
         f"expected exactly 1 UpsertMeeting in plan; got {len(matches)} "
+        f"in {[type(o).__name__ for o in ops]}"
+    )
+    return matches[0]
+
+
+def _find_lifecycle_event(ops: list[AttioOp]) -> EmitMeetingLifecycleEvent:
+    matches = [o for o in ops if isinstance(o, EmitMeetingLifecycleEvent)]
+    assert len(matches) == 1, (
+        f"expected exactly 1 EmitMeetingLifecycleEvent in plan; got {len(matches)} "
         f"in {[type(o).__name__ for o in ops]}"
     )
     return matches[0]
@@ -242,6 +256,35 @@ def test_attio_get_operations_maps_cancelled_status_to_declined() -> None:
         p for p in op.participants if p.email_address == "external@example.com"
     )
     assert external.status == "declined"
+
+
+def test_lifecycle_event_carries_external_company_domain() -> None:
+    """The lifecycle op leads its title with the external attendee's domain.
+
+    Host is ``host@dlthub.com``; the external attendee is
+    ``external@example.com`` → ``company_domain == "example.com"``.
+    """
+    event = _find_lifecycle_event(_load().attio_get_operations())
+    assert event.company_domain == "example.com"
+    assert event.meeting_title == "Discovery call"
+    assert event.event_subtype == "scheduled"
+
+
+def test_lifecycle_event_domain_none_when_only_host_attends() -> None:
+    """No external attendee → company_domain is None (title falls back later)."""
+    w = _mutated_created_webhook(
+        attendees=[
+            {
+                "name": "Internal Host",
+                "email": "host@dlthub.com",
+                "displayEmail": "host@dlthub.com",
+                "timeZone": "America/Los_Angeles",
+                "absent": False,
+            },
+        ],
+    )
+    event = _find_lifecycle_event(w.attio_get_operations())
+    assert event.company_domain is None
 
 
 def test_payload_is_typed_not_dict() -> None:

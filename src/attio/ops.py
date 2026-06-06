@@ -269,8 +269,12 @@ class EmitMeetingLifecycleEvent(BaseModel):
     # Meeting record's ``external_ref.ical_uid`` — the cross-reference between
     # the tracking_events row and the Meeting record.
     external_id: str
-    # Cal.com booking title, combined with ``event_subtype`` to form ``name``.
+    # Cal.com booking title — the trailing segment of the row ``name``.
     meeting_title: str
+    # External company's email domain (e.g. "acme.com"). Leads the row title
+    # (``{domain} · {state} · {meeting_title}``); ``None`` leads with the
+    # explicit ``no-domain`` placeholder instead.
+    company_domain: str | None = None
     event_subtype: Literal[
         "scheduled",
         "cancelled",
