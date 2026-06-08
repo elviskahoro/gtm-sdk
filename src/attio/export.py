@@ -813,6 +813,7 @@ def _handle_emit_meeting_lifecycle_event(
         MeetingLifecycleEventInput(
             external_id=op.external_id,
             meeting_title=op.meeting_title,
+            company_domain=op.company_domain,
             event_subtype=op.event_subtype,
             timestamp=op.timestamp,
             body_json=op.body_json,

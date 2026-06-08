@@ -31,6 +31,44 @@ _MULTISELECT_FIELDS: tuple[str, ...] = ("tags",)
 # stay in lockstep.
 _LIFECYCLE_EVENT_TYPE = "calcom_meeting"
 
+# Human-readable labels for each lifecycle state, used as the middle segment of
+# the row ``name``. Keys mirror ``MeetingLifecycleSubtype``; an unmapped value
+# falls through to itself so a future subtype never blanks the title.
+_MEETING_STATE_LABELS: dict[str, str] = {
+    "scheduled": "Scheduled",
+    "cancelled": "Cancelled",
+    "rescheduled": "Rescheduled",
+    "no_show_attendee": "No-show (attendee)",
+    "no_show_host": "No-show (host)",
+    "completed": "Completed",
+}
+
+# Explicit placeholder for the leading domain segment when the meeting has no
+# external attendee (internal-only). Kept as a visible prefix rather than
+# dropped so the title shape is uniform and the missing-domain case is obvious
+# at a glance in the Attio timeline.
+_NO_DOMAIN_PREFIX = "no-domain"
+
+
+def _meeting_lifecycle_name(
+    company_domain: str | None,
+    meeting_title: str,
+    event_subtype: str,
+) -> str:
+    """Build the row ``name``: ``{domain} · {state} · {meeting_title}``.
+
+    Leads with the external company's domain (what the operator scans for). When
+    no domain is known the leading segment is the explicit ``no-domain``
+    placeholder rather than being dropped, so every title keeps the same shape
+    and the missing-domain case is obvious. Examples:
+    ``"acme.com · Scheduled · Discovery call"`` /
+    ``"no-domain · Scheduled · Discovery call"``.
+    """
+    state = _MEETING_STATE_LABELS.get(event_subtype, event_subtype)
+    domain = company_domain or _NO_DOMAIN_PREFIX
+    segments = [s for s in (domain, state, meeting_title) if s]
+    return " · ".join(segments)
+
 
 def find_or_create_tracking_event(input: TrackingEventInput) -> ReliabilityEnvelope:
     """Idempotently upsert a tracking_events row keyed by `external_id`.
@@ -127,7 +165,7 @@ def find_or_create_meeting_lifecycle_event(
     Writes the slugs confirmed present on prod (and bootstrapped onto dev):
 
     - ``external_id`` — meeting's ical_uid (idempotency key)
-    - ``name`` — ``"<event_subtype> <meeting_title>"``
+    - ``name`` — ``"<company_domain> · <state> · <meeting_title>"``
     - ``event_type`` — always ``"calcom_meeting"``
     - ``event_subtype`` — current state
     - ``body`` — raw webhook JSON (overwritten each transition)
@@ -177,7 +215,18 @@ def find_or_create_meeting_lifecycle_event(
         )
 
         no_show = input.event_subtype in ("no_show_attendee", "no_show_host")
-        name = f"{input.event_subtype} {input.meeting_title}"
+        # The domain comes solely from the meeting's attendee/invitee emails
+        # (derived upstream in the cal.com handler). Cal.com sends the full
+        # attendee list on every webhook, so it resolves consistently across
+        # transitions; an internal-only meeting legitimately has no domain and
+        # the segment is dropped. We deliberately do NOT parse the domain back
+        # out of the stored title — that round-trip is fragile (a meeting_title
+        # can itself contain the separator or a state-label word).
+        name = _meeting_lifecycle_name(
+            input.company_domain,
+            input.meeting_title,
+            input.event_subtype,
+        )
         # Cal.com free-form fields (cancellationReason, ratingFeedback, meeting
         # title, etc.) can carry embedded newlines. Collapse them so every
         # stored transition is exactly one physical line — both for readability

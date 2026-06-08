@@ -44,6 +44,7 @@ from libs.caldotcom import (
     BookingCancelledPayload,
     BookingCreatedPayload,
     BookingNoShowPayload,
+    BookingRequestedPayload,
     BookingRescheduledPayload,
     MeetingEndedPayload,
     MeetingStartedPayload,
@@ -230,6 +231,7 @@ def _ops_for_created(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=title,
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype="scheduled",
             timestamp=created_at,
             body_json=json.dumps(
@@ -254,10 +256,33 @@ def _payload_title(payload: Any) -> str:
 
     The various payload shapes carry ``title`` on most paths; the no-show slim
     payload doesn't, and the meeting-ended flat shape also lacks it. The
-    fallback is fine — the row's `name` slug still scans cleanly with
-    "<event_subtype> Cal.com meeting".
+    fallback is fine — the row's `name` slug still scans cleanly as
+    "<domain> · <state> · Cal.com meeting".
     """
     return getattr(payload, "title", None) or "Cal.com meeting"
+
+
+def _external_company_domain(
+    attendees: list[BookingAttendee] | list[MutationAttendee] | list[NoShowAttendee],
+    host_email: str,
+) -> str | None:
+    """Domain of the first attendee whose email domain differs from the host's.
+
+    Cal.com ``attendees`` are the external guests; ``hosts``/creator are the
+    dlthub side. This domain leads the ``tracking_events`` row title (see
+    ``libs.attio.tracking_events._meeting_lifecycle_name``). Returns ``None``
+    when no external domain can be derived — the title then falls back to a
+    generic source label.
+    """
+    host_domain = host_email.split("@")[-1].lower() if "@" in host_email else ""
+    for a in attendees:
+        email = getattr(a, "email", None)
+        if not email or "@" not in email:
+            continue
+        domain = email.split("@")[-1].lower()
+        if domain and domain != host_domain:
+            return domain
+    return None
 
 
 def _ops_for_cancelled(
@@ -274,6 +299,7 @@ def _ops_for_cancelled(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(payload),
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype="cancelled",
             timestamp=created_at,
             body_json=json.dumps(
@@ -318,6 +344,7 @@ def _ops_for_rescheduled(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(payload),
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype="rescheduled",
             timestamp=created_at,
             body_json=json.dumps(
@@ -368,6 +395,7 @@ def _ops_for_no_show(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(booking),
+            company_domain=_external_company_domain(booking.attendees, host_email),
             event_subtype="no_show_attendee",
             timestamp=created_at,
             body_json=json.dumps(
@@ -403,6 +431,7 @@ def _ops_for_meeting_ended(
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,
             meeting_title=_payload_title(payload),
+            company_domain=_external_company_domain(payload.attendees, host_email),
             event_subtype=event_subtype,
             timestamp=created_at,
             body_json=json.dumps(
@@ -456,9 +485,11 @@ def _validation_result(payload: Any) -> tuple[bool, str]:
         ok = bool(payload.userPrimaryEmail) and bool(payload.attendees)
         return ok, ("" if ok else "MEETING_ENDED missing userPrimaryEmail/attendees")
     if isinstance(payload, MeetingStartedPayload):
-        return False, "MEETING_STARTED is not Attio-actionable in this iteration"
+        # Handler-agnostic wording: this gate is shared by the Attio and Slack
+        # paths, so don't name a specific destination in the rejection string.
+        return False, "MEETING_STARTED is not actionable in this iteration"
     if isinstance(payload, PingPayload):
-        return False, "PING is a connectivity check, not an Attio-actionable event"
+        return False, "PING is a connectivity check, not an actionable event"
     return False, f"unknown Cal.com payload variant: {type(payload).__name__}"
 
 
@@ -562,6 +593,20 @@ class Webhook(CalcomWebhook):
         # non-NO_SHOW branches stay decoupled from Cal.com key health at
         # request time. ``_calcom_client()`` still fetches lazily inside
         # the BOOKING_NO_SHOW_UPDATED branch.
+        #
+        # Slack keys (SLACK_BOT_TOKEN + the per-source channel key from
+        # slack_get_channel_secret_name()) are deliberately NOT listed here:
+        # this method is shared by every handler's preflight (Attio/GCS/Slack),
+        # so adding them would gate the Attio/GCS deploys on Slack secrets they
+        # never touch. The Slack deploy gets its own preflight, scoped to
+        # ``export_to_slack``, in ``scripts/webhooks-redeploy.py``.
+        #
+        # The decoupling is one-directional: the Slack preflight still iterates
+        # this source's required + optional keys, so deploying export_to_slack
+        # for caldotcom also checks ATTIO_API_KEY exists — even though the Slack
+        # path never calls Attio. Accepted: ATTIO_API_KEY is present in every
+        # env this source deploys to, and CALCOM_API_KEY *is* used by the Slack
+        # no-show branch, so the only spurious check is ATTIO_API_KEY.
         return ["CALCOM_API_KEY"]
 
     @staticmethod
@@ -593,6 +638,12 @@ class Webhook(CalcomWebhook):
 
     def attio_get_operations(self) -> list[AttioOp]:
         payload = self.payload
+        # BOOKING_REQUESTED (a pending, unconfirmed booking) subclasses
+        # BookingCreatedPayload, so it must be handled BEFORE the created check.
+        # It's a valid webhook (no 422) but writes nothing to Attio — the Attio
+        # meeting is created when the host confirms and BOOKING_CREATED fires.
+        if isinstance(payload, BookingRequestedPayload):
+            return []
         if isinstance(payload, BookingCreatedPayload):
             return _ops_for_created(payload, self.createdAt)
         if isinstance(payload, BookingCancelledPayload):
@@ -608,6 +659,40 @@ class Webhook(CalcomWebhook):
         # before this point. The fall-through also catches any future variant
         # we add to the union but forget to wire here.
         return []
+
+    # --- Slack export contract ---
+
+    @staticmethod
+    def slack_get_app_name() -> str:
+        return "export-to-slack-from-calcom-bookings"
+
+    @staticmethod
+    def slack_get_channel_secret_name() -> str:
+        # Per-automation channel: the Slack handler fetches THIS Infisical key
+        # for the target channel id, so each source posts to its own channel
+        # (a future source declares its own key, e.g. FATHOM_SLACK_CHANNEL_ID).
+        return "CALCOM_SLACK_CHANNEL_ID"
+
+    def slack_is_valid_webhook(self) -> bool:
+        # Same gate as Attio: PING / MEETING_STARTED are non-actionable.
+        return _validation_result(self.payload)[0]
+
+    def slack_get_invalid_webhook_error_msg(self) -> str:
+        return _validation_result(self.payload)[1]
+
+    def slack_get_messages(self) -> list[Any]:
+        """Build Slack Block Kit messages for this booking lifecycle event.
+
+        Each event threads under the booking's BOOKING_CREATED message; urgent
+        events (cancel/no-show) broadcast back to the channel. The NO_SHOW path
+        opens a Cal.com client lazily — see ``_calcom_client``.
+        """
+        from src.caldotcom.webhook.slack_export import messages_for_payload
+
+        return messages_for_payload(
+            self.payload,
+            calcom_client_factory=self._calcom_client,
+        )
 
 
 # Keep the legacy import path working for callers that still reference
