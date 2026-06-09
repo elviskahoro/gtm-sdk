@@ -161,16 +161,20 @@ class TestOperationDispatch:
 
         meeting_ops = [o for o in ops if isinstance(o, UpsertMeeting)]
         assert len(meeting_ops) == 1
-        expected_ical = canonical_meeting_uid(
+        canonical = canonical_meeting_uid(
             host_email="host@dlthub.com",
             start=datetime(2026, 5, 20, 15, 0, 0, tzinfo=UTC),
         )
-        assert meeting_ops[0].external_ref.ical_uid == expected_ical
+        # The Meeting keys on the real calendar iCalUID (``icsUid``) so it
+        # dedupes against the calendar-synced row (ai-4bz), not the canonical hash.
+        assert meeting_ops[0].external_ref.ical_uid == "ical-evt-abc123@cal.com"
 
         lifecycle = _find_lifecycle(ops)
         assert lifecycle.event_subtype == "scheduled"
-        # external_id == the Meeting's ical_uid: the cross-reference.
-        assert lifecycle.external_id == expected_ical
+        # The lifecycle row's external_id stays the canonical hash (its stable
+        # PATCH key across triggers that lack ``icsUid``) — it no longer equals
+        # the Meeting's ical_uid.
+        assert lifecycle.external_id == canonical
         # The "scheduled" details line names the host and attendees.
         assert "host@dlthub.com" in lifecycle.details_line
         assert "external@example.com" in lifecycle.details_line

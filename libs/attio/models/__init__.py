@@ -8,6 +8,7 @@ from libs.attio.models.companies import (
 )
 from libs.attio.models.ext_tam import ExtTamInput
 from libs.attio.models.meetings import (
+    MeetingCandidate,
     MeetingExternalRef,
     MeetingInput,
     MeetingLinkedRecord,
@@ -35,6 +36,7 @@ __all__ = [
     "CompanyResult",
     "CompanySearchResult",
     "ExtTamInput",
+    "MeetingCandidate",
     "MeetingExternalRef",
     "MeetingInput",
     "MeetingLifecycleEventInput",

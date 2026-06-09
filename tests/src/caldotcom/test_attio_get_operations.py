@@ -98,11 +98,20 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
 
     op = _find_upsert_meeting(plan)
     assert isinstance(op.external_ref, MeetingExternalRef)
-    expected = canonical_meeting_uid(
+    # The Meeting is keyed on the REAL calendar iCalUID (``icsUid``) so
+    # find_or_create collapses onto the calendar-synced row (ai-4bz), NOT the
+    # canonical hash.
+    assert op.external_ref.ical_uid == "ical-evt-abc123@cal.com"
+    assert op.external_ref.provider == "google"
+
+    # The lifecycle row, however, stays keyed on the canonical hash — it is the
+    # PATCH target shared with the cancelled/rescheduled/etc. triggers, which
+    # never carry ``icsUid``.
+    canonical = canonical_meeting_uid(
         host_email="host@dlthub.com",
         start=datetime.fromisoformat("2026-05-20T15:00:00+00:00"),
     )
-    assert op.external_ref.ical_uid == expected
+    assert _find_lifecycle_event(plan).external_id == canonical
 
     assert op.title == "Discovery call"
     assert op.description == "Customer would like to discuss pricing."
@@ -122,12 +131,30 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
     assert external.status == "accepted"
 
 
-def test_attio_get_operations_ignores_icsUid_in_favor_of_canonical_uid() -> None:
-    with_ics = _find_upsert_meeting(_load().attio_get_operations())
-    without_ics = _find_upsert_meeting(
-        _mutated_created_webhook(icsUid=None).attio_get_operations(),
+def test_meeting_uses_icsUid_when_present_falls_back_to_canonical() -> None:
+    """Meeting external_ref keys on the real calendar iCalUID (``icsUid``).
+
+    Switched from the old "always canonical" behavior (ai-4bz): keying on the
+    real ``icsUid`` lets find_or_create collapse onto the meeting Attio's
+    calendar sync already created, instead of minting a synthetic duplicate.
+    When ``icsUid`` is absent we fall back to the canonical hash so a meeting
+    still lands. The lifecycle row's ``external_id`` stays canonical in BOTH
+    cases (its key must be stable across triggers that lack ``icsUid``).
+    """
+    canonical = canonical_meeting_uid(
+        host_email="host@dlthub.com",
+        start=datetime.fromisoformat("2026-05-20T15:00:00+00:00"),
     )
-    assert with_ics.external_ref.ical_uid == without_ics.external_ref.ical_uid
+
+    with_ics_plan = _load().attio_get_operations()
+    with_ics = _find_upsert_meeting(with_ics_plan)
+    assert with_ics.external_ref.ical_uid == "ical-evt-abc123@cal.com"
+    assert _find_lifecycle_event(with_ics_plan).external_id == canonical
+
+    without_ics_plan = _mutated_created_webhook(icsUid=None).attio_get_operations()
+    without_ics = _find_upsert_meeting(without_ics_plan)
+    assert without_ics.external_ref.ical_uid == canonical
+    assert _find_lifecycle_event(without_ics_plan).external_id == canonical
 
 
 def test_attio_is_valid_webhook_false_when_host_email_missing() -> None:
@@ -147,13 +174,20 @@ def test_attio_is_valid_webhook_false_when_host_email_missing() -> None:
 
 
 def test_attio_creator_email_falls_back_to_organizer() -> None:
+    """The creator-email fallback chain drives the canonical lifecycle key.
+
+    With ``hosts=[]`` the host resolves to ``organizer``; that host feeds
+    ``canonical_meeting_uid``, which now keys the lifecycle row's ``external_id``
+    (the Meeting itself keys on the fixture's real ``icsUid`` — ai-4bz).
+    """
     w = _mutated_created_webhook(
         hosts=[],
         organizer={"email": "organizer@example.com"},
     )
     assert w.attio_is_valid_webhook() is True
-    op = _find_upsert_meeting(w.attio_get_operations())
-    assert op.external_ref.ical_uid == canonical_meeting_uid(
+    plan = w.attio_get_operations()
+    assert _find_upsert_meeting(plan).external_ref.ical_uid == "ical-evt-abc123@cal.com"
+    assert _find_lifecycle_event(plan).external_id == canonical_meeting_uid(
         host_email="organizer@example.com",
         start=datetime.fromisoformat("2026-05-20T15:00:00+00:00"),
     )

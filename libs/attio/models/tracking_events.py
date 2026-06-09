@@ -76,9 +76,15 @@ class MeetingLifecycleEventInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # ``canonical_meeting_uid(host_email, start)`` — same value as the Attio
-    # Meeting record's ``external_ref.ical_uid``. Cross-reference between the
-    # tracking_events row and the Meeting record without a foreign key.
+    # ``canonical_meeting_uid(host_email, start)`` — the stable PATCH key for this
+    # lifecycle row, shared by every cal.com trigger for the same meeting so they
+    # advance one row. NOTE (ai-4bz): this no longer equals the Attio Meeting
+    # record's ``external_ref.ical_uid`` for cal.com — the Meeting is now keyed on
+    # the real calendar iCalUID (``icsUid``) to dedupe against calendar-synced
+    # meetings, whereas this row stays on the canonical hash (the cancelled/
+    # rescheduled/etc. payloads don't carry ``icsUid``). The two are independent
+    # keys; the dispatcher links people↔meeting via the in-plan record_id, not
+    # this value.
     external_id: str
     # Cal.com booking title, e.g. "Acme × dlt pricing call". The trailing
     # segment of the row's ``name`` slug.

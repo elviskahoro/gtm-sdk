@@ -1,3 +1,24 @@
+"""Cross-provider meeting identity (ai-4bz model).
+
+Previously Cal.com and Fathom both wrote the synthetic
+``canonical_meeting_uid(host, start)`` so a single POST collapsed them onto one
+Attio meeting. That minted a DUPLICATE of the calendar-synced meeting (Attio's
+Google/Outlook integration owns the real meeting under the real iCalUID).
+
+New model:
+  - **Cal.com** carries the real calendar iCalUID (``icsUid``) and writes it as
+    the meeting ``external_ref.ical_uid`` → ``find_or_create`` collapses onto the
+    calendar-synced meeting directly.
+  - **Fathom** has no calendar uid, so it keeps the canonical hash (as the
+    in-plan LookupTable key + create fallback) and sets
+    ``match_existing_by_participants`` so the dispatcher resolves the existing
+    meeting by participants + start window (``src.attio.meeting_match``).
+
+Convergence onto one record is therefore a DISPATCH-time behavior, covered by
+``tests/src/attio/test_meeting_match.py``. These tests pin the per-provider op
+shape that makes it possible.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,6 +26,7 @@ from pathlib import Path
 import orjson
 import pytest
 
+from libs.meetings import canonical_meeting_uid
 from src.attio.ops import UpsertMeeting
 from src.caldotcom.webhook.booking import Webhook as CalcomBookingWebhook
 from src.fathom.webhook.call import Webhook as FathomCallWebhook
@@ -17,6 +39,8 @@ FATHOM_FIXTURE = Path("api/samples/fathom.recording.redacted.json")
 HOST_EMAIL = "host@dlthub.com"
 SHARED_START = "2026-06-01T15:00:00.000Z"
 SHARED_END = "2026-06-01T15:30:00.000Z"
+# The real calendar uid carried by the cal.com fixture (api/samples).
+CALCOM_ICS_UID = "ical-evt-abc123@cal.com"
 
 
 def _calcom_webhook() -> CalcomBookingWebhook:
@@ -45,34 +69,33 @@ def _fathom_webhook() -> FathomCallWebhook:
 
 
 def _meeting_op(webhook: CalcomBookingWebhook | FathomCallWebhook) -> UpsertMeeting:
-    # The meeting op is no longer guaranteed at index [0]: cal.com prepends host
-    # UpsertCompany + UpsertPerson ops (ai-65l, commit 0ce9f6d) so the dispatcher
-    # can resolve the lifecycle event's host PersonRef. Select by type instead of
-    # position so the test stays focused on the iCalUID invariant. (ai-8k7)
     return next(
         op for op in webhook.attio_get_operations() if isinstance(op, UpsertMeeting)
     )
 
 
-def test_same_meeting_from_both_providers_collapses_to_one_ical_uid() -> None:
-    calcom_op = _meeting_op(_calcom_webhook())
-    fathom_op = _meeting_op(_fathom_webhook())
-    assert calcom_op.external_ref.ical_uid == fathom_op.external_ref.ical_uid
+def test_calcom_meeting_keys_on_real_ical_uid() -> None:
+    """Cal.com writes the real calendar uid and does NOT use the participant matcher."""
+    op = _meeting_op(_calcom_webhook())
+    assert op.external_ref.ical_uid == CALCOM_ICS_UID
+    assert op.match_existing_by_participants is False
 
 
-def test_different_start_times_diverge() -> None:
-    calcom = _calcom_webhook()
-    fathom = _fathom_webhook()
-    fathom.scheduled_start_time = fathom.scheduled_start_time.replace(minute=30)
-    calcom_op = _meeting_op(calcom)
-    fathom_op = _meeting_op(fathom)
-    assert calcom_op.external_ref.ical_uid != fathom_op.external_ref.ical_uid
+def test_fathom_meeting_uses_canonical_uid_and_participant_match() -> None:
+    """Fathom keeps the canonical hash but resolves the real meeting by participants."""
+    op = _meeting_op(_fathom_webhook())
+    assert op.external_ref.ical_uid == canonical_meeting_uid(
+        host_email=HOST_EMAIL,
+        start=_fathom_webhook().scheduled_start_time,
+    )
+    assert op.match_existing_by_participants is True
 
 
-def test_host_email_case_does_not_diverge() -> None:
-    calcom = _calcom_webhook()
+def test_fathom_canonical_uid_is_host_case_insensitive() -> None:
+    """Fathom's create-fallback uid normalizes host-email case (canonical hash)."""
     fathom = _fathom_webhook()
     fathom.recorded_by.email = HOST_EMAIL.upper()
-    calcom_op = _meeting_op(calcom)
-    fathom_op = _meeting_op(fathom)
-    assert calcom_op.external_ref.ical_uid == fathom_op.external_ref.ical_uid
+    assert _meeting_op(fathom).external_ref.ical_uid == canonical_meeting_uid(
+        host_email=HOST_EMAIL,
+        start=fathom.scheduled_start_time,
+    )

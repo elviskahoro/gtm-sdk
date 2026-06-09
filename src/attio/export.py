@@ -20,6 +20,7 @@ from libs.attio.companies import (
 from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope, WarningEntry
 from libs.attio.errors import SchemaMismatchError
 from libs.attio.meetings import find_or_create_meeting
+from src.attio.meeting_match import resolve_meeting_id_by_participants
 from libs.attio.mentions import upsert_mention as libs_upsert_mention
 from libs.attio.models import (
     CompanyInput,
@@ -381,7 +382,35 @@ def _handle_upsert_meeting(
     Person identities other than ``email`` (linkedin/github_handle) resolve only
     via the plan's LookupTable — the live lookup is email-only — so an unresolved
     one is dropped immediately (not retriable) and likewise surfaced.
+
+    Match-first (ai-4bz): when ``op.match_existing_by_participants`` is set (the
+    Fathom path, which has no calendar ``ical_uid``), first try to resolve an
+    existing Attio meeting by participants + start window. On a confident match
+    we return that meeting's record_id WITHOUT writing — the calendar-synced
+    meeting already owns its participants, and ``find_or_create`` would not merge
+    our links onto a pre-existing row anyway (it returns it frozen). The
+    record_id still lands in the plan's LookupTable (keyed by the op's
+    ``ical_uid``), so a downstream ``UpsertNote.meeting`` attaches the recording
+    to the right meeting. No match → fall through and create as normal.
     """
+    if op.match_existing_by_participants:
+        matched_id = resolve_meeting_id_by_participants(
+            start=op.start,
+            participant_emails=[p.email_address for p in op.participants],
+            title=op.title,
+        )
+        if matched_id is not None:
+            return ReliabilityEnvelope(
+                success=True,
+                partial_success=False,
+                action="noop",
+                record_id=matched_id,
+                errors=[],
+                warnings=[],
+                skipped_fields=[],
+                meta={"output_schema_version": "v1", "matched_existing": True},
+            )
+
     # (parent_object, record_id) -> link, deduped across both phases.
     links: dict[tuple[str, str], MeetingLinkedRecord] = {}
     retriable: list[PersonRef | CompanyRef] = []

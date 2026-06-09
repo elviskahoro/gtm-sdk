@@ -153,6 +153,21 @@ def _details_line(timestamp: datetime, event_subtype: str, summary: str) -> str:
     return f"{iso} {event_subtype} — {summary}"
 
 
+def _meeting_provider_for_ics_uid(ics_uid: str | None) -> Literal["google", "outlook"]:
+    """Best-effort calendar provider for the Attio meeting ``external_ref``.
+
+    Matching is driven by ``ical_uid`` (a live write-test matched a ``@Cal.com``
+    uid against a Google-synced row with ``provider="google"``), so this is a
+    hint, not a hard key. Outlook/Exchange GlobalObjectId iCalUIDs are long
+    uppercase hex with no ``@`` — route those to ``"outlook"``; everything else
+    (``…@Cal.com``, ``…@google.com``, missing) defaults to ``"google"``, which
+    matches the dlthub fleet's predominantly Google calendars.
+    """
+    if ics_uid and "@" not in ics_uid:
+        return "outlook"
+    return "google"
+
+
 def _ops_for_created(
     payload: BookingCreatedPayload,
     created_at: datetime,
@@ -169,7 +184,20 @@ def _ops_for_created(
         # Gate should have caught this; defensive fallback to avoid silent failure.
         return []
 
+    # ``ical_uid`` keys the tracking_events lifecycle row (the PATCH target shared
+    # by every later cal.com webhook for this booking — cancelled/rescheduled/
+    # no-show/meeting-ended). It MUST stay the canonical hash so those triggers,
+    # which never carry ``icsUid``, still advance the same row.
     ical_uid = canonical_meeting_uid(host_email=host_email, start=payload.start)
+    # The Attio Meeting record, by contrast, is keyed on the REAL calendar
+    # iCalUID (``icsUid``) so ``find_or_create`` collapses onto the meeting Attio's
+    # Google/Outlook calendar sync already created — instead of minting a synthetic
+    # duplicate. (ai-4bz: prod had ~17k system-synced meetings; the synthetic uid
+    # never matched them.) Fall back to the canonical hash only when ``icsUid`` is
+    # absent (rare — keeps a meeting landing rather than dropping it). Verified by
+    # live write-test: POSTing ``<uid>@Cal.com`` returns the existing system row.
+    meeting_ical_uid = payload.icsUid or ical_uid
+    meeting_provider = _meeting_provider_for_ics_uid(payload.icsUid)
     title = payload.title or "CALCOM Booking"
     description = payload.additionalNotes or payload.description or title
     booking_status = payload.status
@@ -217,8 +245,8 @@ def _ops_for_created(
         *_host_upsert_ops(host_email),
         UpsertMeeting(
             external_ref=MeetingExternalRef(
-                ical_uid=ical_uid,
-                provider="google",
+                ical_uid=meeting_ical_uid,
+                provider=meeting_provider,
                 is_recurring=False,
             ),
             title=title,

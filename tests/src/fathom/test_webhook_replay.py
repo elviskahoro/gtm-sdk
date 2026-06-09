@@ -75,6 +75,16 @@ def test_replay_does_not_create_duplicate_notes(monkeypatch) -> None:
         add_calls.append((note_input.parent_record_id, note_input.title))
         return note
 
+    # Fathom now sets match_existing_by_participants; with no existing meeting in
+    # this test the matcher returns None and the dispatcher falls through to the
+    # (mocked) create path. The matcher itself is covered in test_meeting_match.py.
+    def fake_resolve_meeting(**_: object) -> str | None:
+        return None
+
+    monkeypatch.setattr(
+        "src.attio.export.resolve_meeting_id_by_participants",
+        fake_resolve_meeting,
+    )
     monkeypatch.setattr(
         "src.attio.export.find_or_create_meeting",
         fake_find_or_create_meeting,
