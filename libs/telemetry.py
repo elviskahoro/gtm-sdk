@@ -125,33 +125,61 @@ def _hyperdx_auth_headers(hyperdx_key: str | None) -> dict[str, str]:
 
 # --- Collector fan-out -----------------------------------------------------
 #
-# When ``TELEMETRY_COLLECTOR_APP`` is set, the app exports telemetry to a single
-# middle layer instead of talking to providers directly: a custom OTEL exporter
+# By default (collector mode is the default — see ``DEFAULT_COLLECTOR_APP``), the
+# app exports telemetry to a single middle layer instead of talking to providers
+# directly: a custom OTEL exporter
 # serializes each batch to OTLP protobuf and fire-and-forget ``.spawn()``s the
 # collector Modal function (``src/otel_collector.py``). That function feeds the
 # bytes to an OpenTelemetry Collector running as a localhost sidecar inside the
 # (always-warm) collector container, which fans out to every configured provider
-# (Dash0 + HyperDX + Logfire) with real batching/retry/queueing. This keeps
+# (Dash0 + HyperDX + Logfire + LangSmith) with real batching/retry/queueing. This keeps
 # provider credentials on the collector only, gives the app a single "write",
 # centralizes fan-out, and uses Modal RPC as the ingress (no public endpoint).
 #
 # Environment variables:
-# - TELEMETRY_COLLECTOR_APP: Name of the Modal app hosting the collector. Required to enable.
+# - TELEMETRY_COLLECTOR_APP: Override the collector Modal app name. Unset → the
+#   hard-coded DEFAULT_COLLECTOR_APP (collector mode is the default). Set to ""
+#   to force the direct single-sink fallback (local dev).
 # - TELEMETRY_COLLECTOR_FUNCTION: Name of the function within the app (defaults to "fan_out").
+
+# The telemetry collector is fixed infrastructure — one Modal app
+# (``src/otel_collector.py``) that fans out to every provider (Dash0, HyperDX,
+# Logfire, LangSmith). Its name is hard-coded here rather than configured
+# per-environment, so collector fan-out is the DEFAULT mode without any secret
+# wiring. Logfire is reachable ONLY through this path (the direct single-sink
+# fallback has no Logfire exporter), so defaulting to the collector is what
+# gets logs/traces to Logfire. Override with ``TELEMETRY_COLLECTOR_APP=<name>``
+# (e.g. a dev collector), or disable with ``TELEMETRY_COLLECTOR_APP=""`` to use
+# the direct fallback (local dev / tests).
+DEFAULT_COLLECTOR_APP = "otel-collector"
 
 
 def _collector_function() -> tuple[str, str] | None:
     """Return the ``(app, function)`` of the telemetry collector, or ``None``.
 
-    When ``TELEMETRY_COLLECTOR_APP`` is set in the environment, enables the
-    collector path; otherwise falls back to the direct single-endpoint OTLP
-    behavior.
+    Collector mode is the default: when ``TELEMETRY_COLLECTOR_APP`` is unset, the
+    hard-coded ``DEFAULT_COLLECTOR_APP`` is used. An explicit empty string opts
+    out and falls back to the direct single-endpoint OTLP behavior; any other
+    value overrides the app name.
     """
-    app = os.environ.get("TELEMETRY_COLLECTOR_APP", "").strip()
+    raw = os.environ.get("TELEMETRY_COLLECTOR_APP")
+    app = (DEFAULT_COLLECTOR_APP if raw is None else raw).strip()
     if not app:
         return None
     fn = os.environ.get("TELEMETRY_COLLECTOR_FUNCTION", "").strip() or "fan_out"
     return (app, fn)
+
+
+def collector_target() -> tuple[str, str] | None:
+    """The active telemetry collector ``(app, function)``, or ``None`` in direct mode.
+
+    Public surface for callers outside this module — notably
+    ``src.secrets_bootstrap``, which gates direct-sink credential baking on
+    whether collector mode is active. Keeps a single source of truth for the
+    "collector vs direct" decision (including the hard-coded default and the
+    ``TELEMETRY_COLLECTOR_APP=""`` opt-out).
+    """
+    return _collector_function()
 
 
 def _spawn_collector(
@@ -296,9 +324,10 @@ def _init_log_exporter_via_collector(service_name: str, collector: tuple[str, st
 def init_tracer(service_name: str = "elvis-cli"):
     """Initialize OTEL tracer.
 
-    When ``TELEMETRY_COLLECTOR_APP`` is set, spans export to the collector Modal
-    function (see ``_init_tracer_via_collector``). Otherwise falls back to the
-    direct single-endpoint path below — a no-op if neither HYPERDX_API_KEY nor
+    Collector fan-out is the default: spans export to the collector Modal
+    function (see ``_init_tracer_via_collector``) unless ``TELEMETRY_COLLECTOR_APP``
+    is explicitly set to "". When opted out, falls back to the direct
+    single-endpoint path below — a no-op if neither HYPERDX_API_KEY nor
     OTEL_EXPORTER_OTLP_ENDPOINT is set.
 
     Auth handling mirrors ``init_log_exporter``: the HyperDX Bearer header
@@ -389,9 +418,10 @@ def init_tracer(service_name: str = "elvis-cli"):
 def init_log_exporter(service_name: str = "elvis-cli"):
     """Initialize an OTLP log exporter alongside ``libs/logging/structured.log()``.
 
-    When ``TELEMETRY_COLLECTOR_APP`` is set, logs export to the collector Modal
-    function (see ``_init_log_exporter_via_collector``); the direct-sink path
-    below is the fallback.
+    Collector fan-out is the default: logs export to the collector Modal
+    function (see ``_init_log_exporter_via_collector``) unless
+    ``TELEMETRY_COLLECTOR_APP`` is explicitly set to "". The direct-sink path
+    below is the opted-out fallback.
 
     Provider-agnostic: any OTLP-compatible HTTP sink (HyperDX, Datadog OTLP
     intake, Grafana Cloud, a local OTel Collector) works. No-op unless one of

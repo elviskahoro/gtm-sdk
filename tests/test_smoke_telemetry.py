@@ -102,11 +102,11 @@ class TestTelemetryUtilityFunctions:
         ):
             assert _collector_function() == ("my-collector", "custom")
 
-        # When disabled (no app)
+        # Unset app → hard-coded default (collector mode is the default)
         with patch.dict(os.environ, {}, clear=True):
-            assert _collector_function() is None
+            assert _collector_function() == ("otel-collector", "fan_out")
 
-        # Empty app disables
+        # Empty app disables (explicit opt-out → direct fallback)
         with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": ""}):
             assert _collector_function() is None
 
@@ -125,23 +125,31 @@ class TestTelemetryInitialization:
     """Test tracer and logger initialization paths."""
 
     def test_init_tracer_noop_without_config(self):
-        """Tracer init is no-op when no OTEL env vars set."""
-        with patch.dict(os.environ, {}, clear=True):
+        """Tracer init is no-op when collector is opted out and no OTEL env vars set."""
+        # Opt out of the default collector mode so we exercise the direct path,
+        # which is a genuine no-op with no sink configured.
+        with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": ""}, clear=True):
             result = init_tracer("test-service")
             assert result is None
 
     def test_init_tracer_with_hyperdx_key(self):
-        """Tracer initializes with HyperDX API key."""
-        with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
+        """Tracer initializes with HyperDX API key (direct path; collector opted out)."""
+        with patch.dict(
+            os.environ,
+            {"HYPERDX_API_KEY": "test-key", "TELEMETRY_COLLECTOR_APP": ""},
+        ):
             result = init_tracer("test-service")
             # Should succeed and return a tracer
             assert result is not None
 
     def test_init_tracer_with_otel_endpoint(self):
-        """Tracer initializes with generic OTEL endpoint."""
+        """Tracer initializes with generic OTEL endpoint (direct path; collector opted out)."""
         with patch.dict(
             os.environ,
-            {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
+            {
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+                "TELEMETRY_COLLECTOR_APP": "",
+            },
         ):
             result = init_tracer("test-service")
             assert result is not None
@@ -156,36 +164,48 @@ class TestTelemetryInitialization:
                 assert result is not None
 
     def test_init_log_exporter_noop_without_config(self):
-        """Log exporter init is no-op when no OTEL env vars set."""
-        with patch.dict(os.environ, {}, clear=True):
+        """Log exporter init is no-op when collector is opted out and no OTEL env vars set."""
+        with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": ""}, clear=True):
             result = init_log_exporter("test-service")
             assert result is None
 
     def test_init_log_exporter_with_hyperdx_key(self):
-        """Log exporter initializes with HyperDX API key."""
-        with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
+        """Log exporter initializes with HyperDX API key (direct path; collector opted out)."""
+        with patch.dict(
+            os.environ,
+            {"HYPERDX_API_KEY": "test-key", "TELEMETRY_COLLECTOR_APP": ""},
+        ):
             result = init_log_exporter("test-service")
             assert result is not None
 
     def test_init_log_exporter_with_headers_only(self):
-        """Log exporter works with headers-only OTEL config."""
+        """Log exporter works with headers-only OTEL config (direct path; collector opted out)."""
         with patch.dict(
             os.environ,
-            {"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "DD-API-KEY=test"},
+            {
+                "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "DD-API-KEY=test",
+                "TELEMETRY_COLLECTOR_APP": "",
+            },
         ):
             result = init_log_exporter("test-service")
             assert result is not None
 
     def test_init_log_exporter_idempotency(self):
         """Repeated calls with same service name return cached logger."""
-        with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
+        with patch.dict(
+            os.environ,
+            {"HYPERDX_API_KEY": "test-key", "TELEMETRY_COLLECTOR_APP": ""},
+        ):
             logger1 = init_log_exporter("service-1")
             logger2 = init_log_exporter("service-1")
             assert logger1 is logger2
 
     def test_init_log_exporter_per_service(self):
         """Different service names get separate loggers."""
-        with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
+        with patch.dict(
+            os.environ,
+            {"HYPERDX_API_KEY": "test-key", "TELEMETRY_COLLECTOR_APP": ""},
+        ):
             logger1 = init_log_exporter("service-1")
             logger2 = init_log_exporter("service-2")
             # Should be different loggers
@@ -385,8 +405,11 @@ class TestIntegration:
 
         telemetry._otlp_loggers.clear()  # type: ignore[reportPrivateUsage]
 
-        with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
-            # Should use direct sink path
+        with patch.dict(
+            os.environ,
+            {"HYPERDX_API_KEY": "test-key", "TELEMETRY_COLLECTOR_APP": ""},
+        ):
+            # Should use direct sink path (collector explicitly opted out)
             logger2 = init_log_exporter("service-2")
             assert logger2 is not None
 

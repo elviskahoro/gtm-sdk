@@ -42,6 +42,7 @@ from libs.exa import client as exa_client
 from libs.linear import client as linear_client
 from libs.parallel import client as parallel_client
 from libs.slack import client as slack_client
+from libs.telemetry import collector_target  # collector-mode resolution (src→libs)
 
 KEY_SCOPES: dict[str, Callable[[str], AbstractContextManager[None]]] = {
     "APOLLO_API_KEY": apollo_client.api_key_scope,
@@ -54,9 +55,12 @@ KEY_SCOPES: dict[str, Callable[[str], AbstractContextManager[None]]] = {
 }
 
 
-# Telemetry collector pointer: when ``TELEMETRY_COLLECTOR_APP`` is set,
-# ``libs.telemetry`` exports to the collector Modal function (which fans out to
-# all providers) instead of a sink directly.
+# Telemetry collector pointer: ``libs.telemetry`` defaults to collector mode
+# (it hard-codes the collector app name), exporting to the collector Modal
+# function which fans out to all providers instead of a sink directly. These
+# keys only need baking when an operator OVERRIDES the default (a custom
+# collector app, or "" to force the direct fallback); when unset the default
+# applies and nothing is baked.
 _TELEMETRY_POINTER_KEYS = (
     "TELEMETRY_COLLECTOR_APP",
     "TELEMETRY_COLLECTOR_FUNCTION",
@@ -79,8 +83,16 @@ _OTEL_SINK_KEYS = (
 
 
 def _telemetry_collector_enabled() -> bool:
-    """True when the telemetry collector is configured (collector mode)."""
-    return bool(os.environ.get("TELEMETRY_COLLECTOR_APP", "").strip())
+    """True when the telemetry collector is active (collector mode).
+
+    Derives from ``libs.telemetry._collector_function`` so this stays in lockstep
+    with the runtime resolution: collector mode is the default (the app name is
+    hard-coded there), and is only off when ``TELEMETRY_COLLECTOR_APP`` is
+    explicitly set to "". In collector mode app containers must NOT carry
+    provider creds (they reach providers only through the collector), so this
+    gate withholds the direct-sink keys below.
+    """
+    return collector_target() is not None
 
 
 def _bootstrap_secret_payload() -> dict[str, str | None]:
