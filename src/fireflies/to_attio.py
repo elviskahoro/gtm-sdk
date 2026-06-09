@@ -2,9 +2,14 @@
 
 This is the Fireflies twin of ``src/fathom/webhook/call.py::attio_get_operations``:
 it emits the same source-agnostic ``UpsertMeeting`` (+ optional summary
-``UpsertNote``) ops, keyed on the same ``canonical_meeting_uid`` so a Fireflies
-meeting and any Fathom/Cal.com record for the same host+start-minute collapse to
-one Attio meeting (find-or-create). Running it twice is a no-op.
+``UpsertNote``) ops. Like Fathom, Fireflies carries no real calendar iCalUID, so
+the meeting sets ``match_existing_by_participants=True``: the dispatcher first
+resolves an existing Attio meeting by participants + start window (catching the
+~17k calendar-synced rows and any Fathom/Cal.com record for the same meeting)
+before falling back to a find-or-create on the synthetic ``canonical_meeting_uid``
+(host+start-minute). Without this, every Fireflies recording also on a synced
+calendar would mint a duplicate ``dlt-mtg-`` meeting — the exact bug ai-4bz (#205)
+fixed for the live Fathom/Cal.com webhooks. Running it twice is a no-op.
 """
 
 from __future__ import annotations
@@ -110,6 +115,11 @@ def to_attio_operations(
             is_all_day=False,
             participants=participants,
             linked_records=[*person_links, *company_links],
+            # Fireflies has no calendar iCalUID, so dedupe against the existing
+            # calendar-synced / Fathom / Cal.com meeting by participants + start
+            # window before falling back to the synthetic ical_uid. Mirrors the
+            # Fathom path (src/fathom/webhook/call.py); see ai-4bz / #205.
+            match_existing_by_participants=True,
         ),
     ]
 

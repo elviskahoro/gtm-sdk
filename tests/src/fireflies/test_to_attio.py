@@ -42,6 +42,16 @@ def test_emits_meeting_and_summary_note() -> None:
     assert notes[0].title == SUMMARY_NOTE_TITLE
 
 
+def test_meeting_matches_existing_by_participants() -> None:
+    # Fireflies has no calendar iCalUID, so the meeting must dedupe against the
+    # calendar-synced / Fathom / Cal.com row by participants + start window
+    # rather than minting a duplicate synthetic dlt-mtg- meeting (ai-4bz / #205).
+    assert (
+        _meeting(to_attio_operations(_recording())).match_existing_by_participants
+        is True
+    )
+
+
 def test_ical_uid_matches_canonical_and_is_deterministic() -> None:
     rec = _recording()
     ops = to_attio_operations(rec)
