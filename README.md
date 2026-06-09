@@ -171,8 +171,10 @@ Deploy each independently with `modal deploy webhooks/<file>.py`.
 
 OTEL traces and logs emitted from `libs/telemetry.py`. Two export modes:
 
-**Collector fan-out (preferred).** Set `TELEMETRY_COLLECTOR_APP` (default function name
-`fan_out`, override with `TELEMETRY_COLLECTOR_FUNCTION`) and the app exports to a single
+**Collector fan-out (default).** The collector Modal app name is hard-coded in
+`libs/telemetry.py` (`DEFAULT_COLLECTOR_APP = "otel-collector"`), so collector fan-out is the
+default mode with no per-environment wiring — override the app name with `TELEMETRY_COLLECTOR_APP`
+(function name `fan_out`, override with `TELEMETRY_COLLECTOR_FUNCTION`). The app exports to a single
 middle layer: a custom OTEL exporter serializes each batch to OTLP protobuf and
 fire-and-forget `.spawn()`s the collector Modal function (`src/otel_collector.py`) — pure
 Modal RPC, **no public endpoint**. That function hands the bytes to a real OpenTelemetry
@@ -195,9 +197,11 @@ The collector reads provider creds from its own secret: `DASH0_AUTH_TOKEN` +
 (optional `HYPERDX_OTLP_ENDPOINT`), `LOGFIRE_WRITE_TOKEN` (optional `LOGFIRE_OTLP_ENDPOINT`).
 Each unconfigured provider is silently skipped.
 
-**Direct single-sink (fallback).** When `TELEMETRY_COLLECTOR_APP` is unset, telemetry goes
-to one OTLP sink directly, activated by `HYPERDX_API_KEY` / `HYPERDX_OTLP_ENDPOINT` /
-`OTEL_EXPORTER_OTLP_ENDPOINT` (custom collector). Useful for local dev.
+**Direct single-sink (fallback).** Opt out of the collector by setting
+`TELEMETRY_COLLECTOR_APP=""`; telemetry then goes to one OTLP sink directly, activated by
+`HYPERDX_API_KEY` / `HYPERDX_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` (custom collector).
+This path has **no Logfire exporter** — Logfire is reachable only via the collector. Useful for
+local dev.
 
 If neither is configured → no-op (telemetry is never load-bearing). CLI calls
 `init_tracer()` at startup and emits `cli.usage_error` events on Typer exit code 2.
