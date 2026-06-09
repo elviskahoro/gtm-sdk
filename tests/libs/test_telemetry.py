@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import builtins
 
+import pytest
+
 import libs.telemetry as telemetry_module
 from libs.telemetry import (
     emit_cli_event,
@@ -9,6 +11,21 @@ from libs.telemetry import (
     init_log_exporter,
     init_tracer,
 )
+
+
+@pytest.fixture(autouse=True)
+def _default_to_direct_sink(monkeypatch):  # pyright: ignore[reportUnusedFunction]  # autouse fixture, invoked by name
+    """Opt every test out of collector mode unless it asks for it explicitly.
+
+    Collector fan-out is now the library default — an unset
+    ``TELEMETRY_COLLECTOR_APP`` resolves to the hard-coded app name. The
+    direct-sink tests in this module were written against the direct OTLP
+    path (they inspect ``OTLPLogExporter`` kwargs, assert no-op without a
+    sink, etc.), so default them to the opted-out empty string. The
+    collector-specific tests below call ``_clear_collector_env`` and then set
+    ``TELEMETRY_COLLECTOR_APP`` themselves, which overrides this.
+    """
+    monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "")
 
 
 def test_init_tracer_noop_without_env(monkeypatch):
@@ -592,12 +609,17 @@ def _clear_collector_env(monkeypatch) -> None:
 
 def test_collector_function_reads_env(monkeypatch):
     _clear_collector_env(monkeypatch)
-    assert _collector_function() is None
-    monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "otel-collector")
+    # Collector mode is the default: an unset app resolves to the hard-coded name.
     assert _collector_function() == ("otel-collector", "fan_out")
+    # Explicit empty string opts out → direct fallback.
+    monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "")
+    assert _collector_function() is None
+    # A non-empty value overrides the default app name.
+    monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "otel-collector-dev")
+    assert _collector_function() == ("otel-collector-dev", "fan_out")
     # Function name is configurable; env var is used
     monkeypatch.setenv("TELEMETRY_COLLECTOR_FUNCTION", "ship")
-    assert _collector_function() == ("otel-collector", "ship")
+    assert _collector_function() == ("otel-collector-dev", "ship")
 
 
 def _patch_modal_function(monkeypatch):

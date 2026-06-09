@@ -110,6 +110,8 @@ cd ~/Documents/ai/gtm-sdk
 # Set environment (usually injected via Infisical, but can override)
 export DASH0_AUTH_TOKEN="your-token"
 export DASH0_OTLP_ENDPOINT="https://otel-ingest.us.dash0.com"
+# Collector fan-out is the default (app name hard-coded in libs/telemetry.py);
+# only set this to override the app name, or to "" to force the direct fallback.
 export TELEMETRY_COLLECTOR_APP="otel-collector"
 
 # Run tests
