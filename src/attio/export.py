@@ -41,7 +41,7 @@ from libs.attio.notes import (
     add_note as libs_add_note,
 )
 from libs.attio.notes import (
-    list_notes_for_parent as libs_list_notes_for_parent,
+    find_note_by_title as libs_find_note_by_title,
 )
 from libs.attio.notes import (
     resolve_record_id_for_ref as libs_resolve_record_id_for_ref,
@@ -269,9 +269,9 @@ def _handle_upsert_person(
             matching_attribute=op.matching_attribute,
         )
     except SchemaMismatchError as exc:
-        # A matching attribute that the people object doesn't define (e.g.
-        # `github_handle` before the schema is bootstrapped) surfaces from the
-        # lib layer as a typed SchemaMismatchError. Classify it as a normal
+        # A matching attribute that the people object doesn't define (e.g. the
+        # `github` slug if it were archived/absent) surfaces from the lib layer
+        # as a typed SchemaMismatchError. Classify it as a normal
         # `schema_mismatch` failed envelope instead of letting the dispatcher's
         # catch-all tag it `handler_exception` (ai-0ex). When this op is
         # `optional`, execute() keeps going and the mention still lands.
@@ -569,24 +569,30 @@ def _handle_upsert_note(
     # for the scoped match to miss. Notes the new code writes always carry
     # meeting_id (verified against prod), and non-meeting callers pass
     # op.meeting is None and keep the original title-only dedup below.
-    existing = libs_list_notes_for_parent(
+    # Scan via ``find_note_by_title`` rather than materializing the whole list:
+    # it streams the paginated history and stops at the first match, so an
+    # already-written note on an early page is found without forcing a full-
+    # history read. (A full read would let the paginator's fail-closed cap turn
+    # an oversized parent into a hard export abort even when the match is early.)
+    # ``meeting_record_id`` is None exactly when ``op.meeting`` is None, so this
+    # preserves the title-only dedup for non-meeting notes.
+    existing_note_id = libs_find_note_by_title(
         parent_object=parent_object,
         parent_record_id=parent_record_id,
+        title=op.title,
+        meeting_id=meeting_record_id,
     )
-    for note in existing:
-        if note.title == op.title and (
-            op.meeting is None or note.meeting_id == meeting_record_id
-        ):
-            return ReliabilityEnvelope(
-                success=True,
-                partial_success=False,
-                action="noop",
-                record_id=note.note_id,
-                errors=[],
-                warnings=[],
-                skipped_fields=[],
-                meta={"output_schema_version": "v1"},
-            )
+    if existing_note_id is not None:
+        return ReliabilityEnvelope(
+            success=True,
+            partial_success=False,
+            action="noop",
+            record_id=existing_note_id,
+            errors=[],
+            warnings=[],
+            skipped_fields=[],
+            meta={"output_schema_version": "v1"},
+        )
 
     result = libs_add_note(
         NoteInput(
@@ -649,7 +655,7 @@ def _handle_upsert_mention(
             # Opted-in best-effort link (octolens): the mention is the primary
             # record and the person is enrichment, so when the related person
             # could not be resolved (e.g. its optional UpsertPerson failed
-            # because the people object lacks a `github_handle` attribute) write
+            # because the people object lacks the `github` attribute) write
             # the mention WITHOUT the link rather than dropping it — silent data
             # loss is the bug this fixes (ai-0ex).
             degrade_warnings.append(
