@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from attio.errors.sdkerror import SDKError
@@ -8,11 +9,87 @@ from attio.errors.sdkerror import SDKError
 from libs.attio.client import get_client
 from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
 from libs.attio.errors import AttioNotFoundError, classify_error
-from libs.attio.models import MeetingInput, MeetingResult
+from libs.attio.models import MeetingCandidate, MeetingInput, MeetingResult
 from libs.attio.sdk_boundary import build_post_meeting_request
 from libs.attio.values import build_meeting_payload
 
 logger = logging.getLogger(__name__)
+
+
+def _meeting_start_dt(meeting: Any) -> datetime | None:
+    """Pull a tz-aware UTC start from a listed Meeting (datetime or all-day date)."""
+    start = getattr(meeting, "start", None)
+    raw = getattr(start, "datetime_", None) or getattr(start, "date_", None)
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def list_candidate_meetings(
+    *,
+    start: datetime,
+    window_minutes: int = 10,
+    limit: int = 50,
+) -> list[MeetingCandidate]:
+    """List meetings whose start falls within ``±window_minutes`` of ``start``.
+
+    Used to match a source meeting (e.g. a Fathom recording) to an existing
+    Attio meeting when the caller lacks the calendar ``ical_uid``. The list
+    endpoint filters server-side by an overlap window (``starts_before`` /
+    ``ends_from``); we then keep only candidates whose START is within the
+    window (a long meeting can overlap without starting near ``start``).
+    Participant scoring is left to the caller (``src.attio.meeting_match``) so
+    this stays a pure single-object Attio adapter.
+    """
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    start = start.astimezone(timezone.utc)
+    window = timedelta(minutes=window_minutes)
+    lo, hi = start - window, start + window
+
+    def iso(d: datetime) -> str:
+        return d.isoformat().replace("+00:00", "Z")
+
+    candidates: list[MeetingCandidate] = []
+    cursor: str | None = None
+    with get_client() as client:
+        while True:
+            resp = client.meetings.get_v2_meetings(
+                limit=limit,
+                cursor=cursor,
+                starts_before=iso(hi),
+                ends_from=iso(lo),
+                sort="start_asc",
+            )
+            for m in resp.data:
+                m_start = _meeting_start_dt(m)
+                if m_start is None or not (lo <= m_start <= hi):
+                    continue
+                emails = sorted(
+                    (p.email_address or "").lower()
+                    for p in (m.participants or [])
+                    if getattr(p, "email_address", None)
+                )
+                actor = getattr(m, "created_by_actor", None)
+                candidates.append(
+                    MeetingCandidate(
+                        meeting_id=m.id.meeting_id,
+                        title=m.title or "",
+                        start=m_start,
+                        participant_emails=emails,
+                        created_by_system=getattr(actor, "type", None) == "system",
+                    ),
+                )
+            cursor = resp.pagination.next_cursor if resp.pagination else None
+            if not cursor:
+                break
+    return candidates
 
 
 def _extract_result(data: Any) -> MeetingResult:

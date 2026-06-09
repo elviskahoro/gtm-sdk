@@ -51,3 +51,26 @@ class MeetingResult(BaseModel):
     title: str
     external_ref_ical_uid: str | None = None
     created: bool = True
+
+
+class MeetingCandidate(BaseModel):
+    """A possible match for a source meeting, returned by the list query.
+
+    Attio's ``GET /v2/meetings`` does NOT expose ``external_ref.ical_uid`` (only
+    create/find responses echo it), so a producer that lacks the calendar uid
+    (e.g. Fathom) cannot match by uid. It matches structurally instead — start
+    time + participant emails — against these candidates. See
+    ``src.attio.meeting_match``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    meeting_id: str
+    title: str
+    start: datetime
+    participant_emails: list[str] = Field(default_factory=list)
+    # True when Attio's calendar integration created this row (``created_by_actor.
+    # type == "system"``). The matcher prefers these — they are the canonical
+    # calendar-synced meetings we want to attach to, over any api-token duplicates
+    # a prior run may have minted (ai-4bz).
+    created_by_system: bool = False

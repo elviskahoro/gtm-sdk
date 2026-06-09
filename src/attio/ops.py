@@ -153,6 +153,15 @@ class UpsertMeeting(BaseModel):
     is_all_day: bool = False
     participants: list[MeetingParticipant]
     linked_records: list[Ref] = Field(default_factory=list)
+    # When True, the dispatcher first tries to resolve an EXISTING Attio meeting
+    # by participants + start-time window (``src.attio.meeting_match``) and uses
+    # it instead of creating one. Set by producers that lack the real calendar
+    # ``ical_uid`` (Fathom) so their recording attaches to the calendar-synced
+    # meeting rather than minting a synthetic duplicate (ai-4bz). Producers that
+    # carry the real uid (cal.com via ``icsUid``) leave this False and dedupe via
+    # ``find_or_create`` directly. ``external_ref.ical_uid`` is the create
+    # fallback when no existing meeting matches.
+    match_existing_by_participants: bool = False
 
 
 class UpsertNote(BaseModel):

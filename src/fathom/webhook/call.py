@@ -178,6 +178,12 @@ class Webhook(FathomWebhook):
                 is_organizer=True,
             ),
         ]
+        # Fathom has no calendar ``ical_uid``, so it cannot key on the real
+        # calendar event the way cal.com now does (ai-4bz). This canonical hash is
+        # only the in-plan LookupTable key (so the summary note resolves to the
+        # meeting) and the create-fallback uid. Actual dedup against the
+        # calendar-synced meeting happens at dispatch time via
+        # ``match_existing_by_participants`` below (participants + start window).
         ical_uid = canonical_meeting_uid(
             host_email=self.recorded_by.email,
             start=self.scheduled_start_time,
@@ -230,6 +236,9 @@ class Webhook(FathomWebhook):
                 is_all_day=False,
                 participants=participants,
                 linked_records=[*person_links, *company_links],
+                # Resolve to the calendar-synced meeting by participants + start
+                # window instead of creating a synthetic-uid duplicate (ai-4bz).
+                match_existing_by_participants=True,
             ),
         ]
 
