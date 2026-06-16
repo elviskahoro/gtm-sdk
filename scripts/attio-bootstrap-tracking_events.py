@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run python
 """Idempotent attribute bootstrap for the ``tracking_events`` Attio object.
 
 Covers two concerns on the same object:
@@ -64,11 +65,10 @@ What this script deliberately does NOT do:
   history) per the spec.
 
 Usage:
-    uv run python scripts/attio-bootstrap-tracking_events.py --preview
-    uv run python scripts/attio-bootstrap-tracking_events.py --apply
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-tracking_events.py --preview
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-tracking_events.py --apply
 
-Run against dev first (``infisical run ... --env=dev -- ...``), verify the new
-slugs are visible in Attio, then run against prod.
+Run against dev first, verify the new slugs are visible in Attio, then run against prod.
 """
 
 from __future__ import annotations
