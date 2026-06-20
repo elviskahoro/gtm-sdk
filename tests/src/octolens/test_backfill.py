@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from libs.octolens.models import ApiMention
 from src.octolens.backfill import (
+    api_mention_to_row,
     is_dlthub_url,
     build_webhook_payload,
     coerce_view_id,
     include_mention,
     normalize_source,
+    relevance_from_api,
     split_csv_list,
 )
 from src.octolens.webhook import Webhook
@@ -222,3 +225,95 @@ def test_payload_youtube_source_validates() -> None:
     )
     webhook = Webhook.model_validate(payload)
     assert webhook.data.source == "youtube"
+
+
+# --- relevance_from_api ----------------------------------------------------
+
+
+def test_relevance_from_api_prefers_numeric_score() -> None:
+    assert relevance_from_api(0, "relevant") == "high"
+    assert relevance_from_api(1, "relevant") == "medium"
+    assert relevance_from_api(2, "not_relevant") == "low"
+    # Floats (the API types relevanceScore as a number) coerce.
+    assert relevance_from_api(0.0, None) == "high"
+
+
+def test_relevance_from_api_falls_back_to_verdict() -> None:
+    assert relevance_from_api(None, "not_relevant") == "low"
+    assert relevance_from_api(None, "relevant") == "medium"
+    assert relevance_from_api(None, None) == "medium"
+
+
+# --- api_mention_to_row ----------------------------------------------------
+
+
+def _api_mention(**overrides: Any) -> ApiMention:
+    base: dict[str, Any] = {
+        "sourceId": "reddit_t3_1abc",
+        "url": "https://www.reddit.com/r/dataengineering/comments/x/dlthub_rocks/",
+        "title": None,
+        "body": "We migrated our pipelines to dlthub and it's great",
+        "source": "reddit",
+        "timestamp": "2026-05-10 11:55:53.000",
+        "author": "jane.doe",
+        "authorUrl": "https://reddit.com/u/jane.doe",
+        "authorAvatar": "https://img/avatar.png",
+        "relevanceScore": 0,
+        "relevance": "relevant",
+        "relevanceComment": "Clear dlthub adoption story",
+        "sentiment": "Positive",
+        "language": "en",
+        "tags": ["customer_testimonial"],
+        "keywords": [{"id": 42, "keyword": "dlthub"}],
+        "imageUrl": None,
+    }
+    base.update(overrides)
+    return ApiMention.model_validate(base)
+
+
+def test_api_mention_to_row_maps_and_validates_end_to_end() -> None:
+    row = api_mention_to_row(_api_mention())
+    # The row is CSV-shaped, so include_mention + build_webhook_payload work.
+    keep, reason = include_mention(row)
+    assert keep is True
+    assert reason == "dlthub-anywhere"
+
+    payload = build_webhook_payload(row, relevance="unknown", source_file="ignored")
+    webhook = Webhook.model_validate(payload)
+    assert webhook.data.source == "reddit"
+    assert webhook.data.source_id == "reddit_t3_1abc"
+    assert webhook.data.author_profile_link == "https://reddit.com/u/jane.doe"
+    assert webhook.data.keyword == "dlthub"
+    # Real relevance wins over the build_webhook_payload `relevance` arg.
+    assert webhook.data.relevance_score == "high"
+    assert webhook.data.relevance_comment == "Clear dlthub adoption story"
+
+
+def test_api_mention_to_row_stamps_mapped_relevance_when_no_comment() -> None:
+    row = api_mention_to_row(
+        _api_mention(relevanceScore=1, relevanceComment=None),
+    )
+    assert row["_relevance_score"] == "medium"
+    assert "relevance=medium" in row["_relevance_comment"]
+
+
+def test_api_mention_to_row_normalizes_reddit_comment_source() -> None:
+    row = api_mention_to_row(_api_mention(source="reddit_comment"))
+    assert row["Source"] == "reddit"
+
+
+def test_api_mention_to_row_falls_back_to_author_name() -> None:
+    # author empty but authorName populated → use authorName, not blank.
+    row = api_mention_to_row(_api_mention(author="", authorName="Jane Doe"))
+    assert row["Author"] == "Jane Doe"
+
+
+def test_build_webhook_payload_csv_path_uses_relevance_arg() -> None:
+    # A CSV row has no _relevance_score, so the explicit arg is stamped.
+    payload = build_webhook_payload(
+        _row(),
+        relevance="unknown",
+        source_file="export.csv",
+    )
+    assert payload["data"]["relevance_score"] == "unknown"
+    assert "CSV export" in payload["data"]["relevance_comment"]
