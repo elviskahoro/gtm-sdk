@@ -16,8 +16,11 @@ table.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    from libs.octolens.models import ApiMention
 
 # Phrases that indicate a `dlt`-keyword mention is really about the dlthub
 # Python library (not "distributed ledger technology" or an incidental match).
@@ -152,22 +155,103 @@ def _opt(value: Any) -> str | None:
     return text or None
 
 
+# Octolens v2 API relevanceScore (0=high, 1=medium, 2=low) → our RelevanceScore.
+# The CSV path has no score and stamps "unknown"; the API path carries a real
+# verdict, so we preserve it here. Low survives the mapping but the live webhook's
+# DEFAULT_FILTERS drops it before Attio (matching live behaviour).
+RELEVANCE_BY_SCORE: dict[int, str] = {0: "high", 1: "medium", 2: "low"}
+
+# API source platforms that the inbound-webhook Mention model accepts under a
+# different name. Everything else outside libs.octolens.Source is skipped by the
+# api build with a logged count (the webhook itself couldn't ingest it).
+_API_SOURCE_ALIASES: dict[str, str] = {"reddit_comment": "reddit"}
+
+
+def relevance_from_api(relevance_score: Any, relevance: Any) -> str:
+    """Map the v2 API's ``relevanceScore``/``relevance`` to a RelevanceScore.
+
+    Prefer the numeric ``relevanceScore`` (0=high / 1=medium / 2=low). When it's
+    absent, fall back to the coarse ``relevance`` verdict: ``not_relevant`` → low
+    (dropped by the webhook), anything else → medium.
+    """
+    if relevance_score is not None:
+        try:
+            return RELEVANCE_BY_SCORE.get(int(relevance_score), "medium")
+        except (TypeError, ValueError):
+            pass
+    if isinstance(relevance, str) and relevance.strip().lower() == "not_relevant":
+        return "low"
+    return "medium"
+
+
+def api_mention_to_row(mention: ApiMention) -> dict[str, Any]:
+    """Map one v2-API :class:`ApiMention` to the CSV-shaped row dict.
+
+    Producing the same Title-Case row shape the CSV reader yields lets
+    :func:`include_mention` and :func:`build_webhook_payload` work unchanged
+    across both sources. Unlike the CSV path, the API carries a real relevance
+    verdict, stamped under the internal ``_relevance_score`` /
+    ``_relevance_comment`` keys (underscore-prefixed like ``_source_file``, so
+    they never collide with a CSV column); ``build_webhook_payload`` prefers
+    those over its ``relevance`` argument.
+    """
+    keywords = [kw.keyword for kw in mention.keywords if kw.keyword]
+    raw_source = (mention.source or "").strip().lower()
+    source = _API_SOURCE_ALIASES.get(raw_source, raw_source)
+    relevance = relevance_from_api(mention.relevance_score, mention.relevance)
+    comment = _opt(mention.relevance_comment) or (
+        f"Backfilled from Octolens v2 API (relevance={relevance})."
+    )
+    return {
+        "URL": (mention.url or "").strip(),
+        "Title": mention.title,
+        "Body": mention.body or "",
+        "Timestamp": (mention.timestamp or "").strip(),
+        "Image URL": mention.image_url,
+        "Source": source,
+        "Source ID": (mention.source_id or "").strip(),
+        # Fall back to authorName when the handle field is empty — some sources
+        # populate one but not the other; an empty author loses person linkage.
+        "Author": mention.author or mention.author_name or "",
+        "Author Avatar URL": mention.author_avatar,
+        "Author Profile Link": mention.author_url,
+        "Language": mention.language,
+        "Keyword": ", ".join(keywords),
+        "Sentiment": mention.sentiment,
+        "Tags": ", ".join(str(tag) for tag in mention.tags),
+        "View ID": None,
+        "View Name": None,
+        "_source_file": "octolens-api-v2",
+        "_relevance_score": relevance,
+        "_relevance_comment": comment,
+    }
+
+
 def build_webhook_payload(
     row: dict[str, Any],
     *,
     relevance: str,
     source_file: str,
 ) -> dict[str, Any]:
-    """Map one CSV row to the Octolens webhook payload ``{"action", "data"}``.
+    """Map one row (CSV- or API-shaped) to the webhook payload ``{"action", "data"}``.
 
     Keys are the Mention field names (snake_case); the model has
-    ``populate_by_name=True`` so they bind without aliases. ``relevance`` is
-    stamped verbatim (the backfill uses ``"unknown"`` — the CSV carries no
-    score). Required string fields absent from the CSV are coerced to ""; the
-    caller validates the result against the Webhook model and skips rows that
-    fail (missing url/source/source_id or an unparseable timestamp).
+    ``populate_by_name=True`` so they bind without aliases. Required string
+    fields absent from the source are coerced to ""; the caller validates the
+    result against the Webhook model and skips rows that fail (missing
+    url/source/source_id or an unparseable timestamp).
+
+    Relevance: a row may carry a real verdict under ``_relevance_score`` /
+    ``_relevance_comment`` (set by :func:`api_mention_to_row`); when present those
+    win. Otherwise the ``relevance`` argument is stamped verbatim — the CSV
+    backfill passes ``"unknown"`` because those exports carry no score.
     """
     keywords = split_csv_list(row.get("Keyword"))
+    relevance_score = _opt(row.get("_relevance_score")) or relevance
+    relevance_comment = _opt(row.get("_relevance_comment")) or (
+        f"Backfilled from Octolens CSV export ({source_file}); "
+        "relevance not scored at export time."
+    )
     data: dict[str, Any] = {
         "url": (row.get("URL") or "").strip(),
         "title": _opt(row.get("Title")),
@@ -179,11 +263,8 @@ def build_webhook_payload(
         "author": (row.get("Author") or "").strip(),
         "author_avatar_url": _opt(row.get("Author Avatar URL")),
         "author_profile_link": _opt(row.get("Author Profile Link")),
-        "relevance_score": relevance,
-        "relevance_comment": (
-            f"Backfilled from Octolens CSV export ({source_file}); "
-            "relevance not scored at export time."
-        ),
+        "relevance_score": relevance_score,
+        "relevance_comment": relevance_comment,
         "language": _opt(row.get("Language")),
         "keyword": _primary_keyword(keywords),
         "keywords": keywords,

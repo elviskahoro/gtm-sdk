@@ -151,6 +151,81 @@ class Mention(BaseModel):
             raise ValueError(error_msg) from e
 
 
+class ApiMentionKeyword(BaseModel):
+    """A monitored keyword on an :class:`ApiMention` (id + display text).
+
+    Both fields are nullable: a single malformed/null nested keyword must not
+    fail validation of the whole mention (consistent with the lenient
+    :class:`ApiMention`). ``api_mention_to_row`` already drops empty keywords.
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    id: int | None = None
+    keyword: str | None = None
+
+
+class ApiMention(BaseModel):
+    """One mention from the Octolens v2 REST API (``POST /api/v2/mentions``).
+
+    Distinct from :class:`Mention` (the *inbound webhook* payload): the API uses
+    camelCase, carries a real relevance verdict (``relevanceScore`` 0=high /
+    1=medium / 2=low), and spans a superset of source platforms. Every field is
+    optional with a safe default and ``extra="allow"`` is set, so a single
+    malformed or newly-added field never aborts a multi-page bulk pull — the
+    backfill validates the essentials (url/source/source_id) downstream and skips
+    rows that don't map. ``src.octolens.backfill.api_mention_to_row`` converts an
+    instance into the CSV-shaped row the rest of the backfill consumes.
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    # Identity fields are nullable (not just defaulted) so a null in the payload
+    # is absorbed rather than raising ValidationError — the backfill filters rows
+    # with an empty url/source/source_id downstream and counts them, instead of
+    # silently dropping the record at parse time.
+    id: int | None = None
+    source_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("sourceId", "source_id"),
+    )
+    url: str | None = None
+    title: str | None = None
+    body: str | None = None
+    source: str | None = None
+    timestamp: str | None = None
+    author: str | None = None
+    author_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("authorName", "author_name"),
+    )
+    author_avatar: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("authorAvatar", "author_avatar"),
+    )
+    author_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("authorUrl", "author_url"),
+    )
+    relevance: str | None = None
+    relevance_comment: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("relevanceComment", "relevance_comment"),
+    )
+    relevance_score: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("relevanceScore", "relevance_score"),
+    )
+    sentiment: str | None = None
+    language: str | None = None
+    tags: list[Any] = Field(default_factory=list)
+    keywords: list[ApiMentionKeyword] = Field(default_factory=list)
+    image_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("imageUrl", "image_url"),
+    )
+
+
 class Webhook(BaseModel):
     model_config = ConfigDict(extra="allow")
 
