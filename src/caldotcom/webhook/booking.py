@@ -189,13 +189,17 @@ def _ops_for_created(
     # no-show/meeting-ended). It MUST stay the canonical hash so those triggers,
     # which never carry ``icsUid``, still advance the same row.
     ical_uid = canonical_meeting_uid(host_email=host_email, start=payload.start)
-    # The Attio Meeting record, by contrast, is keyed on the REAL calendar
-    # iCalUID (``icsUid``) so ``find_or_create`` collapses onto the meeting Attio's
-    # Google/Outlook calendar sync already created — instead of minting a synthetic
-    # duplicate. (ai-4bz: prod had ~17k system-synced meetings; the synthetic uid
-    # never matched them.) Fall back to the canonical hash only when ``icsUid`` is
-    # absent (rare — keeps a meeting landing rather than dropping it). Verified by
-    # live write-test: POSTing ``<uid>@Cal.com`` returns the existing system row.
+    # The Attio Meeting record keys on the REAL calendar iCalUID (``icsUid``) when
+    # present, falling back to the canonical hash when absent. NOTE (ai-4bz.8
+    # reopen): ``icsUid`` alone does NOT merge onto the calendar-synced ``system``
+    # meeting — those rows expose no matchable ``external_ref.ical_uid`` (prod GETs
+    # return ``external_ref=None``), so ``find_or_create`` on ``<uid>@Cal.com``
+    # mints a synthetic api-token duplicate instead of collapsing onto the existing
+    # row (a 2026-06-19 prod scan found 93+ such duplicates from the webhook and an
+    # earlier backfill). Real dedup against the calendar meeting therefore happens
+    # at dispatch via ``match_existing_by_participants`` (participants + start
+    # window — the same matcher Fathom uses); ``icsUid`` now only keys
+    # api-token→api-token idempotency across replays and the create-fallback uid.
     meeting_ical_uid = payload.icsUid or ical_uid
     meeting_provider = _meeting_provider_for_ics_uid(payload.icsUid)
     title = payload.title or "CALCOM Booking"
@@ -255,6 +259,11 @@ def _ops_for_created(
             end=payload.end,
             is_all_day=False,
             participants=participants,
+            # Resolve to the calendar-synced ``system`` meeting by participants +
+            # start window before creating an ``icsUid``-keyed row, so we don't
+            # duplicate the meeting Attio's Google/Outlook sync already owns
+            # (ai-4bz.8 reopen — ``icsUid`` can't match those rows).
+            match_existing_by_participants=True,
         ),
         EmitMeetingLifecycleEvent(
             external_id=ical_uid,

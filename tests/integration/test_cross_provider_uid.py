@@ -6,9 +6,13 @@ Attio meeting. That minted a DUPLICATE of the calendar-synced meeting (Attio's
 Google/Outlook integration owns the real meeting under the real iCalUID).
 
 New model:
-  - **Cal.com** carries the real calendar iCalUID (``icsUid``) and writes it as
-    the meeting ``external_ref.ical_uid`` → ``find_or_create`` collapses onto the
-    calendar-synced meeting directly.
+  - **Cal.com** carries the real calendar iCalUID (``icsUid``) as the meeting
+    ``external_ref.ical_uid`` (kept for api-token replay idempotency + the
+    create-fallback uid), but the calendar-synced ``system`` meeting Attio owns
+    exposes no matchable ``ical_uid`` — so ``icsUid`` alone mints a duplicate.
+    Cal.com therefore ALSO sets ``match_existing_by_participants`` (ai-4bz.8) so
+    the dispatcher first resolves the existing calendar meeting by participants +
+    start window, mirroring the Fathom/Fireflies paths.
   - **Fathom** has no calendar uid, so it keeps the canonical hash (as the
     in-plan LookupTable key + create fallback) and sets
     ``match_existing_by_participants`` so the dispatcher resolves the existing
@@ -75,10 +79,15 @@ def _meeting_op(webhook: CalcomBookingWebhook | FathomCallWebhook) -> UpsertMeet
 
 
 def test_calcom_meeting_keys_on_real_ical_uid() -> None:
-    """Cal.com writes the real calendar uid and does NOT use the participant matcher."""
+    """Cal.com retains the real calendar uid AND uses the participant matcher.
+
+    ``icsUid`` is kept for api-token replay idempotency + the create-fallback uid,
+    but the calendar-synced ``system`` row exposes no matchable ``ical_uid``, so
+    ``match_existing_by_participants`` must be set to collapse onto it (ai-4bz.8).
+    """
     op = _meeting_op(_calcom_webhook())
     assert op.external_ref.ical_uid == CALCOM_ICS_UID
-    assert op.match_existing_by_participants is False
+    assert op.match_existing_by_participants is True
 
 
 def test_fathom_meeting_uses_canonical_uid_and_participant_match() -> None:
