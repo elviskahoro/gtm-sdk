@@ -19,10 +19,10 @@ with ``--data-dir`` or the ``OCTOLENS_DATA_DIR`` env var (the exports live in th
 parent ``ai/`` repo, so there is no portable default):
 
     export OCTOLENS_DATA_DIR=~/Documents/ai/data/octolens
-    uv run python scripts/octolens-backfill-mentions.py                 # build + preview
-    uv run python scripts/octolens-backfill-mentions.py --send          # dry-run send
-    uv run python scripts/octolens-backfill-mentions.py --send --apply  # real POST (dev first!)
-    uv run python scripts/octolens-backfill-mentions.py --send --apply --limit 1
+    ./scripts/octolens-backfill-mentions.py                 # build + preview
+    ./scripts/octolens-backfill-mentions.py --send          # dry-run send
+    ./scripts/octolens-backfill-mentions.py --send --apply  # real POST (dev first!)
+    ./scripts/octolens-backfill-mentions.py --send --apply --limit 1
 
 dev vs prod is selected by ``--endpoint-url`` (or the ``MODAL_WORKSPACE`` env var
 that ``modal_url_for_app`` reads). Confirm which endpoint targets dev Attio

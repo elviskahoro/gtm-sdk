@@ -15,9 +15,9 @@ Infisical project + token.
 
 Usage:
 
-    INFISICAL_ENV=dev uv run python scripts/attio-probe_workspace_slug.py
-    uv run python scripts/attio-probe_workspace_slug.py --env prod
-    uv run python scripts/attio-probe_workspace_slug.py --env dev --json
+    scripts/attio-probe_workspace_slug.py --env dev
+    scripts/attio-probe_workspace_slug.py --env prod
+    scripts/attio-probe_workspace_slug.py --env dev --json
 
 You can still pre-inject the key yourself if you don't want the self-bootstrap:
 

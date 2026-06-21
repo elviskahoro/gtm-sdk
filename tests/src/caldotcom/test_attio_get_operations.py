@@ -98,11 +98,15 @@ def test_attio_get_operations_returns_single_upsert_meeting() -> None:
 
     op = _find_upsert_meeting(plan)
     assert isinstance(op.external_ref, MeetingExternalRef)
-    # The Meeting is keyed on the REAL calendar iCalUID (``icsUid``) so
-    # find_or_create collapses onto the calendar-synced row (ai-4bz), NOT the
-    # canonical hash.
+    # The Meeting keys on the REAL calendar iCalUID (``icsUid``), NOT the canonical
+    # hash. But icsUid can't merge onto the calendar-synced ``system`` row (those
+    # expose no matchable external_ref.ical_uid), so dedup happens at dispatch via
+    # ``match_existing_by_participants`` (ai-4bz.8 reopen); ``icsUid`` only keys
+    # api-token→api-token replay idempotency + the create-fallback uid.
     assert op.external_ref.ical_uid == "ical-evt-abc123@cal.com"
     assert op.external_ref.provider == "google"
+    # Resolve the existing calendar meeting by participants before creating one.
+    assert op.match_existing_by_participants is True
 
     # The lifecycle row, however, stays keyed on the canonical hash — it is the
     # PATCH target shared with the cancelled/rescheduled/etc. triggers, which

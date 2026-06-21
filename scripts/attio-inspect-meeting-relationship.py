@@ -45,8 +45,8 @@ set `INFISICAL_ENV`. The script self-bootstraps `infisical run` from
 
 Usage:
 
-    uv run python scripts/attio-inspect-meeting-relationship.py --env prod
-    uv run python scripts/attio-inspect-meeting-relationship.py --env prod \
+    scripts/attio-inspect-meeting-relationship.py --env prod
+    scripts/attio-inspect-meeting-relationship.py --env prod \
         --idempotency-check --execute
 """
 

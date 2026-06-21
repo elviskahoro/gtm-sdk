@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run python
 """Sync agent skills into `<gtm-sdk>/.agents/skills/` as symlinks.
 
 Composes two sources, with the local layer overriding the parent on
@@ -11,7 +12,7 @@ deletes in either source propagate cleanly. Real directories (which
 should not exist) are left alone.
 
 Usage:
-    uv run python scripts/agent_skills-sync.py
+    ./scripts/agent_skills-sync.py
 """
 
 from __future__ import annotations

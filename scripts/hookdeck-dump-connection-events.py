@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run python
 """Dump all Hookdeck events attached to a single connection.
 
 Runs the `hookdeck` CLI inside a Dagger-managed container so the dump is
@@ -11,13 +12,13 @@ its human name (`--connection-name rb2b-visits-mock`). Name lookups happen
 inside the container so the host still needs no Hookdeck install.
 
 Usage:
-    infisical run -- uv run python scripts/hookdeck-dump-connection-events.py \\
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/hookdeck-dump-connection-events.py \\
         --connection-id web_xxx
 
-    infisical run -- uv run python scripts/hookdeck-dump-connection-events.py \\
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/hookdeck-dump-connection-events.py \\
         --connection-name rb2b-visits-mock
 
-    infisical run -- uv run python scripts/hookdeck-dump-connection-events.py \\
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/hookdeck-dump-connection-events.py \\
         --connection-id web_xxx --max-events 50
 
 Requires `HOOKDECK_API_KEY` in the environment (inject via Infisical).
@@ -248,7 +249,7 @@ def main() -> int:
     if not api_key:
         print(
             "HOOKDECK_API_KEY is not set. Run via:\n"
-            "  infisical run -- uv run python scripts/hookdeck-dump-connection-events.py ...",
+            '  infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/hookdeck-dump-connection-events.py ...',
             file=sys.stderr,
         )
         return 2
