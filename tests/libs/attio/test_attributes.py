@@ -8,6 +8,7 @@ from attio.errors.sdkerror import SDKError
 from libs.attio.attributes import (
     create_companies_attribute,
     ensure_select_options,
+    is_select_attribute_writable,
     list_attributes,
     list_select_options,
     list_status_options,
@@ -589,6 +590,74 @@ def test_list_select_options_returns_titles(monkeypatch) -> None:
         target_object="social_mention",
         attribute_slug="relevance_score",
     ) == ["high", "low"]
+
+
+def test_is_select_attribute_writable_true_for_active_select(monkeypatch) -> None:
+    attrs = _FakeReadAttributes(attrs=[_live_attr("industry_select", "select")])
+    monkeypatch.setattr(
+        "libs.attio.attributes.get_client",
+        lambda: _FakeReadClient(attrs),
+    )
+
+    assert (
+        is_select_attribute_writable(
+            target_object="companies",
+            attribute_slug="industry_select",
+        )
+        is True
+    )
+
+
+def test_is_select_attribute_writable_false_for_archived_select(monkeypatch) -> None:
+    # The ai-3gx prod state: the slug exists and the options endpoint still
+    # returns options, but it is archived -> unwritable.
+    attrs = _FakeReadAttributes(
+        attrs=[_live_attr("industry_select", "select", is_archived=True)],
+    )
+    monkeypatch.setattr(
+        "libs.attio.attributes.get_client",
+        lambda: _FakeReadClient(attrs),
+    )
+
+    assert (
+        is_select_attribute_writable(
+            target_object="companies",
+            attribute_slug="industry_select",
+        )
+        is False
+    )
+
+
+def test_is_select_attribute_writable_false_for_missing_slug(monkeypatch) -> None:
+    attrs = _FakeReadAttributes(attrs=[_live_attr("other", "select")])
+    monkeypatch.setattr(
+        "libs.attio.attributes.get_client",
+        lambda: _FakeReadClient(attrs),
+    )
+
+    assert (
+        is_select_attribute_writable(
+            target_object="companies",
+            attribute_slug="industry_select",
+        )
+        is False
+    )
+
+
+def test_is_select_attribute_writable_false_for_non_select_type(monkeypatch) -> None:
+    attrs = _FakeReadAttributes(attrs=[_live_attr("industry", "text")])
+    monkeypatch.setattr(
+        "libs.attio.attributes.get_client",
+        lambda: _FakeReadClient(attrs),
+    )
+
+    assert (
+        is_select_attribute_writable(
+            target_object="companies",
+            attribute_slug="industry",
+        )
+        is False
+    )
 
 
 def test_list_status_options_returns_titles(monkeypatch) -> None:

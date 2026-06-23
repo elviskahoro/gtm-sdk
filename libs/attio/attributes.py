@@ -96,6 +96,28 @@ def list_select_options(*, target_object: str, attribute_slug: str) -> list[str]
         return [getattr(option, "title", "") for option in response.data]
 
 
+def is_select_attribute_writable(
+    *,
+    target_object: str,
+    attribute_slug: str,
+) -> bool:
+    """True when ``attribute_slug`` is a present, active (non-archived) select.
+
+    :func:`list_select_options` reads the *options* endpoint, which still returns
+    options for an **archived** attribute — a false green-light that hid the
+    unwritable ``industry_select`` slug behind ai-3gx's "all 76 labels are seeded"
+    preflight, while every PATCH onto it 400'd with ``value_not_found``. This
+    checks actual writability via :func:`list_attributes` (which surfaces
+    ``is_archived`` + ``attribute_type`` when ``show_archived=True``). See ai-e6e.
+
+    Returns ``False`` for an archived, missing, or non-select attribute.
+    """
+    for attr in list_attributes(target_object, show_archived=True):
+        if attr.api_slug == attribute_slug:
+            return not attr.is_archived and attr.attribute_type == "select"
+    return False
+
+
 def list_status_options(*, target_object: str, attribute_slug: str) -> list[str]:
     """Return the status titles on a ``status`` attribute. Read-only.
 
