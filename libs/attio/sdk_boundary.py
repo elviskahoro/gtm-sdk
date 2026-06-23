@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from types import ModuleType
 from typing import Any, Protocol, cast
@@ -194,6 +195,54 @@ def is_unknown_filter_attribute(exc: BaseException) -> bool:
     if payload is not None:
         return payload.get("code") == "unknown_filter_attribute_slug"
     return "unknown_filter_attribute_slug" in body_text
+
+
+@dataclass
+class AttioErrorDescription:
+    """The real fields from Attio's documented error envelope.
+
+    Attio returns ``{"status_code", "type", "code", "message"}`` on a 4xx, but
+    the generated SDK's response models constrain ``code`` to a narrow ``Literal``
+    per endpoint (e.g. only ``missing_value``). Any other valid code
+    (``value_not_found``, ``rate_limit_exceeded``, ...) fails response
+    unmarshalling, so the SDK raises ``ResponseValidationError`` and the real
+    status/message is lost behind pydantic's ``"Input should be 'missing_value'"``
+    noise. This carries the parsed-back-out truth so callers can log/classify it.
+    """
+
+    status_code: int | None
+    type: str | None
+    code: str | None
+    message: str | None
+
+
+def describe_attio_error(exc: BaseException) -> AttioErrorDescription | None:
+    """Re-parse an exception's body into Attio's real error envelope, or ``None``.
+
+    Generalizes the re-parse pattern in :func:`is_uniqueness_conflict` /
+    :func:`is_unknown_filter_attribute`: the SDK's ``Code`` Literal omits most of
+    Attio's codes, so the body is only legible by reading ``exc.body`` directly
+    (set from ``raw_response.text`` on every ``SDKError``). Returns a description
+    only when the parsed body carries both a string ``code`` and a string
+    ``message`` (Attio's documented shape); returns ``None`` otherwise — e.g. a
+    plain pydantic ``ValidationError`` on our own request input has no ``.body``,
+    so callers fall back to ``str(exc)`` / the pydantic-unwrap path. See ai-e7s.
+    """
+    payload = _parse_json_object(extract_exception_body_text(exc))
+    if payload is None:
+        return None
+    code = payload.get("code")
+    message = payload.get("message")
+    if not isinstance(code, str) or not isinstance(message, str):
+        return None
+    status_code = payload.get("status_code")
+    error_type = payload.get("type")
+    return AttioErrorDescription(
+        status_code=status_code if isinstance(status_code, int) else None,
+        type=error_type if isinstance(error_type, str) else None,
+        code=code,
+        message=message,
+    )
 
 
 def model_dump_or_empty(value: object) -> dict[str, Any]:

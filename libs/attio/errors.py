@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError as PydanticValidationError
 
+from libs.attio.sdk_boundary import describe_attio_error
 from src.modal_app import MODAL_APP
 
 
@@ -114,6 +115,20 @@ _SCOPE_REMEDIATION = (
 )
 
 
+# Attio error codes the SDK's per-endpoint ``Code`` Literal omits, mapped to our
+# ClassifiedError buckets. The SDK raises ResponseValidationError before the body
+# is visible, so without re-parsing (see sdk_boundary.describe_attio_error) these
+# all degraded to a generic pydantic "Invalid input for: ..." that masked the real
+# message (e.g. value_not_found: "Cannot find attribute ... industry_select"). An
+# unmapped code falls through to the real Attio code verbatim — truthful beats a
+# normalized lie. See ai-e7s.
+_ATTIO_CODE_TO_CLASSIFIED: dict[str, str] = {
+    "value_not_found": "not_found",
+    "uniqueness_conflict": "conflict",
+    "unknown_filter_attribute_slug": "schema_mismatch",
+}
+
+
 def _looks_like_scope_error(error: Exception) -> bool:
     status = getattr(
         getattr(error, "raw_response", None),
@@ -185,6 +200,21 @@ def classify_error(error: Exception, *, strict: bool = False) -> ClassifiedError
         return ClassifiedError(
             code="not_found",
             message=str(error),
+            error_type=type(error).__name__,
+            fatal=True,
+        )
+
+    # The SDK raises ResponseValidationError (with a pydantic ValidationError in
+    # `__cause__`) for any Attio code its narrow `Code` Literal omits. Re-parse the
+    # body BEFORE the pydantic-unwrap branch below so the real status/code/message
+    # wins over the generic "Invalid input for: ...". A genuine pydantic error on
+    # our OWN request input has no `.body`, so describe_attio_error returns None and
+    # the pydantic branch still handles it (no regression). See ai-e7s.
+    attio_desc = describe_attio_error(error)
+    if attio_desc is not None and attio_desc.code is not None:
+        return ClassifiedError(
+            code=_ATTIO_CODE_TO_CLASSIFIED.get(attio_desc.code, attio_desc.code),
+            message=attio_desc.message or str(error),
             error_type=type(error).__name__,
             fatal=True,
         )
