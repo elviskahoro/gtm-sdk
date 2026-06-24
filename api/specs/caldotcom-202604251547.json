@@ -143,7 +143,13 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "enum": ["upcoming", "recurring", "past", "cancelled", "unconfirmed"]
+                "enum": [
+                  "upcoming",
+                  "recurring",
+                  "past",
+                  "cancelled",
+                  "unconfirmed"
+                ]
               }
             }
           },
@@ -6415,7 +6421,13 @@
             "enum": ["CONFIDENTIAL", "PUBLIC"]
           }
         },
-        "required": ["client_id", "redirect_uris", "name", "is_trusted", "client_type"]
+        "required": [
+          "client_id",
+          "redirect_uris",
+          "name",
+          "is_trusted",
+          "client_type"
+        ]
       },
       "OAuth2ClientResponseDto": {
         "type": "object",
@@ -6460,7 +6472,13 @@
             "description": "The client secret for confidential clients"
           }
         },
-        "required": ["client_id", "grant_type", "code", "redirect_uri", "client_secret"]
+        "required": [
+          "client_id",
+          "grant_type",
+          "code",
+          "redirect_uri",
+          "client_secret"
+        ]
       },
       "OAuth2ExchangePublicInput": {
         "type": "object",
@@ -6491,7 +6509,13 @@
             "description": "PKCE code verifier (required for public clients that used code_challenge)"
           }
         },
-        "required": ["client_id", "grant_type", "code", "redirect_uri", "code_verifier"]
+        "required": [
+          "client_id",
+          "grant_type",
+          "code",
+          "redirect_uri",
+          "code_verifier"
+        ]
       },
       "OAuth2RefreshConfidentialInput": {
         "type": "object",
@@ -6517,7 +6541,12 @@
             "description": "The client secret for confidential clients"
           }
         },
-        "required": ["client_id", "grant_type", "refresh_token", "client_secret"]
+        "required": [
+          "client_id",
+          "grant_type",
+          "refresh_token",
+          "client_secret"
+        ]
       },
       "OAuth2RefreshPublicInput": {
         "type": "object",
@@ -6565,7 +6594,12 @@
             "example": 1800
           }
         },
-        "required": ["access_token", "token_type", "refresh_token", "expires_in"]
+        "required": [
+          "access_token",
+          "token_type",
+          "refresh_token",
+          "expires_in"
+        ]
       },
       "ManagedUserOutput": {
         "type": "object",
@@ -6728,7 +6762,15 @@
           "weekStart": {
             "type": "string",
             "example": "Monday",
-            "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            "enum": [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday"
+            ]
           },
           "timeZone": {
             "type": "string",
@@ -6825,7 +6867,13 @@
             "type": "number"
           }
         },
-        "required": ["accessToken", "refreshToken", "user", "accessTokenExpiresAt", "refreshTokenExpiresAt"]
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "user",
+          "accessTokenExpiresAt",
+          "refreshTokenExpiresAt"
+        ]
       },
       "CreateManagedUserOutput": {
         "type": "object",
@@ -6878,7 +6926,15 @@
           },
           "weekStart": {
             "type": "string",
-            "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+            "enum": [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday"
+            ],
             "example": "Monday"
           },
           "timeZone": {
@@ -6970,7 +7026,12 @@
             "type": "number"
           }
         },
-        "required": ["accessToken", "refreshToken", "accessTokenExpiresAt", "refreshTokenExpiresAt"]
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "accessTokenExpiresAt",
+          "refreshTokenExpiresAt"
+        ]
       },
       "KeysResponseDto": {
         "type": "object",
@@ -7474,7 +7535,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "AddressFieldInput_2024_06_14": {
         "type": "object",
@@ -7509,7 +7577,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "TextFieldInput_2024_06_14": {
         "type": "object",
@@ -7544,7 +7619,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "NumberFieldInput_2024_06_14": {
         "type": "object",
@@ -7579,7 +7661,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "TextAreaFieldInput_2024_06_14": {
         "type": "object",
@@ -7614,7 +7703,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "SelectFieldInput_2024_06_14": {
         "type": "object",
@@ -7656,7 +7752,15 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "options", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "options",
+          "hidden"
+        ]
       },
       "MultiSelectFieldInput_2024_06_14": {
         "type": "object",
@@ -7729,7 +7833,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "CheckboxGroupFieldInput_2024_06_14": {
         "type": "object",
@@ -7871,7 +7982,14 @@
             "description": "If true show under event type settings but don't show this booking field in the Booker. If false show in both."
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden"
+        ]
       },
       "BusinessDaysWindow_2024_06_14": {
         "type": "object",
@@ -8092,7 +8210,11 @@
             "example": true
           }
         },
-        "required": ["seatsPerTimeSlot", "showAttendeeInfo", "showAvailabilityCount"]
+        "required": [
+          "seatsPerTimeSlot",
+          "showAttendeeInfo",
+          "showAvailabilityCount"
+        ]
       },
       "InputAttendeeAddressLocation_2024_06_14": {
         "type": "object",
@@ -8976,7 +9098,14 @@
             "type": "boolean"
           }
         },
-        "required": ["type", "label", "placeholder", "isDefault", "slug", "required"]
+        "required": [
+          "type",
+          "label",
+          "placeholder",
+          "isDefault",
+          "slug",
+          "required"
+        ]
       },
       "LocationDefaultFieldOutput_2024_06_14": {
         "type": "object",
@@ -9204,7 +9333,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "BooleanFieldOutput_2024_06_14": {
         "type": "object",
@@ -9285,7 +9422,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "options", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "options",
+          "hidden",
+          "isDefault"
+        ]
       },
       "MultiEmailFieldOutput_2024_06_14": {
         "type": "object",
@@ -9326,7 +9471,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "MultiSelectFieldOutput_2024_06_14": {
         "type": "object",
@@ -9370,7 +9523,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "options", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "options",
+          "hidden",
+          "isDefault"
+        ]
       },
       "UrlFieldOutput_2024_06_14": {
         "type": "object",
@@ -9411,7 +9572,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "NumberFieldOutput_2024_06_14": {
         "type": "object",
@@ -9452,7 +9621,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "PhoneFieldOutput_2024_06_14": {
         "type": "object",
@@ -9491,7 +9668,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "RadioGroupFieldOutput_2024_06_14": {
         "type": "object",
@@ -9535,7 +9720,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "options", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "options",
+          "hidden",
+          "isDefault"
+        ]
       },
       "SelectFieldOutput_2024_06_14": {
         "type": "object",
@@ -9583,7 +9776,16 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "options", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "options",
+          "hidden",
+          "isDefault"
+        ]
       },
       "TextAreaFieldOutput_2024_06_14": {
         "type": "object",
@@ -9624,7 +9826,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "TextFieldOutput_2024_06_14": {
         "type": "object",
@@ -9665,7 +9875,15 @@
             "default": false
           }
         },
-        "required": ["type", "slug", "label", "required", "placeholder", "hidden", "isDefault"]
+        "required": [
+          "type",
+          "slug",
+          "label",
+          "required",
+          "placeholder",
+          "hidden",
+          "isDefault"
+        ]
       },
       "BookerActiveBookingsLimitOutput_2024_06_14": {
         "type": "object",
@@ -11035,7 +11253,15 @@
             "description": "Array of days when schedule is active.",
             "items": {
               "type": "string",
-              "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+              "enum": [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday"
+              ]
             }
           },
           "startTime": {
@@ -11179,7 +11405,15 @@
             }
           }
         },
-        "required": ["id", "ownerId", "name", "timeZone", "availability", "isDefault", "overrides"]
+        "required": [
+          "id",
+          "ownerId",
+          "name",
+          "timeZone",
+          "availability",
+          "isDefault",
+          "overrides"
+        ]
       },
       "CreateScheduleOutput_2024_06_11": {
         "type": "object",
@@ -11371,7 +11605,13 @@
             "example": "2025-12-31T23:59:59.000Z"
           }
         },
-        "required": ["linkId", "eventTypeId", "isExpired", "bookingUrl", "expiresAt"]
+        "required": [
+          "linkId",
+          "eventTypeId",
+          "isExpired",
+          "bookingUrl",
+          "expiresAt"
+        ]
       },
       "UsageBasedPrivateLinkOutput": {
         "type": "object",
@@ -11408,7 +11648,14 @@
             "example": 3
           }
         },
-        "required": ["linkId", "eventTypeId", "isExpired", "bookingUrl", "maxUsageCount", "usageCount"]
+        "required": [
+          "linkId",
+          "eventTypeId",
+          "isExpired",
+          "bookingUrl",
+          "maxUsageCount",
+          "usageCount"
+        ]
       },
       "CreatePrivateLinkOutput": {
         "type": "object",
@@ -11625,7 +11872,10 @@
         "properties": {
           "urls": {
             "type": "array",
-            "example": ["https://cal.com/ics/feed.ics", "http://cal.com/ics/feed.ics"],
+            "example": [
+              "https://cal.com/ics/feed.ics",
+              "http://cal.com/ics/feed.ics"
+            ],
             "description": "An array of ICS URLs",
             "items": {
               "type": "string",
@@ -11837,7 +12087,13 @@
             "nullable": true
           }
         },
-        "required": ["externalId", "primary", "readOnly", "isSelected", "credentialId"]
+        "required": [
+          "externalId",
+          "primary",
+          "readOnly",
+          "isSelected",
+          "credentialId"
+        ]
       },
       "Calendar": {
         "type": "object",
@@ -12587,7 +12843,14 @@
             "example": "America/Los_Angeles"
           }
         },
-        "required": ["id", "name", "email", "displayEmail", "username", "timeZone"]
+        "required": [
+          "id",
+          "name",
+          "email",
+          "displayEmail",
+          "username",
+          "timeZone"
+        ]
       },
       "EventType": {
         "type": "object",
@@ -13802,7 +14065,14 @@
             "example": "Error message"
           }
         },
-        "required": ["id", "roomName", "startTs", "status", "duration", "shareToken"]
+        "required": [
+          "id",
+          "roomName",
+          "startTs",
+          "status",
+          "duration",
+          "shareToken"
+        ]
       },
       "GetBookingRecordingsOutput": {
         "type": "object",
@@ -14336,7 +14606,15 @@
             }
           }
         },
-        "required": ["id", "room", "startTime", "duration", "ongoing", "maxParticipants", "participants"]
+        "required": [
+          "id",
+          "room",
+          "startTime",
+          "duration",
+          "ongoing",
+          "maxParticipants",
+          "participants"
+        ]
       },
       "GetBookingVideoSessionsOutput": {
         "type": "object",
@@ -14440,7 +14718,14 @@
             "example": 251
           }
         },
-        "required": ["name", "email", "displayEmail", "timeZone", "absent", "id"]
+        "required": [
+          "name",
+          "email",
+          "displayEmail",
+          "timeZone",
+          "absent",
+          "id"
+        ]
       },
       "GetBookingAttendeesOutput_2024_08_13": {
         "type": "object",
@@ -14636,7 +14921,15 @@
             "example": 313
           }
         },
-        "required": ["name", "email", "displayEmail", "timeZone", "absent", "id", "bookingId"]
+        "required": [
+          "name",
+          "email",
+          "displayEmail",
+          "timeZone",
+          "absent",
+          "id",
+          "bookingId"
+        ]
       },
       "AddAttendeeOutput_2024_08_13": {
         "type": "object",
@@ -15269,7 +15562,14 @@
             "type": "string"
           }
         },
-        "required": ["payloadTemplate", "triggers", "userId", "id", "subscriberUrl", "active"]
+        "required": [
+          "payloadTemplate",
+          "triggers",
+          "userId",
+          "id",
+          "subscriberUrl",
+          "active"
+        ]
       },
       "UserWebhookOutputResponseDto": {
         "type": "object",
@@ -15417,7 +15717,14 @@
             "type": "string"
           }
         },
-        "required": ["payloadTemplate", "triggers", "eventTypeId", "id", "subscriberUrl", "active"]
+        "required": [
+          "payloadTemplate",
+          "triggers",
+          "eventTypeId",
+          "id",
+          "subscriberUrl",
+          "active"
+        ]
       },
       "EventTypeWebhookOutputResponseDto": {
         "type": "object",
@@ -15516,7 +15823,14 @@
             "type": "string"
           }
         },
-        "required": ["payloadTemplate", "triggers", "oAuthClientId", "id", "subscriberUrl", "active"]
+        "required": [
+          "payloadTemplate",
+          "triggers",
+          "oAuthClientId",
+          "id",
+          "subscriberUrl",
+          "active"
+        ]
       },
       "OAuthClientWebhookOutputResponseDto": {
         "type": "object",
