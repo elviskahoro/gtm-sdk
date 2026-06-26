@@ -745,15 +745,7 @@ def error_envelope(error: Exception, *, strict: bool = False) -> ReliabilityEnve
         partial_success=False,
         action="failed",
         record_id=None,
-        errors=[
-            ErrorEntry(
-                code=classified.code,
-                message=classified.message,
-                error_type=classified.error_type,
-                fatal=classified.fatal,
-                field=classified.field,
-            ),
-        ],
+        errors=[classified.to_error_entry()],
     )
 
 

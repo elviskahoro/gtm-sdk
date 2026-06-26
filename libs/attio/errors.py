@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError as PydanticValidationError
 
+from libs.attio.contracts import ErrorEntry
 from libs.attio.sdk_boundary import describe_attio_error
 from src.modal_app import MODAL_APP
 
@@ -80,6 +81,27 @@ class ClassifiedError:
     error_type: str
     fatal: bool
     field: str | None = None
+    # Attio's real HTTP status and documented error type, populated only on the
+    # describe_attio_error re-parse path (other branches leave them None). See ai-fxs.
+    status_code: int | None = None
+    type: str | None = None
+
+    def to_error_entry(self) -> ErrorEntry:
+        """Convert to the business-facing envelope entry.
+
+        Single conversion point so the status_code/type forwarding stays in sync
+        across every error_envelope construction site (people/companies/mentions/
+        tracking_events/meetings). See ai-fxs.
+        """
+        return ErrorEntry(
+            code=self.code,
+            message=self.message,
+            error_type=self.error_type,
+            fatal=self.fatal,
+            field=self.field,
+            status_code=self.status_code,
+            type=self.type,
+        )
 
 
 def translate_modal_signature_error(error: Exception) -> Exception:
@@ -217,6 +239,8 @@ def classify_error(error: Exception, *, strict: bool = False) -> ClassifiedError
             message=attio_desc.message or str(error),
             error_type=type(error).__name__,
             fatal=True,
+            status_code=attio_desc.status_code,
+            type=attio_desc.type,
         )
 
     # pydantic's own ValidationError is NOT one of the custom AttioError subclasses

@@ -3,7 +3,6 @@ from typing import Any
 
 from libs.attio.client import get_client
 from libs.attio.contracts import (
-    ErrorEntry,
     ReliabilityEnvelope,
     WarningEntry,
 )
@@ -258,15 +257,7 @@ def error_envelope(error: Exception, *, strict: bool = False) -> ReliabilityEnve
         record_id=None,
         warnings=[],
         skipped_fields=[],
-        errors=[
-            ErrorEntry(
-                code=classified.code,
-                message=classified.message,
-                error_type=classified.error_type,
-                fatal=classified.fatal,
-                field=classified.field,
-            ),
-        ],
+        errors=[classified.to_error_entry()],
         meta={"output_schema_version": "v1"},
     )
 

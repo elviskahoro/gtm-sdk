@@ -106,3 +106,52 @@ def test_classify_error_bodyless_pydantic_still_validation_error() -> None:
     classified = classify_error(_make_pydantic_error())
     assert classified.code == "validation_error"
     assert "pydantic" not in classified.message.lower()
+
+
+def test_classify_error_carries_status_code_and_type() -> None:
+    # ai-fxs: status_code + Attio's documented type must survive classification,
+    # not just code + message.
+    err = _FakeResponseValidationError(_VALUE_NOT_FOUND_BODY)
+    err.__cause__ = _make_pydantic_error()
+
+    classified = classify_error(err)
+
+    assert classified.status_code == 400
+    assert classified.type == "invalid_request_error"
+
+
+def test_to_error_entry_propagates_status_code_and_type() -> None:
+    # ai-fxs: the business-facing ErrorEntry envelope must carry status_code/type,
+    # while error_type stays the Python exception class name (the two are distinct).
+    err = _FakeResponseValidationError(_VALUE_NOT_FOUND_BODY)
+    err.__cause__ = _make_pydantic_error()
+
+    entry = classify_error(err).to_error_entry()
+
+    assert entry.status_code == 400
+    assert entry.type == "invalid_request_error"
+    assert entry.error_type == "_FakeResponseValidationError"
+    assert entry.code == "not_found"
+
+
+def test_to_error_entry_carries_rate_limit_status_and_type() -> None:
+    body = (
+        '{"status_code": 429, "type": "rate_limit_error",'
+        ' "code": "rate_limit_exceeded", "message": "Slow down."}'
+    )
+    err = _FakeResponseValidationError(body)
+    err.__cause__ = _make_pydantic_error()
+
+    entry = classify_error(err).to_error_entry()
+
+    assert entry.status_code == 429
+    assert entry.type == "rate_limit_error"
+
+
+def test_to_error_entry_leaves_status_code_and_type_none_for_non_attio() -> None:
+    # A bodyless pydantic error never hits the describe_attio_error branch, so the
+    # new fields stay None rather than carrying stale Attio values.
+    entry = classify_error(_make_pydantic_error()).to_error_entry()
+
+    assert entry.status_code is None
+    assert entry.type is None

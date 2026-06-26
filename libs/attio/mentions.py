@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from libs.attio.attributes import ensure_select_options
 from libs.attio.client import get_client
-from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
+from libs.attio.contracts import ReliabilityEnvelope
 from libs.attio.errors import classify_error
 from libs.attio.models import MentionInput
 from libs.attio.sdk_boundary import build_assert_record_request
@@ -117,14 +117,6 @@ def _error_envelope(error: Exception) -> ReliabilityEnvelope:
         record_id=None,
         warnings=[],
         skipped_fields=[],
-        errors=[
-            ErrorEntry(
-                code=classified.code,
-                message=classified.message,
-                error_type=classified.error_type,
-                fatal=classified.fatal,
-                field=classified.field,
-            ),
-        ],
+        errors=[classified.to_error_entry()],
         meta={"output_schema_version": "v1"},
     )

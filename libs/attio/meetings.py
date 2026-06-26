@@ -7,7 +7,7 @@ from typing import Any
 from attio.errors.sdkerror import SDKError
 
 from libs.attio.client import get_client
-from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope
+from libs.attio.contracts import ReliabilityEnvelope
 from libs.attio.errors import AttioNotFoundError, classify_error
 from libs.attio.models import MeetingCandidate, MeetingInput, MeetingResult
 from libs.attio.sdk_boundary import build_post_meeting_request
@@ -166,15 +166,7 @@ def find_or_create_meeting(input: MeetingInput) -> ReliabilityEnvelope:
             partial_success=False,
             action="failed",
             record_id=None,
-            errors=[
-                ErrorEntry(
-                    code=classified.code,
-                    message=classified.message,
-                    error_type=classified.error_type,
-                    fatal=classified.fatal,
-                    field=classified.field,
-                ),
-            ],
+            errors=[classified.to_error_entry()],
             warnings=[],
             skipped_fields=[],
             meta={"output_schema_version": "v1"},
