@@ -10,6 +10,7 @@ from cli.exa import app as exa_app
 from cli.gmail import app as gmail_app
 from cli.granola import app as granola_app
 from cli.parallel import app as parallel_app
+from cli.sanity import app as sanity_app
 from cli.webhook import app as webhook_app
 from libs.logging.structured import set_source
 from libs.telemetry import emit_cli_event, init_log_exporter, init_tracer
@@ -47,6 +48,7 @@ app.add_typer(exa_app, name="exa")
 app.add_typer(gmail_app, name="gmail")
 app.add_typer(granola_app, name="granola")
 app.add_typer(parallel_app, name="parallel")
+app.add_typer(sanity_app, name="sanity")
 app.add_typer(webhook_app, name="webhook")
 
 
