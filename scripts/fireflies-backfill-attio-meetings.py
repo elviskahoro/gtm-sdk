@@ -144,6 +144,18 @@ def main() -> int:
 
     processed = written = failed = 0
     fail_details: list[str] = []
+    # Dedup observability (ai-av8): tally how *successful* meeting ops resolved
+    # so the smoke test can prove participant-matching worked.
+    #  - ``matched_existing``: collapsed onto a pre-existing calendar-synced /
+    #    Fathom / Cal.com meeting via ``match_existing_by_participants`` (action
+    #    "noop", no new row) — this is the dedup signal we care about.
+    #  - ``via_find_or_create``: no participant match, so it went through
+    #    ``find_or_create_meeting`` on the synthetic ical_uid. The Attio layer
+    #    reports action "created" for this path whether the row was freshly
+    #    inserted OR returned existing-by-ical_uid (a replay), so we do NOT try
+    #    to split fresh-vs-replay here — it cannot be told apart from the action.
+    # Failed meeting ops are excluded (they show up in the ``failed`` summary).
+    meetings_matched = meetings_via_find_or_create = 0
 
     for raw in iter_assembled_rows(con):
         if args.limit is not None and processed >= args.limit:
@@ -171,13 +183,44 @@ def main() -> int:
             continue
 
         result = execute(ops)
+        # Surface what each op actually did — record_id, action, and the
+        # matched_existing flag — instead of discarding execute()'s outcomes.
+        # This is the empirical dedup proof for the smoke test (ai-av8): a
+        # Fireflies meeting that coincides with an existing meeting must report
+        # action=noop matched_existing=True, not action=created.
+        for outcome in result.outcomes:
+            matched = bool(outcome.envelope.meta.get("matched_existing"))
+            emit(
+                f"    -> {outcome.op_type} action={outcome.envelope.action} "
+                f"matched_existing={matched} record_id={outcome.record_id}",
+            )
+            # OpOutcome.op_type is the op class name (type(op).__name__), e.g.
+            # "UpsertMeeting" — not the snake_case AttioOp.op_type.
+            if outcome.op_type == "UpsertMeeting":
+                if matched:
+                    meetings_matched += 1
+                elif outcome.envelope.action != "failed":
+                    # Non-matched success → the find_or_create path.
+                    meetings_via_find_or_create += 1
         if result.success:
             written += 1
         else:
             failed += 1
+            # Surface the failing op's actual error envelope, not just the
+            # opaque fail_reason ("op_failed"), so failures are triageable from
+            # the report alone.
+            err_detail = ""
+            if result.fail_index is not None and result.fail_index < len(
+                result.outcomes,
+            ):
+                env = result.outcomes[result.fail_index].envelope
+                if env.errors:
+                    err_detail = " errors=" + "; ".join(
+                        str(e.model_dump()) for e in env.errors
+                    )
             fail_details.append(
                 f"transcript_id={rec_id} fail_index={result.fail_index} "
-                f"reason={result.fail_reason}",
+                f"reason={result.fail_reason}{err_detail}",
             )
 
     emit("")
@@ -186,6 +229,14 @@ def main() -> int:
         + (f"written={written} " if args.execute else "")
         + f"failed={failed}",
     )
+    if args.execute:
+        # The dedup payoff: matched_existing meetings collapsed onto a
+        # pre-existing row (no duplicate); via_find_or_create went through the
+        # synthetic-ical_uid path (no participant match found).
+        emit(
+            f"- meetings: matched_existing={meetings_matched} "
+            f"via_find_or_create={meetings_via_find_or_create}",
+        )
     for detail in fail_details:
         emit(f"- FAIL {detail}")
     if not args.execute:
