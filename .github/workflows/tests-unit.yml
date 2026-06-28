@@ -15,15 +15,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Dagger
-        uses: dagger/dagger-for-github@8.0.0
+        uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
 
       - name: Install Dagger Python SDK
         run: pip install dagger-io anyio
+
+      # `dagger run` pulls registry.dagger.io/engine:v<cli-version> on first use.
+      # That single pull intermittently times out (~15s) during registry.dagger.io
+      # brownouts and kills the job before any test runs — observed as 3 consecutive
+      # failures on one branch while a concurrent run pulled fine (ai-4bz). Pre-pull
+      # with retry so a flaky pull self-heals; `dagger run` then finds the image
+      # cached locally and skips the pull. The tag tracks the CLI version installed
+      # by dagger-for-github, so nothing is hardcoded.
+      - name: Pre-pull Dagger engine image (resilient to registry flakiness)
+        run: |
+          set -uo pipefail
+          version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+          if [ -z "${version}" ]; then
+            echo "::warning::could not determine Dagger engine version; skipping pre-pull"
+            exit 0
+          fi
+          image="registry.dagger.io/engine:${version}"
+          echo "Pre-pulling ${image}"
+          for attempt in $(seq 1 6); do
+            if docker pull "${image}"; then
+              echo "Pulled ${image} on attempt ${attempt}"
+              exit 0
+            fi
+            echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
+            sleep 20
+          done
+          echo "::error::failed to pull ${image} after 6 attempts"
+          exit 1
 
       # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
       # inside the container) — the host-side Dagger engine reads it to ship
