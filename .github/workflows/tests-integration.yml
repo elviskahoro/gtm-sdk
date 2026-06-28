@@ -24,8 +24,14 @@ jobs:
       - name: Install Dagger Python SDK
         run: pip install dagger-io anyio
 
+      # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
+      # inside the container) — the host-side Dagger engine reads it to ship
+      # traces to Dagger Cloud. The value is stored in Infisical and synced into
+      # repo `secrets.*` by Infisical's GitHub App integration (same path as the
+      # ATTIO/MODAL/PARALLEL keys below). See https://docs.dagger.io/reference/configuration/cloud/
       - name: Run integration pytest in Dagger
         env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           ATTIO_API_KEY: ${{ secrets.ATTIO_API_KEY }}
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
