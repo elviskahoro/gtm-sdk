@@ -63,6 +63,11 @@ gtm = "cli.main:run"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib -m 'not integration'"
+filterwarnings = [
+  # jsonpath-python 1.1.6 (latest; pulled in transitively via fathom-python) touches
+  # deprecated ast.Num/Str/Bytes/NameConstant at import time. Not fixable upstream yet.
+  "ignore::DeprecationWarning:jsonpath.jsonpath",
+]
 markers = [
   "integration: tests that hit live external APIs (require credentials; run with `-m integration`)",
 ]
