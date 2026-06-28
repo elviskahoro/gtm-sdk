@@ -437,13 +437,23 @@ def main() -> int:
         return 1 if invalid_rows else 0
 
     # ---- Send: one-by-one POST with retry/backoff + per-record logging ----
+    # Outcomes are persisted INCREMENTALLY: each record's result row (and any
+    # failure) is appended and flushed the moment its POST resolves, rather than
+    # buffered in memory until the loop ends. This gives live progress (tail
+    # results.jsonl, or watch the stdout N/total counter) and makes partial
+    # progress durable if the sweep is interrupted — the replay is idempotent, so
+    # re-running simply no-ops the rows that already landed. The in-memory lists
+    # are retained only for the final summary counts.
     url = modal_url_for_app(WEBHOOK_APP_NAME)
-    print(f"[backfill] POSTing {len(envelopes)} envelopes → {url}")
+    total = len(envelopes)
+    print(f"[backfill] POSTing {total} envelopes → {url}", flush=True)
+    results_path = OUT_DIR / "results.jsonl"
+    failures_path = OUT_DIR / "failures.jsonl"
     results: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     sent_ok = 0
     with httpx.Client(timeout=30.0) as http:
-        for envelope in envelopes:
+        for index, envelope in enumerate(envelopes, start=1):
             uid = envelope["payload"].get("uid")
             code, error = _post_with_retry(http, url, envelope)
             row = {
@@ -456,11 +466,20 @@ def main() -> int:
             if error is None:
                 sent_ok += 1
             else:
-                failures.append({"uid": uid, "error": error, "envelope": envelope})
-
-    _write_jsonl(OUT_DIR / "results.jsonl", results, append=True)
-    if failures:
-        _write_jsonl(OUT_DIR / "failures.jsonl", failures, append=True)
+                failure_row = {"uid": uid, "error": error, "envelope": envelope}
+                failures.append(failure_row)
+                # Persist the dead-letter BEFORE the result row: failures.jsonl is
+                # the recovery-critical artifact (re-fed on the next run), so if the
+                # process is interrupted between the two appends the worst case is a
+                # dead-letter with no matching result row — harmless, since re-feed
+                # is idempotent. The reverse (a "failed" result row whose dead-letter
+                # was lost) would be a silent backfill gap, so never order it that way.
+                _write_jsonl(failures_path, [failure_row], append=True)
+            _write_jsonl(results_path, [row], append=True)
+            print(
+                f"[backfill] {index}/{total} {row['action']} (http {code}) uid={uid}",
+                flush=True,
+            )
 
     print(
         f"[backfill] done: {sent_ok}/{len(envelopes)} sent, {len(failures)} failed.\n"
