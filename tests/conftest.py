@@ -17,6 +17,87 @@ from attio.errors import SDKError  # noqa: E402
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _neuter_telemetry_network() -> Iterator[None]:
+    """Stop telemetry unit tests from phoning home at interpreter shutdown.
+
+    The telemetry tests (``tests/test_smoke_telemetry.py``,
+    ``tests/libs/test_telemetry.py``) call ``init_tracer`` / ``init_log_exporter``
+    with real-ish env (``HYPERDX_API_KEY="test-key"`` etc.), which builds a live
+    ``OTLPSpanExporter``/``OTLPLogExporter`` behind a ``BatchSpanProcessor`` and
+    registers ``atexit.register(provider.shutdown)`` (see ``libs/telemetry.py``).
+    The global ``TracerProvider`` is process-wide and set-once, so any later
+    ``emit_cli_event`` span lands in whichever exporter was installed first and
+    gets flushed to ``in-otel.hyperdx.io`` at process exit — using a bogus key,
+    so the server returns 404 and the OTEL SDK prints
+    ``Failed to export span batch code: 404, reason: Not Found`` *after* the
+    pytest summary. It looks like a failure on a passing run (the Dagger CI job
+    is green regardless — only pytest's exit code reddens it).
+
+    Neuter the network boundary for the whole session so nothing is ever sent,
+    regardless of test ordering or which provider wins the set-once global:
+    subclass the real OTLP HTTP exporters and no-op their ``export``/
+    ``shutdown``/``force_flush`` (construction kwargs like ``endpoint=`` are
+    still accepted, so introspection tests that nest their own
+    ``patch(...OTLPLogExporter, autospec=True)`` are unaffected).
+
+    Lazy ``from ... import OTLPSpanExporter`` inside ``libs/telemetry.py`` reads
+    the source-module attribute at call time, so patching it there takes effect.
+    The collector path (``TELEMETRY_COLLECTOR_APP`` unset, the CI default) is
+    left alone: its ``_spawn_collector`` Modal RPC already swallows its own
+    errors and never prints the OTLP HTTP 404, and it is exercised directly by
+    the spawn-exporter unit tests.
+    """
+    from unittest.mock import patch
+
+    from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+        OTLPLogExporter as _RealLogExporter,
+    )
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+        OTLPSpanExporter as _RealSpanExporter,
+    )
+    from opentelemetry.sdk._logs.export import LogRecordExportResult
+    from opentelemetry.sdk.trace.export import SpanExportResult
+
+    class _NoNetworkSpanExporter(_RealSpanExporter):  # type: ignore[misc]
+        def export(self, spans: Any) -> Any:  # noqa: ARG002
+            return SpanExportResult.SUCCESS
+
+        def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
+            return True
+
+        def shutdown(self) -> None:
+            return None
+
+    class _NoNetworkLogExporter(_RealLogExporter):  # type: ignore[misc]
+        def export(self, batch: Any) -> Any:  # noqa: ARG002
+            return LogRecordExportResult.SUCCESS
+
+        def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
+            return True
+
+        def shutdown(self) -> None:
+            return None
+
+    patchers = [
+        patch(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
+            _NoNetworkSpanExporter,
+        ),
+        patch(
+            "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter",
+            _NoNetworkLogExporter,
+        ),
+    ]
+    for p in patchers:
+        p.start()
+    try:
+        yield
+    finally:
+        for p in patchers:
+            p.stop()
+
+
 # Attio API keys are 64 chars per the API's own validation
 # ("API Keys should be 64 characters long" — surfaced in the 401 body).
 # Skip rather than 401 when ATTIO_API_KEY is set to a shorter stub value, so
