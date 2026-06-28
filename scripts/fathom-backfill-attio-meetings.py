@@ -27,7 +27,13 @@ already present in Attio will NOT pick up later description/metadata changes
 from a re-run. New recordings are created complete; pre-existing rows are
 effectively frozen. Run the backfill only once hydration is final (see ai-crf).
 
-Default is a DRY RUN. Pass --execute to write to Attio.
+Default is a DRY RUN. Pass --execute to write to Attio. NOTE: a dry run only
+prints the planned ops — it never calls ``src.attio.export.execute``, so it
+CANNOT surface failures that only happen at write time. In particular, a note
+whose parent attendee is not yet a Person in Attio fails with ``unresolved_ref``
+at --execute (the meeting's own POST normally auto-creates participants, but a
+pre-existing meeting is a no-op and creates none). A clean dry run is therefore
+NOT proof the --execute run will be failure-free.
 
 Usage:
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\

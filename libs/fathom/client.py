@@ -97,6 +97,29 @@ def iter_meetings(
     if recorded_by:
         kwargs["recorded_by"] = recorded_by
 
+    # Fathom's edge throttles back-to-back page fetches: page 1 returns ~100
+    # recordings, then the SDK fires the next() cursor request immediately and
+    # the gateway answers 429 (Content-Type text/html, empty body) — a per-burst
+    # limit, distinct from the documented 60-calls/60-seconds API limit. The SDK
+    # ships a backoff retrier that handles 429/5xx and honors Retry-After, but
+    # its default config is UNSET (no retries), so the first next() 429 aborts
+    # the whole listing. Configure backoff explicitly; .next() threads this same
+    # retries config through every subsequent page. Only inject for the real SDK
+    # client — injected test stubs don't accept a retries kwarg.
+    if client is None:
+        from fathom_python.utils.retries import BackoffStrategy, RetryConfig
+
+        kwargs["retries"] = RetryConfig(
+            "backoff",
+            BackoffStrategy(
+                initial_interval=1_000,  # ms; first wait after a 429
+                max_interval=30_000,  # ms; cap per-retry wait
+                exponent=1.5,
+                max_elapsed_time=120_000,  # ms; total retry budget per page
+            ),
+            retry_connection_errors=True,
+        )
+
     response = fathom.list_meetings(**kwargs)
     while response is not None:
         for meeting in response.result.items:
