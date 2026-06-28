@@ -25,7 +25,14 @@ jobs:
       - name: Install Dagger Python SDK
         run: pip install dagger-io anyio
 
+      # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
+      # inside the container) — the host-side Dagger engine reads it to ship
+      # traces to Dagger Cloud. The value is stored in Infisical and synced into
+      # repo `secrets.*` by Infisical's GitHub App integration (same path as
+      # TRUNK_API_TOKEN / MODAL_TOKEN_*). See https://docs.dagger.io/reference/configuration/cloud/
       - name: Run pytest in Dagger
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
         run: dagger run python .github/workflows/ci/pytest_dagger.py
 
       # If this step errors "Unauthorized access, your Trunk organization URL
