@@ -36,10 +36,19 @@ _MIN_OVERLAP = 0.5
 _DEFAULT_WINDOW_MINUTES = 10
 
 
-def _overlap_coefficient(a: set[str], b: set[str]) -> float:
+def overlap_coefficient(a: set[str], b: set[str]) -> float:
+    """Szymkiewicz–Simpson overlap |a∩b| / min(|a|,|b|); 0.0 if either is empty.
+
+    Shared by the live matcher and the orphan detector (``src.attio.
+    orphan_meetings``, ai-4bz.9) so both score participant overlap identically.
+    """
     if not a or not b:
         return 0.0
     return len(a & b) / min(len(a), len(b))
+
+
+# Backwards-compatible internal alias for existing callers in this module.
+_overlap_coefficient = overlap_coefficient
 
 
 def resolve_meeting_id_by_participants(
