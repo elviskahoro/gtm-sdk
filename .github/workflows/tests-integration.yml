@@ -33,13 +33,12 @@ jobs:
       # secrets (forwarded as Dagger secrets), and the uv-cache volume stream to
       # the cloud engine unchanged.
       #
-      # Token model: `--cloud` authenticates with a Dagger Cloud *Compute Token*
-      # (DAGGER_CLOUD_COMPUTE_TOKEN), distinct from the *Telemetry Token* in
-      # DAGGER_CLOUD_TOKEN. The CLI only reads DAGGER_CLOUD_TOKEN, so the
-      # compute-token secret is mapped onto that var for this step; the telemetry
-      # secret is left untouched and the cloud engine ships its own traces. Both
-      # come from Infisical via the GitHub App sync.
-      # See https://docs.dagger.io/reference/configuration/cloud/
+      # Token model: `--cloud` authenticates with a Dagger Cloud token, read only
+      # from DAGGER_CLOUD_TOKEN. During early access the org's single Dagger Cloud
+      # token serves both compute and telemetry, so DAGGER_CLOUD_COMPUTE_TOKEN
+      # currently carries the *same value* as DAGGER_CLOUD_TOKEN. It is kept as a
+      # separate secret so the two can diverge later if Dagger issues a distinct
+      # compute token. See https://docs.dagger.io/reference/configuration/cloud/
       - name: Run integration pytest in Dagger (Cloud engine)
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}
