@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -14,6 +15,9 @@ from libs.attio.sdk_boundary import build_post_meeting_request
 from libs.attio.values import build_meeting_payload
 
 logger = logging.getLogger(__name__)
+
+# Attio caps GET /v2/meetings page size at 200; a larger value 400s.
+_MAX_MEETINGS_PAGE_LIMIT = 200
 
 
 def _meeting_start_dt(meeting: Any) -> datetime | None:
@@ -29,6 +33,111 @@ def _meeting_start_dt(meeting: Any) -> datetime | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _parse_iso(raw: str | None) -> datetime | None:
+    """Parse a plain ISO-8601 string (e.g. ``Meeting.created_at``) to UTC.
+
+    Unlike ``_meeting_start_dt`` this takes a bare string, not a Start union —
+    ``created_at`` is a top-level ISO timestamp on the listed Meeting.
+    """
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _candidate_from_meeting(m: Any) -> MeetingCandidate | None:
+    """Build a ``MeetingCandidate`` from a listed SDK Meeting (None if no start)."""
+    m_start = _meeting_start_dt(m)
+    if m_start is None:
+        return None
+    emails = sorted(
+        (p.email_address or "").lower()
+        for p in (m.participants or [])
+        if getattr(p, "email_address", None)
+    )
+    actor = getattr(m, "created_by_actor", None)
+    actor_type = getattr(actor, "type", None)
+    return MeetingCandidate(
+        meeting_id=m.id.meeting_id,
+        title=m.title or "",
+        start=m_start,
+        participant_emails=emails,
+        created_by_system=actor_type == "system",
+        created_by_type=actor_type,
+        created_at=_parse_iso(getattr(m, "created_at", None)),
+    )
+
+
+def iter_meetings_in_range(
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    limit: int = 200,
+) -> Iterator[MeetingCandidate]:
+    """Stream every meeting whose START falls in ``[start, end]`` (bounds optional).
+
+    Unlike :func:`list_candidate_meetings`, this applies NO ``±window`` filter and
+    yields lazily — it is built for a broad backfill-era range scan (~12.5k rows)
+    where holding the whole list in memory is wasteful. ``start``/``end`` map to
+    the server-side ``ends_from`` / ``starts_before`` bounds; either left ``None``
+    is sent as ``UNSET`` (a ``None``/``None`` call lists the whole workspace under
+    ``sort="start_asc"``). A light client-side ``start <= s <= end`` filter trims
+    the partial first/last pages that the overlap-based server filter lets through.
+
+    ``limit`` is the per-page size; Attio caps ``GET /v2/meetings`` at 200, so the
+    default is the max (~63 pages over a 12.5k-row range) and any larger value is
+    clamped down to avoid a 400.
+
+    Populates ``created_by_type`` and ``created_at`` on each candidate (orphan
+    detection needs both — see ai-4bz.9). Pages via ``pagination.next_cursor``.
+    """
+    limit = min(limit, _MAX_MEETINGS_PAGE_LIMIT)
+    if start is not None:
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        start = start.astimezone(timezone.utc)
+    if end is not None:
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        end = end.astimezone(timezone.utc)
+
+    def iso(d: datetime) -> str:
+        return d.isoformat().replace("+00:00", "Z")
+
+    bounds: dict[str, str] = {}
+    if end is not None:
+        bounds["starts_before"] = iso(end)
+    if start is not None:
+        bounds["ends_from"] = iso(start)
+
+    cursor: str | None = None
+    with get_client() as client:
+        while True:
+            resp = client.meetings.get_v2_meetings(
+                limit=limit,
+                cursor=cursor,
+                sort="start_asc",
+                **bounds,
+            )
+            for m in resp.data:
+                candidate = _candidate_from_meeting(m)
+                if candidate is None:
+                    continue
+                if start is not None and candidate.start < start:
+                    continue
+                if end is not None and candidate.start > end:
+                    continue
+                yield candidate
+            cursor = resp.pagination.next_cursor if resp.pagination else None
+            if not cursor:
+                break
 
 
 def list_candidate_meetings(
