@@ -24,22 +24,60 @@ jobs:
       - name: Install Dagger Python SDK
         run: pip install dagger-io anyio
 
-      # See tests-unit.yml: `dagger run`'s first-use engine image pull intermittently
-      # times out during registry.dagger.io brownouts and fails the job before any
-      # test runs. Pre-pull with retry so a flaky pull self-heals.
-      - name: Pre-pull Dagger engine image (resilient to registry flakiness)
+      # See tests-unit.yml for the full rationale: registry.dagger.io brownouts
+      # (dagger/dagger#7548) stall the first-use engine image pull and kill the job
+      # before any test runs. Two-layer mitigation: cache the engine tarball keyed
+      # on the engine version so most runs skip the registry, and on a miss retry
+      # the pull with a per-attempt timeout so a hung blob cedes to a fresh attempt.
+      - name: Resolve Dagger engine version
+        id: dagger_engine
         run: |
           set -uo pipefail
           version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
           if [ -z "${version}" ]; then
             echo "::warning::could not determine Dagger engine version; skipping pre-pull"
-            exit 0
           fi
-          image="registry.dagger.io/engine:${version}"
-          echo "Pre-pulling ${image}"
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+
+      - name: Cache Dagger engine image
+        if: steps.dagger_engine.outputs.version != ''
+        id: dagger_engine_cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /tmp/dagger-engine.tar
+          key: dagger-engine-${{ runner.os }}-${{ steps.dagger_engine.outputs.version }}
+
+      - name: Load or pre-pull Dagger engine image (resilient to registry flakiness)
+        if: steps.dagger_engine.outputs.version != ''
+        env:
+          ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
+          CACHE_HIT: ${{ steps.dagger_engine_cache.outputs.cache-hit }}
+        run: |
+          set -uo pipefail
+          image="registry.dagger.io/engine:${ENGINE_VERSION}"
+          tarball="/tmp/dagger-engine.tar"
+          if [ "${CACHE_HIT}" = "true" ] && [ -f "${tarball}" ]; then
+            echo "Loading ${image} from cache (${tarball})"
+            if docker load -i "${tarball}"; then
+              echo "Loaded ${image} from cache; skipping registry pull"
+              exit 0
+            fi
+            echo "::warning::cached engine tarball failed to load; falling back to registry pull"
+          fi
+          echo "Pulling ${image} from registry"
           for attempt in $(seq 1 6); do
-            if docker pull "${image}"; then
+            if timeout 150 docker pull "${image}"; then
               echo "Pulled ${image} on attempt ${attempt}"
+              # Fail closed on the cache, not the job: the engine is already in the
+              # local daemon so this run proceeds regardless. A partial/failed save
+              # must NOT be persisted by actions/cache or every later run loads a
+              # broken tarball — delete it so the cache step finds nothing to store.
+              if docker save "${image}" -o "${tarball}"; then
+                echo "Saved ${image} to ${tarball} for future runs"
+              else
+                echo "::warning::docker save failed; removing partial tarball so a bad cache is not persisted"
+                rm -f "${tarball}"
+              fi
               exit 0
             fi
             echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
