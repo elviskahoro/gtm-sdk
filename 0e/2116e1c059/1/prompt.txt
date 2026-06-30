@@ -1,0 +1,27 @@
+nstalling the CLI and enabling Entire in a Git repository.
+
+1
+Install the CLI
+Install Entire in your terminal.
+
+
+curl
+curl -fsSL https://entire.io/install.sh | bash
+
+2
+Log in
+Link the CLI to your Entire account.
+
+entire login
+
+3
+Enable checkpoints
+From any Git repository, enable Entire so every push can publish checkpoints.
+
+entire enable
+
+4
+Code and push
+Work with your coding agents as usual. When you push, Entire links captured sessions to your commits and your first checkpoint will appear here.
+
+i'm trying to get entire to send some checkpoints to the console pleaes help me do this
