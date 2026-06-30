@@ -1,0 +1,23 @@
+figure out how entire CLI works and see how it will clash with paper CLI which is via paper start / paper doctor
+they both seem to be intercepting something to do with claude
+entire seems to have setup some type of hooks but i don't know if they are claude or git or both:
+entire enable
+Detected agent: Claude Code
+
+[entire] Backed up existing post-commit to post-commit.pre-entire
+[entire] Backed up existing pre-push to pre-push.pre-entire
+  ✓ Installed hooks
+  ✓ Configured project
+    .entire/settings.json
+  ✓ Created orphan ref entire/checkpoints/v1 for session metadata
+
+Ready.
+
+---
+
+yeah mess around with entire and figure out how it's setup and what it does exactly!
+
+---
+
+yes let's do this:
+Want me to test the checkpoint flow end-to-end (make a throwaway file edit + commit so it generates a real checkpoint on the orphan ref), then show what entire blame/why/explain actually produce?
