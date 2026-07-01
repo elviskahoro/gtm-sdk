@@ -4,7 +4,7 @@
   "checkpoint_id": "13148e494143",
   "strategy": "manual-commit",
   "branch": "agent/entire-checkpoint-test",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "entire_smoketest_opus.txt"
   ],
@@ -15,13 +15,20 @@
       "compact_transcript": "/13/148e494143/0/transcript.jsonl",
       "content_hash": "/13/148e494143/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/13/148e494143/1/metadata.json",
+      "transcript": "/13/148e494143/1/full.jsonl",
+      "compact_transcript": "/13/148e494143/1/transcript.jsonl",
+      "content_hash": "/13/148e494143/1/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
-    "input_tokens": 4,
-    "cache_creation_tokens": 108937,
+    "input_tokens": 6,
+    "cache_creation_tokens": 197114,
     "cache_read_tokens": 106154,
-    "output_tokens": 3016,
-    "api_call_count": 2
+    "output_tokens": 3792,
+    "api_call_count": 3
   }
 }
