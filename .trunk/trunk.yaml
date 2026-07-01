@@ -236,14 +236,17 @@ lint:
 
 actions:
   enabled:
-    - git-lfs
-    - trunk-announce
     - trunk-cache-prune
     - trunk-upgrade-available
-    - trunk-check-pre-push
 
   disabled:
+    # git-hook-triggered actions disabled so trunk releases core.hooksPath to
+    # Entire (checkpoints). trunk-check-pre-push is redundant with roborev + the
+    # merge queue's required "Trunk Check"; git-lfs is unused (no LFS-tracked files).
     - trunk-fmt-pre-commit
+    - git-lfs
+    - trunk-announce
+    - trunk-check-pre-push
 
 merge:
   required_statuses:
