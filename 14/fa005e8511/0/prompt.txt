@@ -15,3 +15,7 @@ we can also turn off the trunk action let's do that instead
 ---
 
 we can also turn off the trunk action let's do that instead
+
+---
+
+let's wire this back in: - Anti-co-author hooks: your global prepare-commit-msg/commit-msg that reject Co-Authored-By: Claude/Oz are not running in this repo (they were bypassed by trunk before, and now by Entire's .git/hooks). If you want that enforcement back here, I can wire it into the hook chain.
