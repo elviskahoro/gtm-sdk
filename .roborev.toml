@@ -1,0 +1,21 @@
+# roborev review configuration for gtm-sdk.
+#
+# `review_guidelines` is embedded into every review prompt. Use it to encode
+# deliberate house decisions so the reviewer stops re-flagging them as findings.
+
+review_guidelines = """
+- The anti-AI-co-author git hooks (scripts/git-hooks/prepare-commit-msg and
+  commit-msg) are intentionally a DENYLIST of known AI/agent identities (Claude,
+  Oz, Copilot, Cursor, Devin, Jules, ...), NOT a human allowlist. Do not suggest
+  switching to an allowlist or "reject every Co-Authored-By: not on a human
+  list" — humans co-author freely in this repo, so an allowlist would block
+  legitimate contributors and require perpetual upkeep. The correct maintenance
+  action is to extend the denylist when a new agent identity appears.
+
+- scripts/setup-entire-hooks.py applies its --force custom-hook guard only to
+  prepare-commit-msg and commit-msg. This is deliberate, not an oversight: the
+  script re-seeds ONLY those two hooks (it unlinks Entire's .pre-entire backup
+  and rewrites them). Entire's own `entire enable` chains any pre-existing
+  post-commit / pre-push / post-rewrite hook to <hook>.pre-entire, so those
+  slots are already preserved without a separate guard (verified empirically).
+"""
