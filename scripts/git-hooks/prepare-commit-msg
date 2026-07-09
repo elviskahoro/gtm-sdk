@@ -1,0 +1,36 @@
+#!/bin/sh
+# prepare-commit-msg — strip agent/AI co-authors before the commit editor opens.
+#
+# Enforces the AGENTS.md rule: commits credit only human authors. Installed as
+# .git/hooks/prepare-commit-msg.pre-entire and chained behind Entire's hook by
+# scripts/setup-entire-hooks.py (Entire injects its checkpoint trailer first,
+# then this strips any Co-Authored-By: Claude/Oz lines).
+#
+# Runs for ALL commit sources (normal, -m, amend/-c/-C, template, merge, squash)
+# so an amend or templated message can't smuggle a co-author past into the strip
+# path; commit-msg is the reject backstop. Note: `git commit --no-verify` skips
+# every client-side hook — enforce there via CI if that path matters.
+
+COMMIT_MSG_FILE="$1"
+
+[ -f "${COMMIT_MSG_FILE}" ] || exit 0
+
+# AI/agent co-author denylist (AGENTS.md bans ALL AI co-authors, not just two).
+# Deliberately a DENYLIST, not a human allowlist: humans co-author freely here,
+# so allowlisting would block legitimate contributors and need constant upkeep.
+# Two precise, low-false-positive strategies; POSIX ERE only (no \b — a GNU grep
+# extension unreliable on macOS BSD grep):
+#   1. Anchored display names for the unambiguous agents (Claude, Oz). The "<"
+#      anchor means humans like "Ozzie"/"Claudette" are NOT matched.
+#   2. Distinctive agent emails / bot handles for the rest — so a human named
+#      "Devin" is kept, but the devin-ai-integration bot is not.
+# Extend both branches as new agents appear. Keep in sync with commit-msg.
+pattern='Co-Authored-By:[[:space:]]*(Claude|Oz)[[:space:]]*<|Co-Authored-By:.*(@anthropic\.com|oz-agent@warp\.dev|copilot@|@cursor\.com|cursoragent|devin-ai-integration|google-labs-jules)'
+if grep -qiE "${pattern}" "${COMMIT_MSG_FILE}"; then
+  tmp="$(mktemp)"
+  grep -viE "${pattern}" "${COMMIT_MSG_FILE}" >"${tmp}"
+  mv "${tmp}" "${COMMIT_MSG_FILE}"
+  printf '%s\n' "[hooks] Removed agent/AI co-author (AGENTS.md: human authors only)." >&2
+fi
+
+exit 0

@@ -132,6 +132,18 @@ cd gtm
 uv sync
 ```
 
+### Enable Entire session capture (per clone)
+
+Git hooks aren't committed, so after cloning on a new device wire up Entire
+(agent-session checkpoints) plus the anti-AI-co-author enforcement in one step:
+
+```bash
+scripts/setup-entire-hooks.py
+```
+
+Install the Entire CLI (`curl -fsSL https://entire.io/install.sh | bash`) and run
+`entire login` first. The script is idempotent — safe to re-run.
+
 ## Common commands
 
 ```bash

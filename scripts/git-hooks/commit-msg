@@ -1,0 +1,27 @@
+#!/bin/sh
+# commit-msg — reject commits that still carry an agent/AI co-author.
+#
+# Enforces the AGENTS.md rule: commits credit only human authors. Installed as
+# .git/hooks/commit-msg.pre-entire and chained behind Entire's hook by
+# scripts/setup-entire-hooks.py. This is the backstop for the prepare-commit-msg
+# strip (e.g. amends / templated commits the strip skips): it fails the commit.
+
+COMMIT_MSG_FILE="$1"
+[ -f "${COMMIT_MSG_FILE}" ] || exit 0
+
+# AI/agent co-author denylist — see prepare-commit-msg for the rationale. Two
+# strategies: anchored names for the unambiguous agents (Claude, Oz) + distinctive
+# agent emails/bot handles for the rest (a human named "Devin" is kept). POSIX ERE
+# only — no \b (unreliable on macOS BSD grep). Keep in sync with prepare-commit-msg.
+pattern='Co-Authored-By:[[:space:]]*(Claude|Oz)[[:space:]]*<|Co-Authored-By:.*(@anthropic\.com|oz-agent@warp\.dev|copilot@|@cursor\.com|cursoragent|devin-ai-integration|google-labs-jules)'
+if grep -qiE "${pattern}" "${COMMIT_MSG_FILE}"; then
+  cat >&2 <<'MSG'
+
+COMMIT REJECTED: agent/AI co-author detected.
+  Per AGENTS.md, commits must credit only human authors.
+  Remove the "Co-Authored-By: Claude/Oz/..." line(s) and retry.
+MSG
+  exit 1
+fi
+
+exit 0
