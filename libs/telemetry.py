@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
 import os
 import signal
 import sys
 from typing import Any
+
+# OTLP attribute values must be one of {str, bool, int, float, bytes} or a
+# homogeneous list of those. Mirrors the sanitization contract in
+# ``libs/logging/structured._emit_to_otlp`` — kept local so this module never
+# imports the structured logger (which imports telemetry lazily in the other
+# direction).
+_OTLP_PRIMITIVES = (str, bool, int, float, bytes)
 
 _tracer = None
 # Keyed by ``service_name`` rather than a single global so a process that
@@ -634,3 +642,98 @@ def emit_cli_event(name: str, attributes: dict[str, Any]) -> None:
                 span.set_attribute(key, json.dumps(value))
             else:
                 span.set_attribute(key, value)
+
+
+def _set_span_attributes(span_obj: Any, attributes: dict[str, Any]) -> None:
+    """Set OTLP-safe attributes on a span; drop ``None``, JSON-encode the rest.
+
+    Same sanitization contract as ``structured._emit_to_otlp``: primitives and
+    homogeneous primitive lists pass through, everything else is JSON-encoded so
+    the attribute still ships rather than getting the span rejected. Never
+    raises — a bad attribute value must not break the wrapped code path.
+    """
+    if span_obj is None:
+        return
+    for key, value in attributes.items():
+        if value is None:
+            continue
+        if isinstance(value, _OTLP_PRIMITIVES):
+            safe: Any = value
+        elif (
+            isinstance(value, (list, tuple))
+            and value
+            and len({type(v) for v in value}) == 1
+            and isinstance(value[0], _OTLP_PRIMITIVES)
+        ):
+            safe = list(value)
+        else:
+            try:
+                safe = json.dumps(value)
+            except (TypeError, ValueError):
+                safe = repr(value)
+        try:
+            span_obj.set_attribute(key, safe)
+        except Exception:  # noqa: BLE001 — attribute set must never raise into the caller  # trunk-ignore(bandit/B112): continue is intentional — a rejected attribute must not abort the span or the wrapped code path
+            continue
+
+
+@contextlib.contextmanager
+def span(name: str, **attributes: Any):
+    """Open an OTEL span under the active provider, or a transparent no-op.
+
+    The span-tree counterpart to the flat ``log()`` events. When ``init_tracer``
+    has installed a real provider, collector fan-out exports these the same way
+    logs go out: the ``BatchSpanProcessor``'s exporter serializes each batch and
+    fire-and-forget ``.spawn()``s the collector's ``fan_out`` with
+    ``signal="traces"``.
+
+    Non-load-bearing by construction — instrumenting a hot path must never be
+    able to fail it:
+
+    * If ``opentelemetry`` isn't importable, or ``init_tracer`` was never called
+      / degraded (no real provider installed), ``trace.get_tracer`` returns a
+      no-op tracer and the wrapped block still runs — no span is exported.
+    * Span export is fire-and-forget on a background thread; a failed collector
+      spawn returns ``SpanExportResult.FAILURE`` and never surfaces here.
+
+    Safe to call from ``src/`` and ``libs/`` code that also runs where tracing
+    isn't wired (tests, CLI, GCP-routed webhooks that only call
+    ``init_log_exporter``). Yields the span (or ``None`` when opentelemetry is
+    absent) so callers can attach outcome attributes with ``annotate_span``.
+    """
+    try:
+        from opentelemetry import trace
+    except Exception:  # noqa: BLE001 — telemetry is never load-bearing
+        yield None
+        return
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span(name) as current:
+        _set_span_attributes(current, attributes)
+        yield current
+
+
+def annotate_span(
+    span_obj: Any,
+    *,
+    error: BaseException | None = None,
+    **attributes: Any,
+) -> None:
+    """Attach outcome attributes (and optionally an error) to a ``span()`` span.
+
+    No-op when ``span_obj`` is ``None`` (tracing off). When ``error`` is given,
+    records the exception and flips the span status to ERROR — for paths that
+    catch-and-continue, so the exception never propagates through the ``span()``
+    context manager where the status would be set automatically. Never raises.
+    """
+    if span_obj is None:
+        return
+    _set_span_attributes(span_obj, attributes)
+    if error is None:
+        return
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        span_obj.record_exception(error)
+        span_obj.set_status(Status(StatusCode.ERROR, str(error)))
+    except Exception:  # noqa: BLE001 — never raise from telemetry
+        return
