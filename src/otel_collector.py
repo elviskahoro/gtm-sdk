@@ -11,8 +11,7 @@ Architecture (see ``libs/telemetry.py`` for the app side):
                                                      batch + retry_on_failure + sending_queue
                                                           ├─▶ Dash0     (Dash0-Dataset header)
                                                           ├─▶ HyperDX
-                                                          ├─▶ Logfire
-                                                          └─▶ LangSmith (x-api-key + Langsmith-Project header)
+                                                          └─▶ Logfire
 
 Why this shape: apps reach the collector through Modal's authenticated RPC
 (``.spawn``), so there is **no inbound web URL** — the otelcol OTLP receiver is
@@ -85,9 +84,6 @@ _PROVIDER_SECRET_KEYS = (
     "HYPERDX_OTLP_ENDPOINT",
     "LOGFIRE_WRITE_TOKEN",
     "LOGFIRE_OTLP_ENDPOINT",
-    "LANGSMITH_API_KEY",
-    "LANGSMITH_OTLP_ENDPOINT",
-    "LANGSMITH_PROJECT",
 )
 
 
@@ -140,12 +136,12 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
     """Build the otelcol config (as a dict) for whichever providers are present.
 
     Returns a config with an otlp/http receiver on localhost, a batch processor,
-    and one ``otlphttp/<provider>`` exporter per configured provider. Trace-only
-    providers (LangSmith) feed the traces pipeline alone; the rest feed both
-    traces and logs. The logs pipeline is omitted when nothing feeds it. Auth
-    tokens are referenced via
-    ``${env:VAR}`` so the raw secret never lands in the rendered config; only
-    non-secret values (endpoints, the Dash0 dataset name) are inlined.
+    and one ``otlphttp/<provider>`` exporter per configured provider. Every
+    provider feeds both the traces and logs pipelines. The logs pipeline is
+    omitted when no provider is configured (an empty exporter list is invalid).
+    Auth tokens are referenced via ``${env:VAR}`` so the raw secret never lands
+    in the rendered config; only non-secret values (endpoints, the Dash0
+    dataset name) are inlined.
 
     JSON is valid YAML, so ``_render_config`` dumps this dict as JSON and otelcol
     loads it directly — no YAML dependency needed.
@@ -153,9 +149,6 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
     e = env if env is not None else dict(os.environ)
     exporters: dict[str, Any] = {}
     names: list[str] = []
-    # Exporters that only implement the traces signal; excluded from the logs
-    # pipeline (their /v1/logs endpoint 404s, which would just churn the queue).
-    traces_only: set[str] = set()
 
     if e.get("HYPERDX_API_KEY"):
         base = _base_endpoint(
@@ -187,44 +180,18 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
         )
         names.append("otlphttp/logfire")
 
-    if e.get("LANGSMITH_API_KEY"):
-        # LangSmith's OTLP ingestion deviates from the Bearer-token providers
-        # above: it authenticates with an ``x-api-key`` header and scopes traces
-        # with a ``Langsmith-Project`` header. Its OTLP base lives under ``/otel``
-        # (the SDK's ``LANGSMITH_ENDPOINT`` plus that path); otlphttp appends
-        # ``/v1/traces`` itself, so we hand it the ``/otel`` base unchanged.
-        # LangSmith implements traces only — ``/otel/v1/logs`` returns 404
-        # (Unimplemented) — so it's traces_only and skips the logs pipeline.
-        base = _base_endpoint(
-            e.get("LANGSMITH_OTLP_ENDPOINT") or "https://api.smith.langchain.com/otel",
-        )
-        exporters["otlphttp/langsmith"] = _retrying_otlphttp(
-            base,
-            {
-                "x-api-key": "${env:LANGSMITH_API_KEY}",
-                "Langsmith-Project": e.get("LANGSMITH_PROJECT") or "gtm-sdk",
-            },
-        )
-        names.append("otlphttp/langsmith")
-        traces_only.add("otlphttp/langsmith")
-
-    # Every exporter handles traces; only non-traces_only ones also take logs.
-    # Omit the logs pipeline entirely when nothing feeds it (otelcol rejects a
-    # pipeline with an empty exporter list) — e.g. a LangSmith-only collector.
-    # In that (non-production) case the receiver has no /v1/logs route, so any
-    # log batch the app spawns is rejected and dropped (``_post_local`` logs the
-    # non-2xx). That's acceptable: telemetry is non-load-bearing, real
-    # deployments always include a log-capable provider, and the app side is
-    # deliberately provider-agnostic so it cannot gate logs on its own.
-    log_names = [n for n in names if n not in traces_only]
+    # Every configured provider feeds both the traces and logs pipelines. Omit
+    # the logs pipeline when no provider is configured — otelcol rejects a
+    # pipeline with an empty exporter list, and ``_ensure_otelcol_running``
+    # likewise declines to start otelcol at all in that case.
     pipelines: dict[str, Any] = {
         "traces": {"receivers": ["otlp"], "processors": ["batch"], "exporters": names},
     }
-    if log_names:
+    if names:
         pipelines["logs"] = {
             "receivers": ["otlp"],
             "processors": ["batch"],
-            "exporters": log_names,
+            "exporters": names,
         }
     return {
         "receivers": {
