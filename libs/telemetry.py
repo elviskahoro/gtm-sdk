@@ -140,7 +140,7 @@ def _hyperdx_auth_headers(hyperdx_key: str | None) -> dict[str, str]:
 # collector Modal function (``src/otel_collector.py``). That function feeds the
 # bytes to an OpenTelemetry Collector running as a localhost sidecar inside the
 # (always-warm) collector container, which fans out to every configured provider
-# (Dash0 + HyperDX + Logfire + LangSmith) with real batching/retry/queueing. This keeps
+# (Dash0 + HyperDX + Logfire + Grafana) with real batching/retry/queueing. This keeps
 # provider credentials on the collector only, gives the app a single "write",
 # centralizes fan-out, and uses Modal RPC as the ingress (no public endpoint).
 #
@@ -152,7 +152,7 @@ def _hyperdx_auth_headers(hyperdx_key: str | None) -> dict[str, str]:
 
 # The telemetry collector is fixed infrastructure — one Modal app
 # (``src/otel_collector.py``) that fans out to every provider (Dash0, HyperDX,
-# Logfire, LangSmith). Its name is hard-coded here rather than configured
+# Logfire, Grafana). Its name is hard-coded here rather than configured
 # per-environment, so collector fan-out is the DEFAULT mode without any secret
 # wiring. Logfire is reachable ONLY through this path (the direct single-sink
 # fallback has no Logfire exporter), so defaulting to the collector is what
