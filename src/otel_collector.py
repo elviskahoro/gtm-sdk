@@ -11,7 +11,8 @@ Architecture (see ``libs/telemetry.py`` for the app side):
                                                      batch + retry_on_failure + sending_queue
                                                           ├─▶ Dash0     (Dash0-Dataset header)
                                                           ├─▶ HyperDX
-                                                          └─▶ Logfire
+                                                          ├─▶ Logfire
+                                                          └─▶ Grafana   (Basic auth, not Bearer)
 
 Why this shape: apps reach the collector through Modal's authenticated RPC
 (``.spawn``), so there is **no inbound web URL** — the otelcol OTLP receiver is
@@ -35,6 +36,7 @@ This is a **standalone** Modal app (its own ``modal.App``), NOT registered in
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import socket
@@ -74,8 +76,19 @@ _OTELCOL_TARBALL = f"otelcol_{_OTELCOL_VERSION}_linux_amd64.tar.gz"
 # no version in the name), covering every otelcol-core artifact for the release.
 _OTELCOL_CHECKSUMS = "opentelemetry-collector-releases_otelcol_checksums.txt"
 
+# Grafana Cloud's OTLP gateway is region-scoped; this shared regional host (like
+# the hard-coded HyperDX/Logfire defaults) is not user-specific and appears in
+# Grafana's public docs. Override per deployment with ``GRAFANA_OTLP_ENDPOINT``.
+_GRAFANA_DEFAULT_ENDPOINT = "https://otlp-gateway-prod-us-east-3.grafana.net/otlp"
+
 # Every provider credential the collector forwards with. These live on the
 # collector only — never on the app containers (which just spawn ``fan_out``).
+#
+# ``GRAFANA_OTLP_AUTH`` is DERIVED at deploy time (see ``_collector_secret_payload``)
+# rather than copied from a same-named host env var; ``GRAFANA_OTLP_ENDPOINT`` is
+# an optional non-secret override. The raw ``GRAFANA_API_KEY`` / ``GRAFANA_INSTANCE_ID``
+# inputs are deliberately NOT listed here — they are deploy-time-only and must
+# never reach the collector container.
 _PROVIDER_SECRET_KEYS = (
     "DASH0_AUTH_TOKEN",
     "DASH0_OTLP_ENDPOINT",
@@ -84,16 +97,51 @@ _PROVIDER_SECRET_KEYS = (
     "HYPERDX_OTLP_ENDPOINT",
     "LOGFIRE_WRITE_TOKEN",
     "LOGFIRE_OTLP_ENDPOINT",
+    "GRAFANA_OTLP_ENDPOINT",
+    "GRAFANA_OTLP_AUTH",
 )
 
 
+def _grafana_basic_auth(instance_id: str, token: str) -> str | None:
+    """Encode Grafana Cloud's OTLP HTTP Basic credential: ``base64("<id>:<token>")``.
+
+    Grafana Cloud's OTLP gateway authenticates with HTTP **Basic** auth, not the
+    Bearer token every other provider here uses — so the header value is
+    ``Basic <base64(instance_id:token)>``. Returns the base64 credential WITHOUT
+    the ``"Basic "`` prefix (the prefix is added in ``build_collector_config``),
+    or ``None`` when either input is missing.
+
+    ``instance_id`` is the numeric OTLP-gateway user from the Grafana Cloud
+    "OpenTelemetry" config page — NOT the org id embedded in the ``glc_`` token.
+    Because base64 spans both the (non-secret) instance id and the (secret) token,
+    it cannot be assembled via otelcol's ``${env:VAR}`` substitution, so we derive
+    it at deploy time and ship only the encoded result (keeping the raw token out
+    of both the container env and the rendered config).
+    """
+    if not instance_id or not token:
+        return None
+    return base64.b64encode(f"{instance_id}:{token}".encode()).decode("ascii")
+
+
 def _collector_secret_payload() -> dict[str, str | None]:
-    """Collect the present provider creds from the host env (deploy-time)."""
+    """Collect the present provider creds from the host env (deploy-time).
+
+    Grafana is special-cased: its Basic credential is derived from the raw
+    ``GRAFANA_INSTANCE_ID`` + ``GRAFANA_API_KEY`` host env vars and shipped as the
+    pre-encoded ``GRAFANA_OTLP_AUTH`` (see ``_grafana_basic_auth``), so the raw
+    ``glc_`` token never reaches the collector container.
+    """
     payload: dict[str, str | None] = {}
     for opt in _PROVIDER_SECRET_KEYS:
         v = os.environ.get(opt, "").strip()
         if v:
             payload[opt] = v
+    grafana_auth = _grafana_basic_auth(
+        os.environ.get("GRAFANA_INSTANCE_ID", "").strip(),
+        os.environ.get("GRAFANA_API_KEY", "").strip(),
+    )
+    if grafana_auth:
+        payload["GRAFANA_OTLP_AUTH"] = grafana_auth
     return payload
 
 
@@ -120,6 +168,24 @@ def _base_endpoint(url: str) -> str:
         if trimmed.endswith(suffix):
             return trimmed[: -len(suffix)]
     return trimmed
+
+
+def _grafana_base_endpoint(url: str) -> str:
+    """Base endpoint for Grafana Cloud, which serves OTLP under a ``/otlp`` prefix.
+
+    Unlike the other providers (whose OTLP ingress sits at the host root, so
+    ``_base_endpoint`` is enough), Grafana Cloud's gateway requires
+    ``.../otlp/v1/{signal}``. Strip any ``/v1/<signal>`` suffix, then guarantee
+    the ``/otlp`` segment so a bare-host override — e.g.
+    ``https://otlp-gateway-prod-eu-west-2.grafana.net`` for a different region,
+    written the way the other providers' endpoints look — still resolves to the
+    correct ``.../otlp/v1/{signal}`` instead of silently dropping the ``/otlp``
+    path and 404-ing every batch.
+    """
+    base = _base_endpoint(url)
+    if not base.endswith("/otlp"):
+        base = f"{base}/otlp"
+    return base
 
 
 def _retrying_otlphttp(endpoint: str, headers: dict[str, str]) -> dict[str, Any]:
@@ -179,6 +245,20 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
             {"Authorization": "Bearer ${env:LOGFIRE_WRITE_TOKEN}"},
         )
         names.append("otlphttp/logfire")
+
+    # Grafana Cloud uses HTTP Basic auth (not Bearer). ``GRAFANA_OTLP_AUTH`` is the
+    # pre-encoded ``base64(instance_id:token)`` derived at deploy time (see
+    # ``_grafana_basic_auth``); we reference it via ``${env:...}`` exactly like the
+    # Bearer providers so the credential never lands in the rendered config.
+    if e.get("GRAFANA_OTLP_AUTH"):
+        base = _grafana_base_endpoint(
+            e.get("GRAFANA_OTLP_ENDPOINT") or _GRAFANA_DEFAULT_ENDPOINT,
+        )
+        exporters["otlphttp/grafana"] = _retrying_otlphttp(
+            base,
+            {"Authorization": "Basic ${env:GRAFANA_OTLP_AUTH}"},
+        )
+        names.append("otlphttp/grafana")
 
     # Every configured provider feeds both the traces and logs pipelines. Omit
     # the logs pipeline when no provider is configured — otelcol rejects a
