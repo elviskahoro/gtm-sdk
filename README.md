@@ -191,7 +191,7 @@ middle layer: a custom OTEL exporter serializes each batch to OTLP protobuf and
 fire-and-forget `.spawn()`s the collector Modal function (`src/otel_collector.py`) — pure
 Modal RPC, **no public endpoint**. That function hands the bytes to a real OpenTelemetry
 Collector running as a **localhost sidecar** in the same (always-warm, `min_containers=1`)
-container; the sidecar fans out to **all** configured providers — Dash0, HyperDX, Logfire —
+container; the sidecar fans out to **all** configured providers — Dash0, HyperDX, Logfire, Grafana —
 with real batching, `retry_on_failure`, and a sending queue. Provider credentials live on
 the collector only, not on each app container. The sidecar's OTLP receiver binds to
 `127.0.0.1`, so it is never reachable from outside the container. (Queue is in-memory; a
@@ -206,8 +206,11 @@ infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --e
 
 The collector reads provider creds from its own secret: `DASH0_AUTH_TOKEN` +
 `DASH0_OTLP_ENDPOINT` (optional `DASH0_DATASET`, default `default`), `HYPERDX_API_KEY`
-(optional `HYPERDX_OTLP_ENDPOINT`), `LOGFIRE_WRITE_TOKEN` (optional `LOGFIRE_OTLP_ENDPOINT`).
-Each unconfigured provider is silently skipped.
+(optional `HYPERDX_OTLP_ENDPOINT`), `LOGFIRE_WRITE_TOKEN` (optional `LOGFIRE_OTLP_ENDPOINT`),
+and Grafana Cloud via `GRAFANA_INSTANCE_ID` + `GRAFANA_API_KEY` (optional
+`GRAFANA_OTLP_ENDPOINT`) — the numeric instance id and `glc_` token are collapsed into a
+base64 Basic credential at deploy time so the raw token never reaches the collector (see
+[`docs/GRAFANA_SETUP.md`](docs/GRAFANA_SETUP.md)). Each unconfigured provider is silently skipped.
 
 **Direct single-sink (fallback).** Opt out of the collector by setting
 `TELEMETRY_COLLECTOR_APP=""`; telemetry then goes to one OTLP sink directly, activated by
