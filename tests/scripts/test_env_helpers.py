@@ -1,8 +1,8 @@
 """Unit tests for the shared bootstrap helpers in scripts/lib/env.py.
 
 These helpers are on the critical path for every repo script that
-self-bootstraps `infisical run` (e.g. attio-inspect-meeting-relationship,
-attio-probe_workspace_slug), so a regression in `parse_dotenv` or credential
+self-bootstraps `infisical run` (e.g. attio-meeting_relationship-inspect,
+attio-workspace_slug-probe), so a regression in `parse_dotenv` or credential
 resolution would silently break bootstrap across multiple commands. BD: ai-3hq.
 """
 

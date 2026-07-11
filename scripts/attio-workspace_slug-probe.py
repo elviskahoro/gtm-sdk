@@ -15,14 +15,14 @@ Infisical project + token.
 
 Usage:
 
-    scripts/attio-probe_workspace_slug.py --env dev
-    scripts/attio-probe_workspace_slug.py --env prod
-    scripts/attio-probe_workspace_slug.py --env dev --json
+    scripts/attio-workspace_slug-probe.py --env dev
+    scripts/attio-workspace_slug-probe.py --env prod
+    scripts/attio-workspace_slug-probe.py --env dev --json
 
 You can still pre-inject the key yourself if you don't want the self-bootstrap:
 
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\
-      --env=prod -- scripts/attio-probe_workspace_slug.py
+      --env=prod -- scripts/attio-workspace_slug-probe.py
 """
 
 from __future__ import annotations
@@ -247,7 +247,7 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
             "ATTIO_API_KEY is not set and INFISICAL_PROJECT_ID/INFISICAL_TOKEN\n"
             f"were not found in the environment or {REPO_ROOT / '.env.local'}.\n"
             "Run via:\n"
-            f"  {infisical_run_example('scripts/attio-probe_workspace_slug.py')}",
+            f"  {infisical_run_example('scripts/attio-workspace_slug-probe.py')}",
             file=sys.stderr,
         )
         return 2

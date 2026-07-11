@@ -16,7 +16,7 @@ import pytest
 from libs.octolens.models import ApiMention
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "octolens-backfill-mentions.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "octolens-mentions-backfill.py"
 
 
 def _load_module() -> ModuleType:

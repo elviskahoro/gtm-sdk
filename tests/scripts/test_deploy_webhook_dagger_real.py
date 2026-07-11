@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-redeploy.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-handlers-redeploy.py"
 _MODULE_NAME = "_webhooks_redeploy_under_test_real"
 
 
@@ -103,7 +103,7 @@ def _can_open_fresh_connection() -> bool:
 
 @pytest.fixture(scope="module")
 def script_module() -> Iterator[ModuleType]:
-    """Load scripts/webhooks-redeploy.py so the test shares DAGGER_BASE_IMAGE.
+    """Load scripts/webhooks-handlers-redeploy.py so the test shares DAGGER_BASE_IMAGE.
 
     The script lives under ``scripts/``, excluded from
     ``[tool.setuptools.packages.find]``, so a normal import doesn't resolve.
