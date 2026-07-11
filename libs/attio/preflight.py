@@ -32,7 +32,7 @@ REQUIRED_WRITE_SCOPES: frozenset[str] = frozenset({"record_permission:read-write
 # Needed only when the path mutates schema at runtime: ``ensure_select_options``
 # POSTing a new option, or ``create_attribute`` adding an attribute. If the
 # target schema is fully pre-bootstrapped (see
-# scripts/attio-bootstrap-tracking_events.py) the JIT calls become no-op GETs and
+# scripts/attio-tracking_events-bootstrap.py) the JIT calls become no-op GETs and
 # this scope is not required at runtime — hence "recommended", surfaced as a
 # warning rather than a hard failure.
 RECOMMENDED_WRITE_SCOPES: frozenset[str] = frozenset(
@@ -171,7 +171,7 @@ def assert_attio_token_scopes(
                     "runtime just-in-time schema seeding (ensure_select_options / "
                     "create_attribute) will fail with a permission error unless "
                     "the target schema is pre-bootstrapped via "
-                    "scripts/attio-bootstrap-tracking_events.py"
+                    "scripts/attio-tracking_events-bootstrap.py"
                 ),
             },
         )

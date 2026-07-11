@@ -12,7 +12,7 @@ class MentionInput(BaseModel):
     Unlike CompanyInput / PersonInput / MeetingInput which target Attio's
     built-in standard objects, this model targets a **custom** object that
     must be bootstrapped into the workspace via
-    ``scripts/attio-bootstrap-social_mentions.py`` before any upsert succeeds.
+    ``scripts/attio-social_mentions-bootstrap.py`` before any upsert succeeds.
 
     Fields here mirror the webhook-writable attributes only. The CRM-owned
     fields (triage_status, related_person, related_company) are intentionally

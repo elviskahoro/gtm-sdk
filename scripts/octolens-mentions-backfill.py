@@ -32,16 +32,16 @@ dir with ``--data-dir`` or ``OCTOLENS_DATA_DIR`` (the exports live in the parent
 ``ai/`` repo, so there is no portable default):
 
     export OCTOLENS_DATA_DIR=~/Documents/ai/data/octolens
-    ./scripts/octolens-backfill-mentions.py                 # build + preview
-    ./scripts/octolens-backfill-mentions.py --send          # dry-run send
-    ./scripts/octolens-backfill-mentions.py --send --apply  # real POST (dev first!)
+    ./scripts/octolens-mentions-backfill.py                 # build + preview
+    ./scripts/octolens-mentions-backfill.py --send          # dry-run send
+    ./scripts/octolens-mentions-backfill.py --send --apply  # real POST (dev first!)
 
 **api source needs ``OCTOLENS_API_KEY``** (read scope; mint in Octolens
 Settings → API). Inject it via Infisical — use a separate ``--out-dir`` so the
 api and csv ``sent.log``s don't mix:
 
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
-      --env=<dev|prod> -- ./scripts/octolens-backfill-mentions.py \
+      --env=<dev|prod> -- ./scripts/octolens-mentions-backfill.py \
       --source api --rebuild --out-dir out/octolens-backfill-api
     # then dry-run, then --apply (the send phase re-uses the same build):
     ... --source api --send --out-dir out/octolens-backfill-api
@@ -371,7 +371,7 @@ def build_jsonl_from_api(
         client = OctolensClient.from_env()
     except RuntimeError as exc:
         example = infisical_run_example(
-            "./scripts/octolens-backfill-mentions.py",
+            "./scripts/octolens-mentions-backfill.py",
             extra_args="--source api --rebuild --out-dir out/octolens-backfill-api",
         )
         raise SystemExit(f"{exc}\n\n  {example}") from exc

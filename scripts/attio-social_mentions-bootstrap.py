@@ -2,9 +2,9 @@
 """One-off bootstrap for the social_mention custom object.
 
 Usage:
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-social_mentions.py --preview
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-social_mentions.py --apply
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-social_mentions.py --diff
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-social_mentions-bootstrap.py --preview
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-social_mentions-bootstrap.py --apply
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-social_mentions-bootstrap.py --diff
 
 Idempotent. Safe to re-run. Adding a new attribute = edit ATTRIBUTES below
 and re-run.

@@ -37,9 +37,9 @@ NOT proof the --execute run will be failure-free.
 
 Usage:
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\
-        --env=dev -- scripts/fathom-backfill-attio-meetings.py
-    infisical run ... -- scripts/fathom-backfill-attio-meetings.py --execute
-    infisical run ... -- scripts/fathom-backfill-attio-meetings.py \\
+        --env=dev -- scripts/fathom-attio_meetings-backfill.py
+    infisical run ... -- scripts/fathom-attio_meetings-backfill.py --execute
+    infisical run ... -- scripts/fathom-attio_meetings-backfill.py \\
         --created-after 2026-01-01T00:00:00Z --recorded-by martin@dlthub.com
 
 Requires FATHOM_API_KEY (always) and ATTIO_API_KEY (for --execute) in the
@@ -65,7 +65,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Backfill Attio Meeting records from the Fathom API.",
         epilog="Example:\n  "
-        + infisical_run_example("scripts/fathom-backfill-attio-meetings.py"),
+        + infisical_run_example("scripts/fathom-attio_meetings-backfill.py"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--created-after", default=None, help="ISO 8601 lower bound")

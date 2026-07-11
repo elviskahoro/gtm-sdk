@@ -1,4 +1,4 @@
-"""Unit tests for ``scripts/octolens-backfill-mentions.py``.
+"""Unit tests for ``scripts/octolens-mentions-backfill.py``.
 
 The script filename is hyphenated, so it's loaded via ``importlib`` rather than
 imported. Covers the cross-source cache guard (a CSV build can't be silently

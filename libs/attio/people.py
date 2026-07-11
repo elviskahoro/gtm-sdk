@@ -618,7 +618,7 @@ def upsert_person(
 ) -> ReliabilityEnvelope:
     # Read-then-create on the single matching identity. Attio cannot enforce
     # native uniqueness on `linkedin`/`github_handle` (text attributes on the
-    # populated people object — see scripts/attio-bootstrap-people.py), so a
+    # populated people object — see scripts/attio-people-bootstrap.py), so a
     # concurrent create can still produce a duplicate; the >1-match branch below
     # converges future writes deterministically and out-of-band cleanup handles
     # the rare straggler (ai-icn). The PersonInput field name matches

@@ -39,9 +39,9 @@ Run via Infisical so the workspace ``ATTIO_API_KEY`` is injected (``--env`` pick
 dev vs prod — run dev first, confirm, then prod):
 
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\
-        --env=dev -- scripts/rb2b-reconcile-event-ids.py
+        --env=dev -- scripts/rb2b-event_ids-reconcile.py
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\
-        --env=dev -- scripts/rb2b-reconcile-event-ids.py --apply
+        --env=dev -- scripts/rb2b-event_ids-reconcile.py --apply
 """
 
 from __future__ import annotations
@@ -399,7 +399,7 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Example:\n  "
-        + infisical_run_example("scripts/rb2b-reconcile-event-ids.py"),
+        + infisical_run_example("scripts/rb2b-event_ids-reconcile.py"),
     )
     parser.add_argument(
         "--apply",
