@@ -792,13 +792,62 @@ def find_person_by_name_at_company(
         return sorted(rec.id.record_id for rec in response.data)[0]
 
 
+def find_person_by_sanity_author_id(sanity_author_id: str) -> str | None:
+    """Return the People record_id carrying ``sanity_author_id``, or None.
+
+    ``sanity_author_id`` is a stable external key (the Sanity CMS author UUID)
+    written on People sourced from the blog export. Matching on it makes author
+    resolution idempotent across name-spelling drift — a far more reliable join
+    than the casefolded-name fallback. Requires the ``sanity_author_id`` text
+    attribute on the people object (provisioned by the gtm_content bootstrap).
+    """
+    with get_client() as client:
+        response = client.records.post_v2_objects_object_records_query(
+            object="people",
+            filter_={"sanity_author_id": {"$eq": sanity_author_id}},
+            limit=1,
+        )
+        if not response.data:
+            return None
+        return response.data[0].id.record_id
+
+
+def set_person_sanity_author_id(record_id: str, sanity_author_id: str) -> None:
+    """Backfill ``sanity_author_id`` onto an existing (name-matched) Person.
+
+    Used when a blog author matched an existing record by name but had no
+    stable key yet: writing it converts future runs from fragile name matching
+    to id matching. A uniqueness conflict (the id already lives on another
+    record) is treated as a no-op — the key is already anchored somewhere.
+    """
+    with get_client() as client:
+        try:
+            client.records.patch_v2_objects_object_records_record_id_(
+                object="people",
+                record_id=record_id,
+                # Attio text attributes take the [{"value": ...}] list shape.
+                data=build_patch_record_request(
+                    {"sanity_author_id": [{"value": sanity_author_id}]},
+                ),
+            )
+        except Exception as exc:
+            if is_uniqueness_conflict(exc):
+                return
+            raise
+
+
 def stub_create_person(
     name: str,
-    company_record_id: str,
+    company_record_id: str | None = None,
     *,
     apply: bool,
+    sanity_author_id: str | None = None,
 ) -> str:
-    """Create a Person record with only ``name`` (split on first space) and a company link.
+    """Create a Person record with only ``name`` (split on first space).
+
+    Optionally links a company (when ``company_record_id`` is given) and/or
+    stamps a ``sanity_author_id`` external key. With neither, the result is a
+    name-only stub — the blog author case, where no company should be inferred.
 
     Preview mode returns ``preview-<name>``. Apply mode does not require an
     email — it goes around ``PersonInput`` (which mandates one of
@@ -811,10 +860,14 @@ def stub_create_person(
     first, last = _split_name(name)
     values: dict[str, Any] = {
         "name": [{"first_name": first, "last_name": last or "", "full_name": name}],
-        "company": [
-            {"target_object": "companies", "target_record_id": company_record_id},
-        ],
     }
+    if company_record_id is not None:
+        values["company"] = [
+            {"target_object": "companies", "target_record_id": company_record_id},
+        ]
+    if sanity_author_id is not None:
+        # Attio text attributes take the [{"value": ...}] list shape.
+        values["sanity_author_id"] = [{"value": sanity_author_id}]
     with get_client() as client:
         try:
             response = client.records.post_v2_objects_object_records(
