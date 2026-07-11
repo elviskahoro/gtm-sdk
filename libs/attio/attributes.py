@@ -171,8 +171,22 @@ def create_attribute(
     is_required: bool = False,
     is_unique: bool = False,
     allowed_objects: list[str] | None = None,
+    relationship: dict[str, object] | None = None,
     apply: bool,
 ) -> AttributeCreateResult:
+    """Idempotently create (or restore/retitle) an attribute on ``target_object``.
+
+    ``relationship`` makes a ``record-reference`` attribute two-way: Attio
+    creates an entangled inverse attribute on the related object. Shape:
+    ``{"object": "people", "title": "...", "api_slug": "...",
+    "is_multiselect": bool}``. The inverse's ``is_multiselect`` matters —
+    a single-valued inverse imposes a 1:1 constraint where a second source
+    record referencing the same target atomically strips the first (beads
+    memory ``attio-inverse-relationship-multiselect``). Relationship can
+    ONLY be set at creation: Attio rejects it on PATCH, and slugs of
+    archived attributes stay reserved, so an existing one-way attribute
+    cannot be upgraded — it must be deleted in the UI and recreated.
+    """
     with get_client() as client:
         try:
             # show_archived=True so an archived slug is visible here. Without it,
@@ -236,6 +250,8 @@ def create_attribute(
                 "is_multiselect": is_multiselect,
                 "config": config,
             }
+            if relationship is not None:
+                payload["relationship"] = relationship
             client.attributes.post_v2_target_identifier_attributes(
                 target="objects",
                 identifier=target_object,
