@@ -15,8 +15,8 @@ exercises the substitute/restore loop, the EXIT-equivalent restore on deploy
 failure, and the Modal token isolation rule.
 
 Usage:
-    scripts/webhooks-redeploy.py <handler> <source>
-    scripts/webhooks-redeploy.py <handler> --all
+    scripts/webhooks-handlers-redeploy.py <handler> <source>
+    scripts/webhooks-handlers-redeploy.py <handler> --all
 
 The ``DAGGER_DRY_RUN=1`` env var swaps the Dagger deploy for a direct
 ``infisical run -- uv run modal deploy`` invocation on the host. Used by the
@@ -522,7 +522,7 @@ def _acquire_lock() -> None:
         LOCK_DIR.mkdir(parents=False, exist_ok=False)
     except FileExistsError:
         _fail(
-            f"Another scripts/webhooks-redeploy.py invocation appears to be "
+            f"Another scripts/webhooks-handlers-redeploy.py invocation appears to be "
             f"running (lock dir {LOCK_DIR.relative_to(REPO_ROOT)} exists). "
             f"If you are sure it is not, rmdir "
             f"{LOCK_DIR.relative_to(REPO_ROOT)} and retry.",
@@ -914,8 +914,8 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
 
     The user-facing UX matches the bash predecessor:
 
-        scripts/webhooks-redeploy.py <handler> <source>
-        scripts/webhooks-redeploy.py <handler> --all
+        scripts/webhooks-handlers-redeploy.py <handler> <source>
+        scripts/webhooks-handlers-redeploy.py <handler> --all
 
     ``--all`` is implemented as an explicit flag rather than a positional
     sentinel because argparse parses a leading-dash positional as an
@@ -924,7 +924,7 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
     and dispatches on that, so the internal contract stays the same.
     """
     parser = argparse.ArgumentParser(
-        prog="scripts/webhooks-redeploy.py",
+        prog="scripts/webhooks-handlers-redeploy.py",
         description=(
             "Substitute the WebhookModelToReplace placeholder, deploy via "
             "Dagger-wrapped `modal deploy`, then restore the handler. "

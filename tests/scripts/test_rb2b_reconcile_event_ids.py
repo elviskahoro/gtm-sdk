@@ -1,4 +1,4 @@
-"""Offline tests for scripts/rb2b-reconcile-event-ids.py.
+"""Offline tests for scripts/rb2b-event_ids-reconcile.py.
 
 Covers the network-free reconciliation planner. Synthetic ``body`` envelopes are
 built by round-tripping the real ``Rb2bWebhook`` model so the stored snake_case

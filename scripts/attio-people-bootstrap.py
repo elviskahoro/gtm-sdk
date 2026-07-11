@@ -2,9 +2,9 @@
 """One-off bootstrap for github identity attributes on the people object.
 
 Usage:
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-people.py --preview
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-people.py --apply
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-people.py --diff
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-people-bootstrap.py --preview
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-people-bootstrap.py --apply
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-people-bootstrap.py --diff
 
 Adds the ``github_handle`` and ``github_url`` attributes that octolens
 github-source mentions need in order to upsert/link a Person (ai-0ex). Without

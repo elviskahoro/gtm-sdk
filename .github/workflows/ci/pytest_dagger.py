@@ -34,7 +34,7 @@ JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
-# scripts/webhooks-redeploy.py itself runs `git rev-parse --show-toplevel`. When
+# scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`. When
 # Dagger copies the host source into /src from a git worktree, the worktree's
 # `.git` is a gitlink file pointing at a path on the host that does not exist
 # in the container, so every git invocation fails with "fatal: not a git

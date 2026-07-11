@@ -31,8 +31,8 @@ Auth:
 
 Usage:
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\
-        --env=dev -- scripts/fireflies-backfill-attio-meetings.py
-    infisical run ... -- scripts/fireflies-backfill-attio-meetings.py --execute
+        --env=dev -- scripts/fireflies-attio_meetings-backfill.py
+    infisical run ... -- scripts/fireflies-attio_meetings-backfill.py --execute
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Backfill Attio Meeting records from the MotherDuck "
         "fireflies-backfill database.",
         epilog="Example:\n  "
-        + infisical_run_example("scripts/fireflies-backfill-attio-meetings.py"),
+        + infisical_run_example("scripts/fireflies-attio_meetings-backfill.py"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

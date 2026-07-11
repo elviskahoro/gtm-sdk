@@ -45,8 +45,8 @@ set `INFISICAL_ENV`. The script self-bootstraps `infisical run` from
 
 Usage:
 
-    scripts/attio-inspect-meeting-relationship.py --env prod
-    scripts/attio-inspect-meeting-relationship.py --env prod \
+    scripts/attio-meeting_relationship-inspect.py --env prod
+    scripts/attio-meeting_relationship-inspect.py --env prod \
         --idempotency-check --execute
 """
 
@@ -696,7 +696,7 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
             "ATTIO_API_KEY is not set and INFISICAL_PROJECT_ID/INFISICAL_TOKEN\n"
             f"were not found in the environment or {REPO_ROOT / '.env.local'}.\n"
             "Run via:\n"
-            f"  {infisical_run_example('scripts/attio-inspect-meeting-relationship.py')}",
+            f"  {infisical_run_example('scripts/attio-meeting_relationship-inspect.py')}",
             file=sys.stderr,
         )
         return 2

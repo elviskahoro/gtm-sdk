@@ -34,7 +34,7 @@ from src.caldotcom.webhook.booking import (
 if TYPE_CHECKING:
     # Type-check stand-in for the deploy-time placeholder; see the identical
     # block in webhooks/export_to_attio.py for the full rationale. The
-    # scripts/webhooks-redeploy.py substitution rewrites WebhookModelToReplace
+    # scripts/webhooks-handlers-redeploy.py substitution rewrites WebhookModelToReplace
     # to a concrete Webhook class before modal deploy.
     from libs.webhook.protocol import (
         WebhookModelTypeCheckShim as WebhookModelToReplace,

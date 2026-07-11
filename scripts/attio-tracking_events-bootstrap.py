@@ -65,8 +65,8 @@ What this script deliberately does NOT do:
   history) per the spec.
 
 Usage:
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-tracking_events.py --preview
-    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-bootstrap-tracking_events.py --apply
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-tracking_events-bootstrap.py --preview
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- scripts/attio-tracking_events-bootstrap.py --apply
 
 Run against dev first, verify the new slugs are visible in Attio, then run against prod.
 """

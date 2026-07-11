@@ -26,7 +26,7 @@ from pydantic import (
 # (loudly) rather than silently route mentions from an unknown platform.
 # Update this list deliberately after confirming the new platform's shape.
 # "youtube" was added deliberately for the historical CSV backfill
-# (scripts/octolens-backfill-mentions.py), which surfaced real dlt/dlthub
+# (scripts/octolens-mentions-backfill.py), which surfaced real dlt/dlthub
 # mentions from YouTube; the live webhook accepts it going forward too.
 Source = Literal[
     "bluesky",

@@ -29,9 +29,9 @@ Two distinct "status" concepts (easy to conflate):
 
 Usage (dry-run is the default; nothing is POSTed until --apply):
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
-      --env=dev -- scripts/caldotcom-backfill-bookings.py --dry-run
-    infisical run ... -- scripts/caldotcom-backfill-bookings.py --apply --limit 5
-    infisical run ... -- scripts/caldotcom-backfill-bookings.py --apply
+      --env=dev -- scripts/caldotcom-bookings-backfill.py --dry-run
+    infisical run ... -- scripts/caldotcom-bookings-backfill.py --apply --limit 5
+    infisical run ... -- scripts/caldotcom-bookings-backfill.py --apply
 
 Requires ``CALCOM_API_KEY`` (cal.com fetch) and, for ``--apply``, the Modal
 workspace prefix (defaults to ``devx``; override with ``MODAL_WORKSPACE``).
@@ -432,7 +432,7 @@ def main() -> int:
     if not apply:
         print(
             "[backfill] DRY RUN — nothing POSTed. Re-run with --apply to send.\n"
-            f"           example: {infisical_run_example('scripts/caldotcom-backfill-bookings.py', extra_args='--apply')}",
+            f"           example: {infisical_run_example('scripts/caldotcom-bookings-backfill.py', extra_args='--apply')}",
         )
         return 1 if invalid_rows else 0
 

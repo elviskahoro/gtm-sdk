@@ -2,7 +2,7 @@
 
 These functions are I/O-free so they can be unit-tested without touching the
 filesystem or the network. The operator script
-``scripts/octolens-backfill-mentions.py`` wires them to CSV reading and the
+``scripts/octolens-mentions-backfill.py`` wires them to CSV reading and the
 Modal POST loop.
 
 Scope rationale (see the backfill plan): the raw ``dlt`` keyword Octolens

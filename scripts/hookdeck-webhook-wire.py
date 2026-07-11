@@ -54,7 +54,7 @@ from cli.webhook._modal import (  # noqa: E402
 from cli.webhook.sync import SOURCES, app_name_for  # noqa: E402
 from scripts.lib.env import infisical_run_example  # noqa: E402
 
-# Mirror scripts/webhooks-redeploy.py's handler aliases.
+# Mirror scripts/webhooks-handlers-redeploy.py's handler aliases.
 _HANDLER_ALIASES: dict[str, str] = {
     "attio": "export_to_attio",
     "etl": "export_to_gcp_etl",
@@ -158,7 +158,7 @@ def main() -> int:
         if app_name not in list_deployed_app_names():
             print(
                 f"WARNING: Modal app '{app_name}' is not currently deployed. "
-                "Deploy it (scripts/webhooks-redeploy.py) so the destination "
+                "Deploy it (scripts/webhooks-handlers-redeploy.py) so the destination "
                 "URL resolves.",
                 file=sys.stderr,
             )

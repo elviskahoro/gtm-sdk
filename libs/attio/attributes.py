@@ -14,7 +14,7 @@ def list_attributes(
     """Return the attributes on ``target_object``.
 
     Read-only. Powers live-vs-declared schema diffing (see
-    ``scripts/attio-bootstrap-social_mentions.py --diff``). For
+    ``scripts/attio-social_mentions-bootstrap.py --diff``). For
     ``record-reference`` attributes the wire format returns target object *IDs*;
     this resolves them back to api_slugs via a single ``get_v2_objects`` lookup
     so callers can compare against slug-based declarations. Returns ``[]`` when

@@ -135,7 +135,7 @@ class CalcomClient:
     ) -> list[BookingCreatedPayload]:
         """List bookings, paginating the collection endpoint to exhaustion.
 
-        Used by the historical backfill (``scripts/caldotcom-backfill-bookings.py``)
+        Used by the historical backfill (``scripts/caldotcom-bookings-backfill.py``)
         to replay every past booking through the live Modal webhook. The
         single-booking ``get_booking`` only covers the NO_SHOW handler's needs;
         this walks ``GET /v2/bookings``.
