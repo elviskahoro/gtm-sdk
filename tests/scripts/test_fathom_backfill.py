@@ -11,7 +11,7 @@ import pytest
 from fathom_python import models as M
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "fathom-backfill-attio-meetings.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "fathom-attio_meetings-backfill.py"
 SAMPLE = REPO_ROOT / "api" / "samples" / "fathom.list_meetings.redacted.json"
 
 

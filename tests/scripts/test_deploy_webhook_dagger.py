@@ -1,4 +1,4 @@
-"""Mock-based tests for `_deploy_via_dagger` in scripts/webhooks-redeploy.py.
+"""Mock-based tests for `_deploy_via_dagger` in scripts/webhooks-handlers-redeploy.py.
 
 Complements `tests/scripts/test_deploy_webhook.py`, which exercises only the
 host-subprocess fallback (DAGGER_DRY_RUN=1). The live Dagger code path —
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-redeploy.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-handlers-redeploy.py"
 HANDLER_FILE = REPO_ROOT / "webhooks" / "export_to_attio.py"
 
 _MODULE_NAME = "_webhooks_redeploy_under_test"
@@ -74,7 +74,7 @@ class _ChainStep:
 
 @pytest.fixture(scope="module")
 def script_module() -> Iterator[ModuleType]:
-    """Load scripts/webhooks-redeploy.py as a module without packaging it.
+    """Load scripts/webhooks-handlers-redeploy.py as a module without packaging it.
 
     The script lives under `scripts/`, which is intentionally excluded from
     `[tool.setuptools.packages.find]`, so a normal `import` doesn't resolve.

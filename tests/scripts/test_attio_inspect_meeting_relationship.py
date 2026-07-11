@@ -1,4 +1,4 @@
-"""Unit tests for scripts/attio-inspect-meeting-relationship.py pure logic.
+"""Unit tests for scripts/attio-meeting_relationship-inspect.py pure logic.
 
 Covers the config verdict and the linked-record set helpers without standing up
 a live Attio workspace (the live reads/writes are prod-only and guarded behind
@@ -14,7 +14,7 @@ from pathlib import Path
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
     / "scripts"
-    / "attio-inspect-meeting-relationship.py"
+    / "attio-meeting_relationship-inspect.py"
 )
 
 

@@ -10,13 +10,13 @@ import pytest
 
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[2] / "scripts" / "attio-probe_workspace_slug.py"
+    Path(__file__).resolve().parents[2] / "scripts" / "attio-workspace_slug-probe.py"
 )
 
 
 def _load_script_module():
     spec = importlib.util.spec_from_file_location(
-        "attio_probe_workspace_slug",
+        "attio_workspace_slug_probe",
         SCRIPT_PATH,
     )
     assert spec is not None
@@ -56,7 +56,7 @@ def test_missing_creds_shows_canonical_infisical_invocation(
     assert (
         'infisical run --projectId "$INFISICAL_PROJECT_ID" '
         '--token "$INFISICAL_TOKEN" --env=<dev|prod> -- '
-        "scripts/attio-probe_workspace_slug.py"
+        "scripts/attio-workspace_slug-probe.py"
     ) in captured.err
 
 
