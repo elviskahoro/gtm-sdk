@@ -7,6 +7,7 @@ from libs.attio.models.companies import (
     CompanySearchResult,
 )
 from libs.attio.models.ext_tam import ExtTamInput
+from libs.attio.models.gtm_content import GtmContentInput
 from libs.attio.models.meetings import (
     MeetingCandidate,
     MeetingExternalRef,
@@ -36,6 +37,7 @@ __all__ = [
     "CompanyResult",
     "CompanySearchResult",
     "ExtTamInput",
+    "GtmContentInput",
     "MeetingCandidate",
     "MeetingExternalRef",
     "MeetingInput",
