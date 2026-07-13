@@ -1,6 +1,6 @@
 ---
-title: "Week of July 13, 2026"
-description: "Grafana Cloud telemetry, Attio content pipeline, webhook tracing, and Attio inspection URLs"
+title: "July 13, 2026: Grafana Cloud telemetry and Attio content sync"
+description: "Weekly release notes: Grafana Cloud as an OTEL provider, Attio content upserts with Sanity author IDs, webhook span tracing, and Attio URL tools."
 ---
 
 ## New features
@@ -11,7 +11,7 @@ description: "Grafana Cloud telemetry, Attio content pipeline, webhook tracing, 
 
 **Distributed tracing for the rb2b → Attio webhook.** The webhook now emits an OpenTelemetry span tree — root `webhook` → `attio.execute` → one span per op — with `op_type`, `success`, and `record_id` attributes. Traces flow through the same collector fan-out as logs, so they show up in whichever backend you already have wired in [Dash0](/telemetry/dash0-setup) or [Grafana](/telemetry/grafana-setup).
 
-**Attio workspace URL emitter.** A new script resolves an Attio API key to shareable `app.attio.com` inspection links — workspace root, per-object list views, and per-record deep links — with a `--json` output mode for CI use.
+**Attio workspace URL emitter.** A new script turns an Attio API key into shareable `app.attio.com` inspection links for the workspace root, per-object list views, and per-record deep links. Add `--json` for structured output in CI.
 
 **One-shot dev hook setup.** A new `setup-entire-hooks.py` bootstrap script installs session-capture and commit-message hooks in a single idempotent run, so fresh clones and new machines are ready to contribute without hand-wiring `.git/hooks`.
 
