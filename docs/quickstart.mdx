@@ -1,0 +1,48 @@
+---
+title: "Quickstart"
+description: "Install gtm-sdk and run your first command"
+---
+
+## Prerequisites
+
+- Python `>=3.13,<3.14`
+- [`uv`](https://docs.astral.sh/uv/) — the only supported package manager (never bare `pip`)
+- An [Infisical](https://infisical.com/) token for secrets injection (optional for read-only exploration)
+
+## Get started
+
+<Steps>
+  <Step title="Clone">
+    ```bash
+    git clone git@github.com:elviskahoro/gtm-sdk.git
+    cd gtm-sdk
+    ```
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    uv sync
+    ```
+  </Step>
+  <Step title="Run the CLI">
+    The package installs a `gtm` entrypoint:
+
+    ```bash
+    uv run gtm --help
+    ```
+  </Step>
+  <Step title="Inject secrets (optional)">
+    Commands that touch external services expect secrets injected via Infisical:
+
+    ```bash
+    set -a && source .env.local && set +a
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=dev -- uv run gtm <command>
+    ```
+  </Step>
+</Steps>
+
+## Quality gates
+
+```bash
+trunk check --all   # lint + type check
+uv run pytest       # tests
+```
