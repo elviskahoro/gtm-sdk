@@ -5,3 +5,9 @@ composable
 Grafana
 uv
 Infisical
+repo
+dev
+config
+protobuf
+otelcol
+Logfire
