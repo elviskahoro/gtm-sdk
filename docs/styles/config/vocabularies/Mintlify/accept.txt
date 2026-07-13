@@ -1,0 +1,7 @@
+Typer
+serverless
+Attio
+composable
+Grafana
+uv
+Infisical
