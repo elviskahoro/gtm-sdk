@@ -1,0 +1,30 @@
+---
+title: "Changelog"
+description: "Product updates and improvements to gtm-sdk"
+---
+
+<Update label="July 13, 2026">
+
+## New features
+
+**Dash0 telemetry provider**
+
+You can now route the OpenTelemetry collector to [Dash0](/telemetry/dash0-setup) using
+regional US or EU endpoints. Configure `DASH0_AUTH_TOKEN` and `DASH0_OTLP_ENDPOINT`
+and the collector forwards traces, metrics, and logs directly.
+
+**Grafana Cloud telemetry provider**
+
+The collector now supports [Grafana Cloud](/telemetry/grafana-setup) via its
+region-scoped OTLP gateway. Grafana Cloud uses HTTP Basic auth (instead of the Bearer
+pattern used by other providers), and the collector derives the base64 credential at
+deploy time so your raw access-policy token never leaves your secrets store.
+
+## Updates
+
+**`gtm` CLI entrypoint**
+
+Installing the package now exposes a `gtm` command for account research, enrichment,
+CRM sync, and outreach workflows. See the [quickstart](/quickstart) to get set up.
+
+</Update>

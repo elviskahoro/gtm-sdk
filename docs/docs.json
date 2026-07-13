@@ -24,6 +24,12 @@
           "telemetry/dash0-setup",
           "telemetry/grafana-setup"
         ]
+      },
+      {
+        "group": "Changelog",
+        "pages": [
+          "changelog/overview"
+        ]
       }
     ]
   },
