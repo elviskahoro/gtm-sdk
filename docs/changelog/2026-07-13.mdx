@@ -1,0 +1,24 @@
+---
+title: "Week of July 13, 2026"
+description: "Grafana Cloud telemetry, Attio content pipeline, webhook tracing, and Attio inspection URLs"
+---
+
+## New features
+
+**Grafana Cloud as a telemetry provider.** The OTEL collector now fans traces and logs out to Grafana Cloud alongside Dash0, HyperDX, and Logfire. Point `GRAFANA_INSTANCE_ID` and `GRAFANA_API_KEY` at your workspace and the collector handles Basic-auth encoding at deploy time so raw tokens never land in the container. See [Grafana Cloud setup](/telemetry/grafana-setup) to wire it up.
+
+**Attio content pipeline.** New `upsert_gtm_content` (keyed on slug) plus two-way relationship attribute support lets you sync blog posts and other content into Attio idempotently. People records gain Sanity-CMS author-id helpers (`find_person_by_sanity_author_id`, `set_person_sanity_author_id`) so author matching no longer relies on fragile name comparisons.
+
+**Distributed tracing for the rb2b → Attio webhook.** The webhook now emits an OpenTelemetry span tree — root `webhook` → `attio.execute` → one span per op — with `op_type`, `success`, and `record_id` attributes. Traces flow through the same collector fan-out as logs, so they show up in whichever backend you already have wired in [Dash0](/telemetry/dash0-setup) or [Grafana](/telemetry/grafana-setup).
+
+**Attio workspace URL emitter.** A new script resolves an Attio API key to shareable `app.attio.com` inspection links — workspace root, per-object list views, and per-record deep links — with a `--json` output mode for CI use.
+
+**One-shot dev hook setup.** A new `setup-entire-hooks.py` bootstrap script installs session-capture and commit-message hooks in a single idempotent run, so fresh clones and new machines are ready to contribute without hand-wiring `.git/hooks`.
+
+## Updates
+
+**LangSmith removed as a telemetry provider.** LangSmith was the only trace-only sink in the collector and has been retired. Every remaining provider (Dash0, HyperDX, Logfire, Grafana Cloud) now handles both traces and logs through the same pipeline. No action required unless you were pointing at LangSmith directly.
+
+## Bug fixes
+
+**Scripts test suite restored.** A recent rename left the `tests/scripts/` suite red with 30+ import errors. All eight broken test files have been repaired and the suite is green again (138 tests passing), so script changes get real CI signal.
