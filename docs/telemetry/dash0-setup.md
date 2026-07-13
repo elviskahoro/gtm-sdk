@@ -1,4 +1,4 @@
-# Dash0 Telemetry Setup
+# Dash0 telemetry setup
 
 This guide walks through setting up Dash0 as a telemetry provider for the otel-collector.
 
@@ -11,7 +11,7 @@ Dash0 provides regional endpoints:
 
 Choose the one nearest your data location.
 
-## Setting Up Secrets in Infisical
+## Set up secrets in Infisical
 
 Add three secrets to your Infisical project (dev environment):
 
@@ -38,7 +38,7 @@ Add three secrets to your Infisical project (dev environment):
 - **Type**: Secret
 - **Environment**: dev
 
-## Setting Secrets via CLI
+## Set secrets via CLI
 
 ```bash
 cd ~/Documents/ai
@@ -66,7 +66,7 @@ infisical secrets set \
   --token "$INFISICAL_TOKEN"
 ```
 
-## Deploying the Collector
+## Deploy the collector
 
 Once secrets are set, deploy the otel-collector:
 
@@ -82,7 +82,7 @@ infisical run --env=dev -- uv run modal deploy src/otel_collector.py
 
 The collector image build fetches the secrets and embeds them, so when the container starts, Dash0 is already configured.
 
-## Verifying Configuration
+## Verify configuration
 
 Check that Dash0 was included in the collector config:
 
@@ -100,7 +100,7 @@ else:
 "
 ```
 
-## Testing Telemetry Flow
+## Test telemetry flow
 
 Use the verification script to test end-to-end telemetry:
 
@@ -121,7 +121,7 @@ uv run pytest tests/src/test_dash0_telemetry_integration.py -v
 uv run scripts/verify_dash0_telemetry.py
 ```
 
-## Collector Architecture
+## Collector architecture
 
 When the collector is deployed:
 
@@ -142,7 +142,7 @@ See `libs/telemetry.py` and `src/otel_collector.py` for implementation details.
 
 ## Troubleshooting
 
-### Secrets Not Found
+### Secrets not found
 
 ```bash
 # Verify secrets exist in Infisical:
@@ -152,7 +152,7 @@ infisical secrets get DASH0_AUTH_TOKEN --env=dev \
   --token "$INFISICAL_TOKEN"
 ```
 
-### Collector Not Starting
+### Collector not starting
 
 Check the Modal logs for the otel-collector app:
 
@@ -162,14 +162,14 @@ modal logs otel-collector --follow
 
 Look for errors like "exporters config: *conf.ExportersConfig.Validate()..." which indicates a config build error.
 
-### No Telemetry in Dash0
+### No telemetry in Dash0
 
 1. Verify the collector is running: `modal serve src/otel_collector.py`
 2. Check Modal logs for export errors
 3. Verify the OTLP endpoint is reachable from the collector container
 4. Check that the Bearer token is valid
 
-### Mixing Dash0 with Other Providers
+### Mixing Dash0 with other providers
 
 You can enable multiple providers simultaneously — the collector will fan-out to all configured exporters:
 
