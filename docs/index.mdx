@@ -1,0 +1,27 @@
+---
+title: "Introduction"
+description: "Go-To-Market SDK + CLI for account research, enrichment, CRM sync, and outreach"
+---
+
+**gtm-sdk** is a layered Go-To-Market toolkit: a thin Typer CLI on top of workflow
+orchestration on top of single-SDK adapters. It deploys as Modal serverless functions
+and is consumable as an editable Python package.
+
+## Architecture
+
+The repo enforces a strict layering:
+
+| Layer | Directory | Role |
+| --- | --- | --- |
+| CLI | `cli/` | Thin command surface. Parse flags, preflight, call `src/`, render output. No business logic. |
+| Orchestration | `src/` | Multi-step workflows chaining adapters. Modal `@app.function` / `@modal.fastapi_endpoint` decorators live here. |
+| Adapters | `libs/` | One folder per external service (Attio, Apollo, Cal.com, Fathom, …). No cross-lib imports. |
+| Data products | `data-gen/` | Independent, composable data generation and enrichment pipelines. |
+| Webhooks | `webhooks/` | Standalone Modal webhook handlers, deployed individually. |
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Install dependencies and run your first command.
+</Card>
+<Card title="Telemetry" icon="chart-line" href="/telemetry/dash0-setup">
+  Wire the OTEL collector to Dash0, Grafana Cloud, and other providers.
+</Card>

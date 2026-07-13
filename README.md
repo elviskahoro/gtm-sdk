@@ -210,7 +210,7 @@ The collector reads provider creds from its own secret: `DASH0_AUTH_TOKEN` +
 and Grafana Cloud via `GRAFANA_INSTANCE_ID` + `GRAFANA_API_KEY` (optional
 `GRAFANA_OTLP_ENDPOINT`) — the numeric instance id and `glc_` token are collapsed into a
 base64 Basic credential at deploy time so the raw token never reaches the collector (see
-[`docs/GRAFANA_SETUP.md`](docs/GRAFANA_SETUP.md)). Each unconfigured provider is silently skipped.
+[`docs/telemetry/grafana-setup.md`](docs/telemetry/grafana-setup.md)). Each unconfigured provider is silently skipped.
 
 **Direct single-sink (fallback).** Opt out of the collector by setting
 `TELEMETRY_COLLECTOR_APP=""`; telemetry then goes to one OTLP sink directly, activated by
