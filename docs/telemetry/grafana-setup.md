@@ -1,4 +1,7 @@
-# Grafana Cloud telemetry setup
+---
+title: "Send gtm-sdk OTel data to Grafana Cloud via otel-collector"
+description: "Send traces and logs from the gtm-sdk otel-collector to Grafana Cloud OTLP using Basic auth, region-scoped endpoints, and Infisical secrets."
+---
 
 This guide walks through setting up Grafana Cloud as a telemetry provider for the otel-collector.
 

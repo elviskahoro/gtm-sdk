@@ -1,4 +1,7 @@
-# Dash0 telemetry setup
+---
+title: "Send gtm-sdk telemetry to Dash0 with the otel-collector"
+description: "Send OpenTelemetry traces and logs from the gtm-sdk otel-collector to Dash0 with regional endpoints, Infisical secret config, and Modal deploy."
+---
 
 This guide walks through setting up Dash0 as a telemetry provider for the otel-collector.
 
