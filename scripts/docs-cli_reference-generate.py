@@ -181,8 +181,8 @@ def _subapp_page(name: str, group: click.Group) -> str:
     parts.extend(
         [
             "Every command follows the [CLI contract](/concepts/cli-contract):"
-            " JSON on stdout, errors on stderr, mutations gated behind an"
-            " explicit flag. Keys resolve as described in"
+            " JSON on stdout, errors on stderr, and command-specific mutation"
+            " safety controls. Keys resolve as described in"
             " [Secrets and API keys](/secrets).",
             "",
         ],
