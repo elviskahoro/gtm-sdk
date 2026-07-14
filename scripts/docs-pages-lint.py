@@ -85,6 +85,21 @@ def _check_page(path: Path) -> list[str]:
                     f"(max {MAX_DESCRIPTION_LEN} — llms.txt truncates beyond it)",
                 )
 
+        # Mintlify consumes these values as page metadata. Block/folded YAML
+        # scalars are technically valid YAML but make the generated metadata
+        # depend on indentation and can leak line breaks into llms.txt.
+        line_match = re.search(
+            rf"^{re.escape(field)}:\s*(.*)$",
+            frontmatter,
+            re.MULTILINE,
+        )
+        assert line_match is not None  # field_re matched the same field
+        raw_value = line_match.group(1).strip()
+        if raw_value.startswith(("|", ">")):
+            findings.append(
+                f"{rel}: frontmatter '{field}' must be a single-line scalar",
+            )
+
     body = text[match.end() :]
     in_fence = False
     for lineno, line in enumerate(
