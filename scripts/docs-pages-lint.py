@@ -89,7 +89,7 @@ def _check_page(path: Path) -> list[str]:
         # scalars are technically valid YAML but make the generated metadata
         # depend on indentation and can leak line breaks into llms.txt.
         line_match = re.search(
-            rf"^{re.escape(field)}:\s*(.*)$", frontmatter, re.MULTILINE
+            rf"^{re.escape(field)}:\s*(.*)$", frontmatter, re.MULTILINE,
         )
         assert line_match is not None  # field_re matched the same field
         raw_value = line_match.group(1).strip()
