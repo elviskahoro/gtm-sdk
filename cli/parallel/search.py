@@ -27,7 +27,11 @@ def query(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Search the web for a given objective."""
     if json_input:

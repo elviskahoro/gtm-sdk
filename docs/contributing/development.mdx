@@ -1,0 +1,114 @@
+---
+title: "Development guide"
+description: "Setup, everyday commands, layer rules, testing, and conventions for contributing to the gtm-sdk repository."
+---
+
+## Setup
+
+The project requires Python 3.13 (`>=3.13,<3.14`) and uses `uv` as the only supported package manager — never `pip`, `pip3`, or `python3 -m pip`. `uv` resolves everything against the committed `uv.lock`, which guarantees a deterministic, reproducible environment across machines and CI; bare `pip` bypasses that lock file and causes environment drift.
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/elviskahoro/gtm-sdk.git
+    cd gtm-sdk
+    ```
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    uv sync
+    ```
+
+    This installs the runtime dependencies and the `dev` dependency group (pytest, bandit, and friends) from `uv.lock`.
+  </Step>
+  <Step title="Verify the CLI works">
+    ```bash
+    uv run gtm --help
+    ```
+  </Step>
+</Steps>
+
+## Everyday commands
+
+Run everything through `uv run` so it executes inside the project virtual environment.
+
+```bash
+uv sync                          # install/lock deps
+uv run gtm --help                # list CLI command groups
+uv run gtm <GROUP> --help        # list commands in a group
+uv run pytest                    # test suite (integration tests excluded)
+trunk check --all                # lint + typecheck (ruff, pyright, bandit, ...)
+trunk fmt                        # format changed files
+```
+
+<Note>
+`uv run pytest` uses `--import-mode=importlib` and excludes integration tests by default — both are configured in `pyproject.toml` under `[tool.pytest.ini_options]` via `addopts = "--import-mode=importlib -m 'not integration'"`.
+</Note>
+
+## Linting
+
+All linters and formatters run through **trunk**, never as bare binaries. Tools like `ruff`, `bandit`, `yamllint`, `shellcheck`, `prettier`, and `actionlint` live inside trunk's sandbox — invoking them directly either fails with `command not found` or picks up the wrong configuration.
+
+```bash
+trunk check --all                         # everything, whole repo
+trunk check --filter=ruff libs/attio/     # reproduce a single tool's finding
+trunk fmt cli/main.py                     # format one file
+```
+
+To reproduce a specific finding from CI, use `trunk check --filter=<TOOL> <PATH>` with the tool name from the CI output.
+
+## Layer rules
+
+The repository enforces a strict layered architecture:
+
+- `libs/<service>/` wraps **one** external SDK or API with idiomatic Python types and functions. **No `libs/<x>` module may import from `libs/<y>`.** If two adapters need to coordinate, that coordination belongs in `src/`.
+- `src/` is the orchestration layer: multi-step workflows, side effects, and Modal `@app.function` / `@modal.fastapi_endpoint` decorators. Adapter modules in `libs/` must stay callable in isolation — no orchestration inside `libs/`.
+- `cli/` is Typer-only: parse arguments → preflight → call into `src/` → render output. **No business logic in `cli/`.**
+
+<Warning>
+If you add a new top-level package, update `[tool.setuptools.packages.find]` in `pyproject.toml` — otherwise the package is not importable after install.
+</Warning>
+
+### Where new code goes
+
+1. **External SDK call?** New file in `libs/<service>/`. Wrap one SDK only, no cross-lib imports.
+2. **Multi-step flow or Modal endpoint?** `src/<service>/`. If the module defines Modal endpoints, add its import to `_ENDPOINT_MODULES` in `src/app.py` so the decorators register.
+3. **User-facing command?** `cli/<group>/` as a Typer subapp that calls into `src/`. Wire it into `cli/main.py` via `app.add_typer(...)`.
+4. **Standalone data product?** `data-gen/<product>/`. Self-contained and independent of other data products.
+5. **Webhook handler?** `webhooks/<name>.py`. Each handler is an independent Modal app — do not register it in `src/app.py`.
+
+## Testing
+
+```bash
+uv run pytest                    # unit tests (integration excluded by default)
+uv run pytest tests/cli          # one subtree
+uv run pytest -m integration     # integration tests (require live credentials)
+```
+
+- Tests mirror the source layout: `tests/cli/`, `tests/libs/`, `tests/src/`, and `tests/integration/`. Put new tests in the directory that mirrors the code under test.
+- Tests that hit live external APIs carry the `integration` marker, defined in `pyproject.toml`. The default `addopts` filter (`-m 'not integration'`) keeps them out of ordinary runs, so `uv run pytest` never needs credentials.
+- Plain `assert` statements are allowed in tests — ruff's `S101` rule is ignored for `tests/**` via a per-file ignore in `pyproject.toml`.
+
+## Conventions
+
+- **Temporary files go in `tmp/` only.** The directory is gitignored. Never write scratch output to the repo root or next to source code.
+- **Anchor script file I/O on the script's own directory, not the CWD.** `uv run path/to/script.py` does **not** change the working directory, so relative paths resolve from wherever the command was invoked and can silently write files to the wrong place:
+
+  ```python
+  SCRIPT_DIR = Path(__file__).resolve().parent
+  (SCRIPT_DIR / "output.txt").write_text(...)
+  ```
+
+- **Scripts under `scripts/` are directly executable** with `uv` shebangs where practical. Scripts that need Infisical secrets must show the full flag form in their usage text (`--projectId`, `--token`, `--env`) rather than assuming `infisical init` has run:
+
+  ```bash
+  set -a && source .env.local && set +a
+  infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=<dev|prod> -- <CMD>
+  ```
+
+- **Docstrings explain *why*, not *what*.** Document decisions and gotchas inline, next to the code they affect.
+- **No summary or investigation `.md` files.** Live documentation belongs in code (docstrings, per-module READMEs); the docs site under `docs/` is the only place for prose documentation.
+
+## Docs site
+
+Documentation pages live in `docs/` and are built with Mintlify. Local preview requires Node 24 (pinned in `docs/.node-version`): install the CLI with `npm i -g mint`, then run `mint dev` from inside `docs/`. Every page needs `title` and `description` frontmatter — the description becomes the page's `llms.txt` entry.

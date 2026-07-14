@@ -38,7 +38,7 @@ from dagger import dag
 # (ATTIO_API_KEY) and tests/integration/test_gtm_remote_smoke.py (the MODAL_* +
 # PARALLEL_API_KEY set). MODAL_ENVIRONMENT/MODAL_APP are intentionally absent: the
 # Modal client resolves the environment from the token's default workspace, and
-# MODAL_APP defaults to "elvis-ai-v2" in src/modal_app.py.
+# MODAL_APP defaults to "gtm-sdk" in src/modal_app.py.
 INTEGRATION_SECRET_ENV_VARS = (
     "ATTIO_API_KEY",
     "MODAL_TOKEN_ID",

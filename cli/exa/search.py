@@ -45,8 +45,16 @@ def search(
         "--exclude-domains",
         help="Comma-separated domains to exclude",
     ),
-    highlights: bool = typer.Option(True, "--highlights/--no-highlights"),
-    summary: bool = typer.Option(False, "--summary/--no-summary"),
+    highlights: bool = typer.Option(
+        True,
+        "--highlights/--no-highlights",
+        help="Include highlight snippets in each result",
+    ),
+    summary: bool = typer.Option(
+        False,
+        "--summary/--no-summary",
+        help="Include an LLM-generated summary per result",
+    ),
     output_schema_json: str | None = typer.Option(
         None,
         "--output-schema-json",
@@ -57,7 +65,11 @@ def search(
         "--json",
         help="Full JSON payload (overrides flags)",
     ),
-    exa_api_key_override: str | None = typer.Option(None, "--exa-api-key"),
+    exa_api_key_override: str | None = typer.Option(
+        None,
+        "--exa-api-key",
+        help="Override the Exa API key for this invocation",
+    ),
 ) -> None:
     """Search the web via Exa."""
     if json_input:
