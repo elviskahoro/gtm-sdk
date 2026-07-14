@@ -13,7 +13,7 @@ dependencies = [
   # Imported directly by libs/motherduck (md: connections). Already transitive
   # via dlt[duckdb], but declared explicitly since we import the package.
   "duckdb>=1.0",
-  "exa-py>=1.0",
+  "exa-py>=2.16.0",
   "fastapi[standard]",
   "flatsplode>=0.2.0",
   "gcsfs>=2024.10.0",
