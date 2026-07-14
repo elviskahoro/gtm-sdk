@@ -106,9 +106,10 @@ infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --e
     -- uv run modal deploy src/otel_collector.py
 ```
 
-At deploy time the raw `GRAFANA_INSTANCE_ID` + `GRAFANA_API_KEY` are collapsed into
-the pre-encoded `GRAFANA_OTLP_AUTH` Basic credential and embedded in the collector's
-secret, so when the container starts Grafana is already configured.
+At deploy time the collector collapses the raw `GRAFANA_INSTANCE_ID` and
+`GRAFANA_API_KEY` into the pre-encoded `GRAFANA_OTLP_AUTH` Basic credential and
+embeds it in the collector's secret, so when the container starts, Grafana is
+already configured.
 
 ## Verify configuration
 
