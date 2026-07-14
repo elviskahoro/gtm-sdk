@@ -1,0 +1,46 @@
+---
+title: "Launch week — gtm-sdk goes public (July 13, 2026)"
+description: "First public release of gtm-sdk: the gtm CLI, Attio CRM sync, meeting and mention pipelines, web research adapters, Modal deploy, and OpenTelemetry."
+---
+
+The first public release of **gtm-sdk** — a layered Go-To-Market toolkit for account research, enrichment, CRM sync, and outreach.
+
+## New features
+
+**`gtm` CLI**
+A Typer-based command surface for account research, enrichment, and CRM operations. Run `gtm --help` to explore the available command groups. See the [quickstart](/quickstart) to install and run your first command.
+
+**Account research and enrichment**
+End-to-end account and people workflows including batch research, contact parsing, and multi-source enrichment.
+
+**CRM sync (Attio)**
+Read and write companies, people, notes, meetings, and mentions in Attio, with idempotent upserts and preflight checks against your workspace schema.
+
+**Meeting integrations**
+Backfill and sync meetings from **Cal.com**, **Fathom**, **Fireflies**, and **Granola** into Attio, with cross-provider meeting IDs so the same meeting reconciles across sources.
+
+**Web research**
+Search and extract company and people signals via **Exa** and **Parallel**, and pull publisher blog content from **Sanity**.
+
+**Sales data providers**
+Lookup and enrichment adapters for **Apollo** (organizations and people) and **Harvest** (leads).
+
+**Visitor and mention pipelines**
+Webhook handlers for **RB2B** website visits and **Octolens** social mentions, with normalization and Attio export.
+
+**Outbound**
+Send transactional email through **Resend** and post to **Slack** channels or threads.
+
+**serverless deployment on Modal**
+Orchestration functions and webhook handlers deploy to [Modal](https://modal.com/) with a single `deploy.py` entrypoint.
+
+**Telemetry**
+OpenTelemetry collector with drop-in setup guides for [Dash0](/telemetry/dash0-setup) and [Grafana Cloud](/telemetry/grafana-setup). Structured logs, traces, and metrics from every command and webhook.
+
+**Secrets via Infisical**
+Inject credentials for every provider through a single Infisical token — no per-service `.env` juggling. See the [quickstart](/quickstart#inject-secrets-optional) for the run pattern.
+
+## Updates
+
+- Documentation site launched with an [introduction](/), [quickstart](/quickstart), and telemetry provider guides.
+- Continuous integration hardened: GitHub Actions are pinned to specific commit SHAs for reproducible builds.
