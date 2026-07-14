@@ -1,4 +1,4 @@
-# Grafana Cloud Telemetry Setup
+# Grafana Cloud telemetry setup
 
 This guide walks through setting up Grafana Cloud as a telemetry provider for the otel-collector.
 
@@ -37,7 +37,7 @@ the collector derives the base64 credential (`GRAFANA_OTLP_AUTH`) **at deploy ti
 (see `_grafana_basic_auth` / `_collector_secret_payload` in `src/otel_collector.py`),
 so the raw `glc_` token never reaches the collector container or the rendered config.
 
-## Setting Up Secrets in Infisical
+## Set up secrets in Infisical
 
 Add these secrets to your Infisical project (dev environment):
 
@@ -63,7 +63,7 @@ Add these secrets to your Infisical project (dev environment):
 - **Environment**: dev
 - Omit to use the hard-coded default (`us-east-3`).
 
-## Setting Secrets via CLI
+## Set secrets via CLI
 
 ```bash
 # From the gtm-sdk repo root (its own .env.local holds INFISICAL_TOKEN + INFISICAL_PROJECT_ID)
@@ -90,7 +90,7 @@ infisical secrets set \
   --token "$INFISICAL_TOKEN"
 ```
 
-## Deploying the Collector
+## Deploy the collector
 
 Once secrets are set, deploy the otel-collector:
 
@@ -107,7 +107,7 @@ At deploy time the raw `GRAFANA_INSTANCE_ID` + `GRAFANA_API_KEY` are collapsed i
 the pre-encoded `GRAFANA_OTLP_AUTH` Basic credential and embedded in the collector's
 secret, so when the container starts Grafana is already configured.
 
-## Verifying Configuration
+## Verify configuration
 
 Check that Grafana was included in the collector config:
 
@@ -125,7 +125,7 @@ else:
 "
 ```
 
-## Collector Architecture
+## Collector architecture
 
 When the collector is deployed:
 
@@ -149,7 +149,7 @@ See `libs/telemetry.py` and `src/otel_collector.py` for implementation details.
 
 ## Troubleshooting
 
-### Secrets Not Found
+### Secrets not found
 
 ```bash
 # Verify secrets exist in Infisical (from the gtm-sdk repo root):
@@ -159,7 +159,7 @@ infisical secrets get GRAFANA_API_KEY --env=dev \
   --token "$INFISICAL_TOKEN"
 ```
 
-### 401 / 403 from the Gateway
+### 401 / 403 from the gateway
 
 - Grafana Cloud uses **Basic** auth, not Bearer — a Bearer header returns 401. This is
   handled automatically by the collector; if you see 401s, re-check that
@@ -167,7 +167,7 @@ infisical secrets get GRAFANA_API_KEY --env=dev \
   and that the `glc_` token's access policy has write scope for the signals.
 - Confirm the endpoint region matches the stack the token belongs to.
 
-### Collector Not Starting
+### Collector not starting
 
 Check the Modal logs for the otel-collector app:
 
@@ -176,13 +176,13 @@ infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --e
     -- uv run modal app logs otel-collector
 ```
 
-### No Telemetry in Grafana
+### No telemetry in Grafana
 
 1. Verify the collector is running and Grafana is in the exporter list (see above).
 2. Check Modal logs for export errors.
 3. Verify the OTLP endpoint region is reachable and matches the token's stack.
 
-### Mixing Grafana with Other Providers
+### Mixing Grafana with other providers
 
 You can enable multiple providers simultaneously — the collector fans out to all
 configured exporters. Grafana coexists with Dash0, HyperDX, and Logfire.
