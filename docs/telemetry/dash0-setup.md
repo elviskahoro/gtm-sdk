@@ -34,7 +34,7 @@ Add three secrets to your Infisical project (dev environment):
 - **Type**: Secret
 - **Environment**: dev
 
-### 3. DASH0_DATASET (Optional)
+### 3. DASH0_DATASET (optional)
 
 - **Name**: `DASH0_DATASET`
 - **Value**: `default` (or your dataset name)
@@ -163,7 +163,7 @@ Check the Modal logs for the otel-collector app:
 modal logs otel-collector --follow
 ```
 
-Look for errors like "exporters config: *conf.ExportersConfig.Validate()..." which indicates a config build error.
+Look for errors like "exporters config: *conf.ExportersConfig.Validate()...", which indicate a config build error.
 
 ### No telemetry in Dash0
 

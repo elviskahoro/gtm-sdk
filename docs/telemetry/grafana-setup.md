@@ -58,7 +58,7 @@ Add these secrets to your Infisical project (dev environment):
 - **Type**: Secret
 - **Environment**: dev
 
-### 3. GRAFANA_OTLP_ENDPOINT (Optional)
+### 3. GRAFANA_OTLP_ENDPOINT (optional)
 
 - **Name**: `GRAFANA_OTLP_ENDPOINT`
 - **Value**: Your regional OTLP gateway, e.g. `https://otlp-gateway-prod-us-east-3.grafana.net/otlp`
