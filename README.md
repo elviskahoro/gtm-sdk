@@ -6,6 +6,7 @@ Go-To-Market SDK + CLI for account research, enrichment, CRM sync, and outreach.
 - Python: `>=3.13,<3.14`
 - Package manager: **`uv` only** (never bare `pip`)
 - License: MIT
+- Docs: <https://elviskahoro.mintlify.app> (source in [`docs/`](docs/))
 
 ## Layout
 
@@ -15,10 +16,10 @@ gtm-sdk/
 ├── src/         # Workflow orchestration. Chains libs/ adapters. Modal endpoints register here.
 ├── libs/        # Single-SDK adapters. One folder per external service. NO cross-lib imports.
 ├── data-gen/    # Reusable data generation/enrichment pipelines (independent, composable).
-├── webhooks/    # Standalone Modal webhook handlers (e.g. GCP raw/ETL exporters).
+├── webhooks/    # Standalone Modal webhook handlers (Attio, GCS raw/ETL, Slack).
 ├── api/
-│   ├── specs/   # External API OpenAPI specs (e.g. caldotcom)
-│   └── samples/ # Sample payloads (rb2b, caldotcom)
+│   ├── specs/   # External API OpenAPI specs (e.g. caldotcom, sanity)
+│   └── samples/ # Sample payloads (rb2b, caldotcom, fathom, octolens)
 ├── tests/       # pytest, importlib mode. Mirrors src/, libs/, cli/.
 ├── tmp/         # Gitignored scratch. ALL temporary files go here.
 ├── worktrees/   # Gitignored. All git worktrees under this dir.
@@ -38,72 +39,37 @@ Anti-patterns: orchestration inside `libs/`; business logic inside `cli/`; cross
 
 ## Adapters (`libs/`)
 
-| Adapter | Purpose |
-| --- | --- |
-| `apollo` | People + organization enrichment (via `gtm-apollo`) |
-| `attio` | CRM: companies, people, notes, attributes, values |
-| `browserbase` | Headless browser sessions |
-| `caldotcom` | Cal.com bookings/events |
-| `dlt` | dltHub filesystem destinations (GCP + local), DestinationType |
-| `fathom` | Meeting recordings + transcripts |
-| `filesystem` | File utilities for pipeline I/O |
-| `gmail` | Gmail URL decoding |
-| `granola` | Local Granola export reader |
-| `harvest` | LinkedIn lead/profile data via Harvest |
-| `linkedin` | LinkedIn member-data helpers |
-| `octolens` | Mention monitoring |
-| `openai` | Lead extraction via OpenAI |
-| `parallel` | Parallel.ai web search / extract / findall |
-| `parsers` | Generic parsers |
-| `perplexity` | Perplexity API |
-| `rb2b` | RB2B website visitor identification |
-| `resend` | System/transactional email |
-| `telemetry.py` | OTEL tracer init + `emit_cli_event` |
+One directory per external service (Attio, Apollo, Exa, Parallel, Fathom, Granola, …) plus a few
+internal utility libs. The list is discoverable — this README does not mirror it:
+
+```bash
+ls libs/
+```
+
+Every adapter follows the same pattern: `get_client()` with three-tier API-key resolution —
+explicit `api_key=` argument → `api_key_scope` contextvar → env var.
 
 ## Orchestration (`src/`)
 
-- `src/app.py` — Modal `App` definition, image build, secret bindings (`apollo`, `attio`, `parallel`), endpoint module registration. **Edit here when adding new Modal endpoints.**
-- `src/modal_app.py` — `MODAL_APP` name (env-overridable via `MODAL_APP`, default `elvis-ai-v2`).
-- `src/api_keys.py` — API key resolution.
-- `src/enrichment.py` — Enrichment workflow.
-- `src/accounts/` — `accounts`, `research`, `people`, `batch`, `tasks`, `models`.
-- `src/attio/` — `companies`, `people`, `notes`, `deployment_parity`, `http_responses`.
-- `src/apollo/` — `organizations`, `people`.
-- `src/parallel/` — `extract`, `findall`, `search`.
-- `src/{caldotcom,fathom,granola,octolens,rb2b}/` — workflow modules per integration.
+- `src/app.py` — Modal `App` definition, image build, endpoint-module registration
+  (`_ENDPOINT_MODULES`). **Edit here when adding new Modal endpoints.**
+- `src/modal_app.py` — `MODAL_APP` name (env-overridable via `MODAL_APP`, default `gtm-sdk`).
+- `src/secrets_bootstrap.py` — Infisical-backed secret hydration for Modal functions
+  (`KEY_SCOPES`, `@with_secrets`, `bootstrap_secret()`).
+- One package per domain (`src/accounts/`, `src/attio/`, `src/apollo/`, …) — discoverable via `ls src/`.
 
 ## CLI surface
 
-Run via `uv run gtm <group> <command>` (or `uv run python -m cli.main`).
+Run via `uv run gtm <group> <command>` (or `uv run python -m cli.main`). The command tree is
+discoverable — this README does not mirror it:
 
-```txt
-gtm
-├── hello, version
-├── accounts                       GTM workflow commands
-│   ├── research                   Non-mutating research
-│   ├── enrich                     Non-mutating enrichment
-│   ├── find-people                Non-mutating people discovery
-│   ├── map-account-hierarchy      Non-mutating hierarchy mapping
-│   ├── batch-add-people           Batch add (preview/apply)
-│   └── batch-add-companies        Batch add (preview/apply)
-├── apollo
-│   ├── people                     People enrichment + search
-│   └── organizations              Org enrichment + search
-├── attio
-│   ├── people                     Manage people records
-│   ├── companies                  Manage company records
-│   └── notes                      Manage notes
-├── enrichment
-│   └── enrich                     Enrich records from LinkedIn (Harvest)
-├── gmail
-│   └── url                        Gmail URL decoding
-├── granola
-│   └── export                     Local Granola export
-└── parallel
-    ├── extract                    Extract content from URLs
-    ├── findall                    Discover entities (FindAll)
-    └── search                     Search the web
+```bash
+uv run gtm --help                # list command groups
+uv run gtm <group> --help        # list commands in a group
 ```
+
+Contract: success data is JSON on stdout, errors/logs on stderr; mutating commands preview by
+default and require an explicit flag to execute.
 
 CLI helpers: `cli/json_encoder.py`, `cli/json_validation.py`. CLI emits OTEL events (`cli.usage_error` on exit code 2).
 
@@ -112,7 +78,7 @@ CLI helpers: `cli/json_encoder.py`, `cli/json_validation.py`. CLI emits OTEL eve
 ### As an editable submodule (preferred when consumed from another repo)
 
 ```bash
-git submodule add git@github.com:elviskahoro/gtm.git gtm-sdk
+git submodule add git@github.com:elviskahoro/gtm-sdk.git gtm-sdk
 ```
 
 In the parent `pyproject.toml`:
@@ -127,8 +93,8 @@ Then `uv sync`. All `cli`, `src`, `libs` packages become importable.
 ### Standalone
 
 ```bash
-git clone --recurse-submodules git@github.com:elviskahoro/gtm.git
-cd gtm
+git clone git@github.com:elviskahoro/gtm-sdk.git
+cd gtm-sdk
 uv sync
 ```
 
@@ -138,7 +104,7 @@ Git hooks aren't committed, so after cloning on a new device wire up Entire
 (agent-session checkpoints) plus the anti-AI-co-author enforcement in one step:
 
 ```bash
-scripts/setup-entire-hooks.py
+scripts/entire-hooks-setup.py
 ```
 
 Install the Entire CLI (`curl -fsSL https://entire.io/install.sh | bash`) and run
@@ -162,9 +128,9 @@ uv run modal deploy deploy.py
 ```
 
 - `deploy.py` lives at the repo root **on purpose** — moving it under `src/` causes `src/attio/` to shadow the pip `attio` package.
-- App name resolves from `MODAL_APP` env var; falls back to `elvis-ai-v2`.
+- App name resolves from `MODAL_APP` env var; falls back to `gtm-sdk`.
 - Image is debian_slim + Python 3.13 with a pinned subset of deps and local `libs/` + `src/` mounted via `add_local_python_source`.
-- Secrets used: `apollo`, `attio`, `parallel` (Modal `Secret.from_name`).
+- Secrets: hydrated at call time from Infisical via `src/secrets_bootstrap.py` (`@with_secrets` + `bootstrap_secret()`) — no named Modal `Secret.from_name` bindings.
 - Free tier cap: **8 web endpoints** total. Parallel endpoints are gated behind a plan upgrade.
 - Endpoint modules are imported in `src/app.py` for decorator registration — when adding a new endpoint module, add the import there.
 
@@ -172,54 +138,22 @@ Build env vars baked into the image: `AI_BUILD_GIT_SHA`, `AI_DEPLOYED_AT`.
 
 ## Webhooks
 
-Standalone Modal apps under `webhooks/`:
+Standalone Modal apps under `webhooks/` — one app per (handler, source) pair via the
+`WebhookModelToReplace` placeholder: `export_to_attio.py`, `export_to_gcp_etl.py`,
+`export_to_gcp_raw.py`, `export_to_slack.py`.
 
-- `export_to_gcp_raw.py` — raw payload sink to GCS (bucket `dlthub-devx-test-bucket`, secret `devx-gcp-202605111323`).
-- `export_to_gcp_etl.py` — ETL variant.
-
-Deploy each independently with `modal deploy webhooks/<file>.py`.
+Deploy with `scripts/webhooks-handlers-redeploy.py <handler> <source>` (or `--all`) — never
+`modal deploy webhooks/<file>.py` directly (it fails on the placeholder). Full runbook:
+[`webhooks/README.md`](webhooks/README.md).
 
 ## Telemetry
 
-OTEL traces and logs emitted from `libs/telemetry.py`. Two export modes:
+OTEL traces and logs via `libs/telemetry.py`. The default mode fans out through a collector Modal
+app (`src/otel_collector.py`, deployed standalone) to all configured providers — Dash0, HyperDX,
+Logfire, Grafana; a direct single-sink fallback (`TELEMETRY_COLLECTOR_APP=""`) exists for local
+dev. Neither configured → no-op; telemetry is never load-bearing.
 
-**Collector fan-out (default).** The collector Modal app name is hard-coded in
-`libs/telemetry.py` (`DEFAULT_COLLECTOR_APP = "otel-collector"`), so collector fan-out is the
-default mode with no per-environment wiring — override the app name with `TELEMETRY_COLLECTOR_APP`
-(function name `fan_out`, override with `TELEMETRY_COLLECTOR_FUNCTION`). The app exports to a single
-middle layer: a custom OTEL exporter serializes each batch to OTLP protobuf and
-fire-and-forget `.spawn()`s the collector Modal function (`src/otel_collector.py`) — pure
-Modal RPC, **no public endpoint**. That function hands the bytes to a real OpenTelemetry
-Collector running as a **localhost sidecar** in the same (always-warm, `min_containers=1`)
-container; the sidecar fans out to **all** configured providers — Dash0, HyperDX, Logfire, Grafana —
-with real batching, `retry_on_failure`, and a sending queue. Provider credentials live on
-the collector only, not on each app container. The sidecar's OTLP receiver binds to
-`127.0.0.1`, so it is never reachable from outside the container. (Queue is in-memory; a
-container recycle can lose an unflushed batch — fine for non-load-bearing telemetry.)
-
-Deploy the collector on its own (its own Modal app, not a web endpoint):
-
-```shell
-infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=dev \
-    -- uv run modal deploy src/otel_collector.py
-```
-
-The collector reads provider creds from its own secret: `DASH0_AUTH_TOKEN` +
-`DASH0_OTLP_ENDPOINT` (optional `DASH0_DATASET`, default `default`), `HYPERDX_API_KEY`
-(optional `HYPERDX_OTLP_ENDPOINT`), `LOGFIRE_WRITE_TOKEN` (optional `LOGFIRE_OTLP_ENDPOINT`),
-and Grafana Cloud via `GRAFANA_INSTANCE_ID` + `GRAFANA_API_KEY` (optional
-`GRAFANA_OTLP_ENDPOINT`) — the numeric instance id and `glc_` token are collapsed into a
-base64 Basic credential at deploy time so the raw token never reaches the collector (see
-[`docs/telemetry/grafana-setup.md`](docs/telemetry/grafana-setup.md)). Each unconfigured provider is silently skipped.
-
-**Direct single-sink (fallback).** Opt out of the collector by setting
-`TELEMETRY_COLLECTOR_APP=""`; telemetry then goes to one OTLP sink directly, activated by
-`HYPERDX_API_KEY` / `HYPERDX_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` (custom collector).
-This path has **no Logfire exporter** — Logfire is reachable only via the collector. Useful for
-local dev.
-
-If neither is configured → no-op (telemetry is never load-bearing). CLI calls
-`init_tracer()` at startup and emits `cli.usage_error` events on Typer exit code 2.
+Setup guides: [`docs/telemetry/`](docs/telemetry/) (Dash0, Grafana Cloud).
 
 ## Conventions
 
@@ -227,7 +161,7 @@ If neither is configured → no-op (telemetry is never load-bearing). CLI calls
 - **Branches**: `agent/<slug>` for agent-created branches. Never `claude/*`.
 - **Worktrees**: under `worktrees/<branch-name>`. Never use `.git/modules/*` paths as user-facing worktrees.
 - **Commits**: never add AI co-author trailers (`Co-Authored-By: Claude/Oz/...`). Human authors only.
-- **Documentation**: live in code (docstrings, README per major module, CHANGELOG entries). Do **not** create summary/investigation `.md` files.
+- **Documentation**: live in code (docstrings, README per major module); the published docs site lives in [`docs/`](docs/). Do **not** create summary/investigation `.md` files.
 - **Path anchoring in scripts**: anchor file I/O on `Path(__file__).resolve().parent`, never the CWD — `uv run path/to/script.py` does not chdir.
 
 ## Testing

@@ -8,12 +8,12 @@ version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "attio>=0.22.8",
-  "boto3>=1.42.95",
+  "boto3>=1.43.41",
   "dlt[duckdb,motherduck]>=1.0",
   # Imported directly by libs/motherduck (md: connections). Already transitive
   # via dlt[duckdb], but declared explicitly since we import the package.
   "duckdb>=1.0",
-  "exa-py>=1.0",
+  "exa-py>=2.16.0",
   "fastapi[standard]",
   "flatsplode>=0.2.0",
   "gcsfs>=2024.10.0",
@@ -43,7 +43,7 @@ dependencies = [
   "phonenumbers>=9.0.29",
   "resend>=2.30.0",
   "uuid7>=0.1.0",
-  "dagger-io>=0.21.0",
+  "dagger-io>=0.21.7",
   "pyyaml>=6.0.3",
   "types-pyyaml>=6.0.12.20260510",
   "pycountry>=24.0.0",

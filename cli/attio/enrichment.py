@@ -40,8 +40,16 @@ def backfill_domains(
         "--json",
         help="Full JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
-    exa_api_key_override: str | None = typer.Option(None, "--exa-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
+    exa_api_key_override: str | None = typer.Option(
+        None,
+        "--exa-api-key",
+        help="Override the Exa API key for this invocation",
+    ),
 ) -> None:
     """Backfill missing domains on Attio Companies."""
     if json_input:

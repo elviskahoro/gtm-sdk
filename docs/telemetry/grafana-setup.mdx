@@ -1,0 +1,147 @@
+---
+title: "Send gtm-sdk OpenTelemetry data to Grafana Cloud via otel-collector"
+description: "Send traces and logs from the gtm-sdk otel-collector to Grafana Cloud OTLP using Basic auth, region-scoped endpoints, and Infisical secrets."
+---
+
+## Endpoints
+
+Grafana Cloud exposes a **region-scoped** OTLP gateway:
+
+```text
+https://otlp-gateway-prod-<REGION>.grafana.net/otlp
+```
+
+Find your exact URL on the Grafana Cloud **"OpenTelemetry"** (OTLP) config page for your stack — for example `https://otlp-gateway-prod-us-east-3.grafana.net/otlp` (the collector's hard-coded default) or `https://otlp-gateway-prod-eu-west-2.grafana.net/otlp`.
+
+The collector strips any trailing `/v1/traces` / `/v1/logs` you paste, so either the base (`.../otlp`) or a full-signal URL works.
+
+## Authentication
+
+<Warning>
+Unlike the other providers (Dash0, HyperDX, and Logfire all use `Bearer`), Grafana Cloud's OTLP gateway authenticates with HTTP **Basic** auth. Sending a Bearer header returns a 401.
+</Warning>
+
+```text
+Authorization: Basic base64("<INSTANCE_ID>:<TOKEN>")
+```
+
+- **`<INSTANCE_ID>`** — the numeric **OTLP-gateway instance / user id** shown on the Grafana Cloud "OpenTelemetry" config page. This is _not_ the org id embedded in the `glc_` token.
+- **`<TOKEN>`** — a Grafana Cloud **access-policy token** (starts with `glc_`) scoped to write metrics, logs, and traces.
+
+You do **not** encode this yourself. Set the two raw values as Infisical secrets and the collector derives the base64 credential (`GRAFANA_OTLP_AUTH`) **at deploy time** (see `_grafana_basic_auth` / `_collector_secret_payload` in `src/otel_collector.py`), so the raw `glc_` token never reaches the collector container or the rendered config.
+
+## Setup
+
+<Steps>
+  <Step title="Add secrets to Infisical">
+    Add these secrets to your Infisical project (prod environment):
+
+    | Name | Value | Required |
+    |------|-------|----------|
+    | `GRAFANA_INSTANCE_ID` | The numeric OTLP-gateway instance id | Yes |
+    | `GRAFANA_API_KEY` | Your Grafana Cloud access-policy token (starts with `glc_`) | Yes |
+    | `GRAFANA_OTLP_ENDPOINT` | Your regional OTLP gateway URL | No — omit to use the hard-coded default (`us-east-3`) |
+
+    Set them via the CLI:
+
+    ```bash
+    # From the gtm-sdk repo root (its own .env.local holds INFISICAL_TOKEN + INFISICAL_PROJECT_ID)
+    set -a && source .env.local && set +a
+
+    infisical secrets set \
+      GRAFANA_INSTANCE_ID "<YOUR_GRAFANA_INSTANCE_ID>" \
+      --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+
+    infisical secrets set \
+      GRAFANA_API_KEY "<YOUR_GRAFANA_ACCESS_POLICY_TOKEN>" \
+      --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+
+    # Optional — only if you are not on the us-east-3 default region
+    infisical secrets set \
+      GRAFANA_OTLP_ENDPOINT "https://otlp-gateway-prod-<REGION>.grafana.net/otlp" \
+      --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+    ```
+  </Step>
+  <Step title="Deploy the collector">
+    Once secrets are set, deploy the otel-collector:
+
+    ```bash
+    # From the gtm-sdk repo root
+    set -a && source .env.local && set +a
+
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=prod \
+        -- uv run modal deploy src/otel_collector.py
+    ```
+
+    At deploy time the raw `GRAFANA_INSTANCE_ID` + `GRAFANA_API_KEY` are collapsed into the pre-encoded `GRAFANA_OTLP_AUTH` Basic credential and embedded in the collector's secret, so when the container starts Grafana is already configured.
+  </Step>
+  <Step title="Verify the configuration">
+    Check that Grafana was included in the collector config:
+
+    ```bash
+    uv run python -c "
+    from src.otel_collector import build_collector_config
+    config = build_collector_config()
+    exporters = config.get('exporters', {})
+    print('Exporters:', list(exporters.keys()))
+    if 'otlphttp/grafana' in exporters:
+        print('✓ Grafana is configured')
+    else:
+        print('✗ Grafana is NOT configured')
+    "
+    ```
+  </Step>
+</Steps>
+
+## How Grafana fits the collector
+
+Grafana is one of the fan-out targets of the shared OTEL collector: apps spawn the collector Modal function over RPC, a localhost otelcol sidecar handles retry, queueing, and fan-out, and the Grafana exporter (`otlphttp/grafana`, Basic auth) ships alongside Dash0, HyperDX, and Logfire. See [/telemetry/overview](/telemetry/overview) for the full architecture, and `libs/telemetry.py` / `src/otel_collector.py` for implementation details.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Secrets not found">
+    Verify the secrets exist in Infisical:
+
+    ```bash
+    # From the gtm-sdk repo root
+    set -a && source .env.local && set +a
+    infisical secrets get GRAFANA_API_KEY --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+    ```
+  </Accordion>
+  <Accordion title="401 / 403 from the gateway">
+    - Grafana Cloud uses **Basic** auth, not Bearer — a Bearer header returns 401. The collector handles this automatically; if you see 401s, re-check that `GRAFANA_INSTANCE_ID` is the numeric **OTLP-gateway instance id** (not the org id) and that the `glc_` token's access policy has write scope for the signals.
+    - Confirm the endpoint region matches the stack the token belongs to.
+  </Accordion>
+  <Accordion title="Collector not starting">
+    Check the Modal logs for the otel-collector app:
+
+    ```bash
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=prod \
+        -- uv run modal app logs otel-collector
+    ```
+  </Accordion>
+  <Accordion title="No telemetry in Grafana">
+    1. Verify the collector is running and Grafana is in the exporter list (see the verification step above).
+    2. Check Modal logs for export errors.
+    3. Verify the OTLP endpoint region is reachable and matches the token's stack.
+  </Accordion>
+  <Accordion title="Mixing Grafana with other providers">
+    You can enable multiple providers simultaneously — the collector fans out to all configured exporters. Grafana coexists with Dash0, HyperDX, and Logfire.
+  </Accordion>
+</AccordionGroup>
+
+## Reference
+
+- [Grafana Cloud OTLP endpoint docs](https://grafana.com/docs/grafana-cloud/send-data/otlp/send-data-otlp/)
+- [OpenTelemetry Collector OTLPHTTP Exporter](https://github.com/open-telemetry/opentelemetry-collector/blob/main/exporter/otlphttpexporter/README.md)
+- `src/otel_collector.py` — collector app and config builder
+- `libs/telemetry.py` — app-side telemetry initialization

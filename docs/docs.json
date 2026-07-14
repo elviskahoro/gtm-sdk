@@ -10,28 +10,82 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "pages": [
+    "tabs": [
       {
-        "group": "Getting started",
-        "pages": [
-          "index",
-          "quickstart"
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "index",
+              "quickstart",
+              "installation",
+              "secrets",
+              "ai-tools"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/cli-contract"
+            ]
+          },
+          {
+            "group": "Telemetry",
+            "pages": [
+              "telemetry/overview",
+              "telemetry/dash0-setup",
+              "telemetry/grafana-setup"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/development"
+            ]
+          },
+          {
+            "group": "Changelog",
+            "pages": [
+              "changelog/2026-07-14",
+              "changelog/2026-07-13"
+            ]
+          }
         ]
       },
       {
-        "group": "Telemetry",
-        "pages": [
-          "telemetry/dash0-setup",
-          "telemetry/grafana-setup"
-        ]
-      },
-      {
-        "group": "Changelog",
-        "pages": [
-          "changelog/2026-07-13"
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "CLI",
+            "pages": [
+              "cli/index"
+            ]
+          },
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/accounts",
+              "cli/apollo",
+              "cli/attio",
+              "cli/enrichment",
+              "cli/exa",
+              "cli/gmail",
+              "cli/granola",
+              "cli/parallel",
+              "cli/sanity",
+              "cli/webhook"
+            ]
+          }
         ]
       }
     ]
+  },
+  "errors": {
+    "404": {
+      "redirect": false
+    }
   },
   "logo": {
     "light": "/logo/light.svg",
@@ -52,6 +106,7 @@
       "claude",
       "perplexity",
       "mcp",
+      "add-mcp",
       "cursor",
       "vscode"
     ]

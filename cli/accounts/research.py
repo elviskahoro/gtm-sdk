@@ -25,7 +25,11 @@ def research_command(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Run non-mutating research."""
     if json_input:
@@ -78,7 +82,11 @@ def enrich_command(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Run non-mutating enrichment."""
     if json_input:
