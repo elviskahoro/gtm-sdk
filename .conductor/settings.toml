@@ -69,6 +69,12 @@ if [ ! -e .beads ]; then
   [ ! -e .beads ] && bd init --non-interactive --init-if-missing
 fi
 
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+uv --version
+
 git submodule update --init --recursive
 uv sync
 
