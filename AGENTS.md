@@ -87,6 +87,13 @@ infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --e
 
 Conductor workspaces get `.env.local` copied in at provisioning; the parent `ai/` repo's `.env*` files are not copied. Never fall back to 1Password unless the user explicitly asks.
 
+### roborev's `ANTHROPIC_API_KEY` (not an Infisical secret)
+
+`git roborev review --wait` (see "Session Completion") shells out to a standalone `claude` CLI subprocess that does not share this session's Conductor-hosted auth — it needs its own credential. Claude Code's CLI auth is strictly `ANTHROPIC_API_KEY` (env var) or `apiKeyHelper`; OAuth/keychain are never read by a spawned subprocess. This is a personal credential, not a shared team secret, so it does not go through Infisical/`secrets_bootstrap.py`:
+
+- **Conductor**: set `ANTHROPIC_API_KEY` under `[environment_variables]` in your own `.conductor/settings.local.toml` (excluded from git via `.git/info/exclude` — never commit it).
+- **Kilo**: add `ANTHROPIC_API_KEY=...` to your local `.env.local` (already gitignored and auto-copied into new worktrees), then `set -a && source .env.local && set +a` in the shell before running `git roborev ...` — same manual-source pattern as the Infisical vars above, since a copied `.env.local` file isn't auto-exported into the shell.
+
 ## Script Entrypoints
 
 - Repo-local scripts that are meant to run under `infisical run -- <cmd>` should be directly executable and use a uv shebang when practical.
