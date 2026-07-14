@@ -1,16 +1,18 @@
 ---
 title: "CLI contract"
-description: "The I/O conventions every gtm command follows: JSON on stdout, errors on stderr, preview-by-default mutations, remote execution on Modal, and the --json override."
+description: "The I/O conventions for structured gtm commands: JSON on stdout, errors on stderr, preview-by-default mutations, remote execution on Modal, and the --json override where supported."
 ---
 
-Every `gtm` command follows the same contract. Learn it once and every command group —
-`accounts`, `apollo`, `attio`, `exa`, `parallel`, and the rest — behaves predictably,
-whether a person or an agent is driving.
+Structured `gtm` commands follow the contract below. The generated command reference is
+the source of truth for which options each command supports: if a command's option table
+lists `--json`, it accepts the payload override; if it does not, drive it with the listed
+flags. Local utilities and file workflows document their own output behavior in their
+help text and reference page.
 
 ## JSON on stdout, everything else on stderr
 
-Success output is JSON printed to stdout. Progress, warnings, and errors go to stderr.
-That makes every command safe to pipe:
+For structured commands, success output is JSON printed to stdout. Progress, warnings,
+and errors go to stderr. That makes those commands safe to pipe:
 
 ```bash
 uv run gtm attio people search --email-domain "acme.com" | jq '.[].email'
@@ -72,16 +74,16 @@ no deployment at all.
 
 ## The `--json` override
 
-Every command that builds a request from flags also accepts `--json` with a complete
-payload, which overrides the flags. Useful when an agent already holds a structured
-request:
+Commands whose help lists `--json` accept a complete payload, which overrides the
+individual flags. Useful when an agent already holds a structured request:
 
 ```bash
 uv run gtm exa search --json '{"query": "developer-first CRM tools", "num_results": 5}'
 ```
 
 Payloads are validated against the same Pydantic models the SDK uses; validation
-failures print the model error to stderr and exit `1`.
+failures print the model error to stderr and exit `1`. Commands without `--json` in
+their option table do not accept this override.
 
 ## API-key override flags
 

@@ -80,6 +80,22 @@ def _default_repr(param: click.Parameter) -> str:
     return f"`{param.default}`"
 
 
+def _has_option(cmd: click.Command, option: str) -> bool:
+    return any(
+        option in param.opts
+        for param in cmd.params
+        if isinstance(param, click.Option)
+    )
+
+
+def _has_api_key_override(cmd: click.Command) -> bool:
+    return any(
+        any(opt.endswith("-api-key") for opt in param.opts)
+        for param in cmd.params
+        if isinstance(param, click.Option)
+    )
+
+
 def _command_section(path: list[str], cmd: click.Command) -> str:
     full = " ".join(["gtm", *path])
     lines: list[str] = [f"### `{full}`", ""]
@@ -159,6 +175,58 @@ def _child_groups(group: click.Group) -> list[tuple[str, click.Group]]:
     ]
 
 
+def _all_leaf_commands(group: click.Group) -> list[click.Command]:
+    leaves: list[click.Command] = []
+    for cmd in group.commands.values():
+        if isinstance(cmd, click.Group):
+            leaves.extend(_all_leaf_commands(cmd))
+        else:
+            leaves.append(cmd)
+    return leaves
+
+
+def _conventions_section(group: click.Group) -> list[str]:
+    leaves = _all_leaf_commands(group)
+    if not leaves:
+        return []
+
+    lines = [
+        "Use the command sections below as the source of truth for supported"
+        " options. Shared conventions apply only where the command exposes the"
+        " matching option:",
+        "",
+    ]
+
+    bullets: list[str] = []
+    if any(_has_option(cmd, "--json") for cmd in leaves):
+        bullets.append(
+            "Commands whose option table includes `--json` accept a complete"
+            " JSON payload override; commands without that option do not.",
+        )
+    if any(_has_option(cmd, "--apply") for cmd in leaves):
+        bullets.append(
+            "Commands with `--apply` preview by default and write only when"
+            " that flag is present. See the"
+            " [CLI contract](/concepts/cli-contract).",
+        )
+    if any(_has_api_key_override(cmd) for cmd in leaves):
+        bullets.append(
+            "Provider API-key override flags resolve as described in"
+            " [Secrets and API keys](/secrets).",
+        )
+
+    if not bullets:
+        return [
+            "Use the command sections below as the source of truth for supported"
+            " options and output behavior.",
+            "",
+        ]
+
+    lines.extend(f"- {bullet}" for bullet in bullets)
+    lines.append("")
+    return lines
+
+
 def _subapp_page(name: str, group: click.Group) -> str:
     summary = (group.help or group.short_help or "").strip().rstrip(".")
     description = f"Command reference for gtm {name}"
@@ -178,15 +246,7 @@ def _subapp_page(name: str, group: click.Group) -> str:
 
     if summary:
         parts.extend([f"{_mdx_escape(summary)}.", ""])
-    parts.extend(
-        [
-            "Every command follows the [CLI contract](/concepts/cli-contract):"
-            " JSON on stdout, errors on stderr, mutations gated behind an"
-            " explicit flag. Keys resolve as described in"
-            " [Secrets and API keys](/secrets).",
-            "",
-        ],
-    )
+    parts.extend(_conventions_section(group))
 
     snippet = SNIPPETS_DIR / f"{name}-examples.mdx"
     if snippet.exists():

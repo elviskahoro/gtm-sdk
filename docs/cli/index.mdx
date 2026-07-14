@@ -35,17 +35,21 @@ Two root-level commands exist outside the groups: `gtm hello` (smoke test) and
 
 ## Shared conventions
 
-Every command follows the [CLI contract](/concepts/cli-contract):
+The generated command reference is the source of truth for each command's options and
+output behavior. The [CLI contract](/concepts/cli-contract) applies where the command
+surface supports it:
 
-- Success data is **JSON on stdout**; errors and logs go to stderr.
-- Mutations **preview by default** — `--apply` (or `--modal-sync` on Attio people
-  commands) is required to write.
+- Structured commands print success data as **JSON on stdout**; errors and logs go to
+  stderr.
+- Commands whose option table includes `--json` accept a full payload that overrides
+  individual flags; commands without that option do not.
+- Mutations **preview by default** when the command exposes `--apply` (or
+  `--modal-sync` on Attio people commands).
 - Provider-backed commands **execute on your deployed Modal app**; local-only
   commands (`version`, `gmail url decode`, `granola export`, `sanity blog download`,
   `webhook list`) need no deployment.
-- Every command accepts `--json` with a full payload that overrides individual flags.
 - Keys resolve per [Secrets and API keys](/secrets), with per-invocation
-  `--<service>-api-key` overrides.
+  `--<service>-api-key` overrides where listed.
 
 <Note>
   The per-group reference pages are generated from the CLI's own `--help` text by

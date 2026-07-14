@@ -23,7 +23,8 @@ Perplexity, or connect the MCP server to Cursor and VS Code.
 
 The four facts an agent needs before running commands:
 
-1. **Success data is JSON on stdout; errors and logs go to stderr.** Parse stdout only.
+1. **Structured success data is JSON on stdout; errors and logs go to stderr.** Parse
+   stdout only for commands whose reference documents structured output.
 2. **Mutating commands preview by default.** Nothing writes until you add the explicit
    flag (`--apply` on batch and company commands; `--modal-sync` governs Attio people
    mutations). Copy-pasting an example never mutates state.
@@ -32,8 +33,8 @@ The four facts an agent needs before running commands:
 4. **Exit codes**: `0` success, `1` runtime error (message on stderr, prefixed
    `Error:`), `2` usage error.
 
-The full contract, including the `--json` payload override every command accepts, is on
-the [CLI contract](/concepts/cli-contract) page.
+The full contract, including the `--json` payload override for commands that list it, is
+on the [CLI contract](/concepts/cli-contract) page.
 
 ## Fetching source directly
 

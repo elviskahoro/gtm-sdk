@@ -68,8 +68,8 @@ uv run gtm --help                # list command groups
 uv run gtm <group> --help        # list commands in a group
 ```
 
-Contract: success data is JSON on stdout, errors/logs on stderr; mutating commands preview by
-default and require an explicit flag to execute.
+Contract: structured success data is JSON on stdout, errors/logs on stderr; mutating
+commands preview by default when they expose an execution flag.
 
 CLI helpers: `cli/json_encoder.py`, `cli/json_validation.py`. CLI emits OTEL events (`cli.usage_error` on exit code 2).
 
