@@ -1,0 +1,49 @@
+---
+title: "This week in gtm-sdk (week of July 13, 2026)"
+description: "Launch week recap: the gtm CLI, Attio sync, meeting and mention pipelines, web research, Modal deploy, OpenTelemetry — plus a same-week reliability pass."
+---
+
+A quick weekly recap of what shipped. For the full notes, see the daily entries linked below.
+
+## New features
+
+**gtm-sdk goes public**
+The first public release of `gtm-sdk` — a layered Go-To-Market toolkit with a `gtm` CLI for account research, enrichment, and CRM operations. See the [quickstart](/quickstart) to get running.
+
+**Attio CRM sync**
+Read and write companies, people, notes, meetings, and mentions in Attio, with idempotent upserts and preflight checks against your workspace schema.
+
+**Meeting integrations**
+Backfill and sync meetings from Cal.com, Fathom, Fireflies, and Granola into Attio, reconciled across sources by a cross-provider meeting ID.
+
+**Web research and enrichment**
+Company and people signals via Exa and Parallel, publisher content via Sanity, and lookup/enrichment adapters for Apollo and Harvest.
+
+**Visitor and mention pipelines**
+Webhook handlers for RB2B website visits and Octolens social mentions, with normalization and Attio export.
+
+**Outbound**
+Transactional email via Resend and messaging to Slack channels or threads.
+
+**Serverless deploy on Modal**
+Orchestration and webhook handlers ship with a single `deploy.py` entrypoint on [Modal](https://modal.com/).
+
+**Telemetry out of the box**
+OpenTelemetry collector with drop-in setup guides for [Dash0](/telemetry/dash0-setup) and [Grafana Cloud](/telemetry/grafana-setup).
+
+**Secrets via Infisical**
+Inject credentials for every provider through a single Infisical token. See the [quickstart](/quickstart#inject-secrets-optional).
+
+## Updates
+
+- Automated dependency PRs now honor a cooldown window before adopting freshly published package versions.
+- Documentation site launched with an [introduction](/), [quickstart](/quickstart), and telemetry provider guides.
+
+## Bug fixes
+
+- The Attio sync now gates writes on both archival state *and* attribute type when checking select-attribute writability, preventing invalid upserts against non-select attributes.
+
+## Full notes
+
+- [Launch week — gtm-sdk goes public (July 13)](/changelog/2026-07-13)
+- [Stability and reliability polish (July 14)](/changelog/2026-07-14)

@@ -48,6 +48,7 @@
           {
             "group": "Changelog",
             "pages": [
+              "changelog/2026-week-of-07-13",
               "changelog/2026-07-14",
               "changelog/2026-07-13"
             ]
