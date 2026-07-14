@@ -1,0 +1,18 @@
+---
+title: "Exa research upgrade (July 14, 2026)"
+description: "Web research now runs on Exa 2.16, adding Exa Connect data sources and a create-and-wait helper for agent workflows."
+---
+
+A small mid-week bump that expands what the [Exa web research](/quickstart) integration can do.
+
+## Updates
+
+**Exa client upgraded to 2.16**
+The Exa integration now runs on `exa-py` 2.16.0, picking up two agent-facing improvements from the 2.14–2.16 line:
+
+- **Exa Connect data sources** — agent runs can now target additional first-party data sources exposed by Exa, broadening the surface for account and people research.
+- **`create_and_wait` helper** — a single call that submits an agent run and blocks until it completes, so scripted research flows no longer have to poll manually.
+
+- **Deprecation notice** — the `start_crawl_date` and `end_crawl_date` parameters are now marked deprecated upstream. If you pass them from your own scripts, plan to migrate; the [Exa](/quickstart) commands in `gtm` continue to work unchanged.
+
+No configuration changes are required. Existing `gtm` commands that call Exa will pick up the new client automatically the next time you install.

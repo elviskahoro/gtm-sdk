@@ -28,6 +28,7 @@
       {
         "group": "Changelog",
         "pages": [
+          "changelog/2026-07-14-exa",
           "changelog/2026-07-14",
           "changelog/2026-07-13"
         ]
