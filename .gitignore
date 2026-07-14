@@ -60,6 +60,12 @@ webhooks/registry.yaml
 scripts/lib/__pycache__/
 scripts/lib/**/*.pyc
 
-
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+
+# Gas Town (added by gt)
+.runtime/
+.logs/
+state.json
+CLAUDE.md
+CLAUDE.local.md
