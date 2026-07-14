@@ -82,9 +82,7 @@ def _default_repr(param: click.Parameter) -> str:
 
 def _has_option(cmd: click.Command, option: str) -> bool:
     return any(
-        option in param.opts
-        for param in cmd.params
-        if isinstance(param, click.Option)
+        option in param.opts for param in cmd.params if isinstance(param, click.Option)
     )
 
 
