@@ -37,8 +37,8 @@ Authorization: Basic base64("<instance_id>:<token>")
 
 You do **not** encode this yourself. Set the two raw values as Infisical secrets and
 the collector derives the base64 credential (`GRAFANA_OTLP_AUTH`) **at deploy time**
-(see `_grafana_basic_auth` / `_collector_secret_payload` in `src/otel_collector.py`),
-so the raw `glc_` token never reaches the collector container or the rendered config.
+(see `_grafana_basic_auth` / `_collector_secret_payload` in `src/otel_collector.py`).
+The raw `glc_` token never reaches the collector container or the rendered config.
 
 ## Set up secrets in Infisical
 
