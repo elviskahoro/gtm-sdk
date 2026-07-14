@@ -1,6 +1,6 @@
 ---
 title: "Telemetry architecture"
-description: "Architecture of the gtm-sdk OpenTelemetry pipeline: default collector fan-out over Modal RPC to Dash0, HyperDX, Logfire, and Grafana, plus the direct single-sink fallback."
+description: "How the gtm-sdk OpenTelemetry pipeline fans traces and logs out over Modal RPC to Dash0, HyperDX, Logfire, and Grafana, with a direct single-sink fallback."
 ---
 
 The SDK emits traces and logs through `libs/telemetry.py` in one of two modes: **collector fan-out** (the default) or a **direct single-sink** fallback. This page explains both modes, how to deploy the collector, and which environment variables belong where.
