@@ -6,7 +6,12 @@ set -e
 
 SETUP_LOG="$HOME/.conductor-setup.log"
 : > "$SETUP_LOG"
-exec > >(tee -a "$SETUP_LOG") 2>&1
+# Plain append redirect, not `exec > >(tee ...)`: some Conductor sandboxes have
+# no /dev/fd, which makes bash's process-substitution fd unopenable and (with
+# `set -e`) silently kills the whole script on this very line before anything
+# else runs. This trades away live terminal echo for output only landing in
+# the log file, which is fine since the log is the thing we audit.
+exec >> "$SETUP_LOG" 2>&1
 echo "=== setup started $(date -u +%FT%TZ) ==="
 
 PARENT_REPO="$(dirname "$(git rev-parse --git-common-dir)")/.."
