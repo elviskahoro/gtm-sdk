@@ -1,0 +1,21 @@
+---
+title: "This week in gtm-sdk (week of July 13, 2026)"
+description: "Launch week recap: gtm-sdk shipped its first public release and a same-day reliability pass."
+---
+
+A quick recap of everything that landed this week.
+
+## New features
+
+**gtm-sdk 1.0 is public**
+The first public release shipped Monday: the `gtm` CLI, account research and enrichment, [Attio CRM sync](/quickstart), meeting backfill from Cal.com / Fathom / Fireflies / Granola, web research via Exa and Parallel, Apollo and Harvest lookups, RB2B and Octolens pipelines, Resend and Slack outbound, Modal deployment, and OpenTelemetry with [Dash0](/telemetry/dash0-setup) and [Grafana Cloud](/telemetry/grafana-setup) setup guides. Full list in the [launch notes](/changelog/2026-07-13).
+
+## Updates
+
+**Safer automated dependency updates**
+Dependency PRs now sit through a cooldown window before adopting freshly published package versions, reducing exposure to compromised or yanked releases.
+
+## Bug fixes
+
+**Attio select-attribute writability**
+Attio upserts now gate writes on both archival state *and* attribute type when deciding whether a select attribute is writable. Writes that previously slipped through against non-select attributes are rejected cleanly. Details in the [July 14 notes](/changelog/2026-07-14).
