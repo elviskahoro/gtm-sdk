@@ -1,0 +1,26 @@
+Search people by any combination of criteria (name, email, domain, phone, company):
+
+```bash
+uv run gtm attio people search --email-domain "acme.dev" --limit 10
+```
+
+```bash
+# Browse recent records without a filter.
+uv run gtm attio people search --sample
+```
+
+Add or update a person — people mutations run a Modal deployment-parity preflight,
+governed by `--modal-sync check|deploy|skip`:
+
+```bash
+uv run gtm attio people add "jane@acme.dev" \
+  --first-name "Jane" \
+  --last-name "Doe" \
+  --company "acme.dev"
+```
+
+Company mutations preview by default and write only with `--apply`:
+
+```bash
+uv run gtm attio companies add --domain "acme.dev" --name "Acme Corp" --apply
+```

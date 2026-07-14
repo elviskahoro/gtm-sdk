@@ -44,7 +44,11 @@ def batch_add_people_command(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Batch add people with explicit preview/apply behavior."""
     if json_input:
@@ -104,7 +108,11 @@ def batch_add_companies_command(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Batch add companies with explicit preview/apply behavior."""
     if json_input:

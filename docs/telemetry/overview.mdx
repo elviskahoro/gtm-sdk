@@ -1,0 +1,108 @@
+---
+title: "Telemetry architecture"
+description: "Architecture of the gtm-sdk OpenTelemetry pipeline: default collector fan-out over Modal RPC to Dash0, HyperDX, Logfire, and Grafana, plus the direct single-sink fallback."
+---
+
+The SDK emits traces and logs through `libs/telemetry.py` in one of two modes: **collector fan-out** (the default) or a **direct single-sink** fallback. This page explains both modes, how to deploy the collector, and which environment variables belong where.
+
+## Design goals
+
+Telemetry is never load-bearing. Every export path is fire-and-forget, exporter failures degrade to no-ops, and instrumenting a hot path can never fail it:
+
+- If neither mode is configured, `init_tracer` and `init_log_exporter` return `None` and every span or event call is a no-op.
+- If the `opentelemetry-*` packages are missing from an image, initialization prints one stderr line and degrades instead of crashing the container.
+- The collector's queue is in-memory, not volume-backed. A container recycle can drop an unflushed batch — that loss is acceptable by design.
+
+## Collector fan-out (default)
+
+By default, applications never talk to a telemetry provider directly. A custom OTEL exporter in `libs/telemetry.py` serializes each batch to OTLP protobuf and fire-and-forget `.spawn()`s the collector Modal function (`src/otel_collector.py`) over Modal RPC. There is no public endpoint anywhere in this path.
+
+```text
+app / webhook / CLI ──.spawn(signal, otlp_bytes)──▶ fan_out (Modal function)
+  (custom OTEL exporter serializes each batch)         │ POST 127.0.0.1:4318/v1/{signal}
+                                                       ▼
+                                                otelcol (localhost sidecar in the
+                                                same always-warm container)
+                                                  batch + retry + sending queue
+                                                       ├─▶ Dash0
+                                                       ├─▶ HyperDX
+                                                       ├─▶ Logfire
+                                                       └─▶ Grafana
+```
+
+The `fan_out` function feeds each batch to a real OpenTelemetry Collector (`otelcol`) running as a localhost sidecar in the same container. The container is pinned always-warm and singular (`min_containers=1`, `max_containers=1`), so the sidecar's in-memory queue is a single shared buffer. The sidecar fans out to **all** configured providers — Dash0, HyperDX, Logfire, and Grafana — with real batching, retry, and queueing handled by `otelcol` rather than hand-rolled Python.
+
+Two properties make this the default:
+
+- **Provider credentials live only on the collector.** Application containers hold no provider tokens; they only need permission to spawn the collector function.
+- **No inbound attack surface.** The sidecar's OTLP receiver binds `127.0.0.1`, so it is reachable from `fan_out` in the same container but never from outside. Ingress is Modal's authenticated RPC.
+
+The collector app name is hard-coded as `DEFAULT_COLLECTOR_APP = "otel-collector"` in `libs/telemetry.py`, so collector mode works with zero producer-side configuration. Override the app with `TELEMETRY_COLLECTOR_APP=<COLLECTOR_APP_NAME>` (for example, a dev collector) and the function name with `TELEMETRY_COLLECTOR_FUNCTION` (defaults to `fan_out`).
+
+## Direct single-sink (fallback)
+
+Set `TELEMETRY_COLLECTOR_APP=""` (explicit empty string) to opt out of collector mode. The producer then exports to a single OTLP HTTP sink resolved from `HYPERDX_API_KEY`, `HYPERDX_OTLP_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`. If none of those are set either, telemetry is a clean no-op. This path is intended for local development and tests.
+
+<Warning>
+The direct path has **no Logfire exporter**. Logfire is reachable only through the collector, so an app running in direct mode silently sends nothing to Logfire — no error, no log line. If Logfire is missing data, first confirm the producer is actually in collector mode (that is, `TELEMETRY_COLLECTOR_APP` is unset or non-empty).
+</Warning>
+
+## Deploying the collector
+
+The collector is a **standalone Modal app** — it has its own `modal.App` and is deliberately not registered in `src/app.py`, and it exposes no web endpoint. Deploy it on its own, wrapped in Infisical so the provider credentials are present in the deploy-time environment:
+
+```bash
+set -a && source .env.local && set +a
+infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
+  --env=prod -- uv run modal deploy src/otel_collector.py
+```
+
+At deploy time, the provider credentials found in the host environment are baked into the collector's own inline Modal secret. At runtime, they select which exporters the sidecar configures — a collector deployed with no provider credentials degrades to a clean no-op rather than a boot loop.
+
+<Note>
+Grafana is special-cased: the raw `GRAFANA_INSTANCE_ID` and `GRAFANA_API_KEY` are deploy-time-only inputs. The deploy derives a pre-encoded Basic credential (`GRAFANA_OTLP_AUTH`) from them, so the raw token never reaches the collector container. See the Grafana guide linked below.
+</Note>
+
+## Environment variables
+
+Producer-side variables configure applications, webhooks, and the CLI — the processes that emit telemetry:
+
+| Variable | Purpose |
+| --- | --- |
+| `TELEMETRY_COLLECTOR_APP` | Collector Modal app name. Unset → hard-coded default `otel-collector`. Empty string `""` → direct single-sink fallback. |
+| `TELEMETRY_COLLECTOR_FUNCTION` | Function name within the collector app. Defaults to `fan_out`. |
+| `HYPERDX_API_KEY` | Direct mode only: HyperDX Bearer token. |
+| `HYPERDX_OTLP_ENDPOINT` | Direct mode only: HyperDX OTLP endpoint override. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Direct mode only: generic OTLP base endpoint. |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Direct mode only: per-signal logs URL (takes precedence over the base endpoint). |
+| `OTEL_EXPORTER_OTLP_HEADERS` / `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | Direct mode only: custom auth headers for non-HyperDX sinks, read by the OTEL SDK per spec. |
+
+Collector-side provider credentials live only in the collector's secret (names from `_PROVIDER_SECRET_KEYS` in `src/otel_collector.py`):
+
+| Variable | Purpose |
+| --- | --- |
+| `DASH0_AUTH_TOKEN` | Dash0 Bearer token. |
+| `DASH0_OTLP_ENDPOINT` | Dash0 regional ingest endpoint. Required alongside the token. |
+| `DASH0_DATASET` | Dash0 dataset header. Defaults to `default`. |
+| `HYPERDX_API_KEY` | HyperDX Bearer token. |
+| `HYPERDX_OTLP_ENDPOINT` | HyperDX endpoint override. Defaults to the public HyperDX ingest host. |
+| `LOGFIRE_WRITE_TOKEN` | Logfire write token. |
+| `LOGFIRE_OTLP_ENDPOINT` | Logfire endpoint override. Defaults to the public Logfire host. |
+| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP gateway URL (region-scoped, non-secret override). |
+| `GRAFANA_OTLP_AUTH` | Derived at deploy time: `base64("<instance_id>:<token>")` for HTTP Basic auth. Not set by hand. |
+| `GRAFANA_INSTANCE_ID` / `GRAFANA_API_KEY` | Deploy-time-only raw inputs used to derive `GRAFANA_OTLP_AUTH`. Never shipped to the container. |
+
+## Provider setup guides
+
+<Columns cols={2}>
+  <Card title="Dash0 setup" href="/telemetry/dash0-setup">
+    Regional endpoints, Infisical secrets, and dataset configuration for Dash0.
+  </Card>
+  <Card title="Grafana Cloud setup" href="/telemetry/grafana-setup">
+    Region-scoped OTLP gateway and Basic-auth credential derivation for Grafana Cloud.
+  </Card>
+</Columns>
+
+## Verifying
+
+Two scripts check the pipeline end to end: `scripts/collector-deployment-verify.py` confirms the collector app is deployed and reports which provider exporters its configuration includes, and `scripts/dash0-telemetry-verify.py` emits real logs, traces, and span events so you can confirm they arrive in Dash0. Run both under `infisical run` so the provider credentials they inspect are present in the environment.
