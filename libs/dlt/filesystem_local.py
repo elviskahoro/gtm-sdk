@@ -1,15 +1,20 @@
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
-from libs.filesystem.files import DestinationFileData
+from libs.dlt.filesystem_types import WritableFile
 
 if TYPE_CHECKING:
     import unittest.mock
 
 
+class _TestWritableFile(NamedTuple):
+    string: str
+    path: str
+
+
 def to_filesystem_local(
-    destination_file_data: Iterator[DestinationFileData],
+    destination_file_data: Iterator[WritableFile],
 ) -> None:
     for file_data in destination_file_data:
         file_path: Path = Path(file_data.path)
@@ -94,20 +99,20 @@ def hello_world():
         }
 
     @staticmethod
-    def create_destination_file_data() -> DestinationFileData:
+    def create_destination_file_data() -> _TestWritableFile:
         import json
 
-        return DestinationFileData(
+        return _TestWritableFile(
             string=json.dumps(TestContentGenerator.generate_json_data(), indent=2),
             path="test_bucket/test_folder/test_file_2024_01_15.json",
         )
 
     @staticmethod
-    def create_destination_file_data_multiple() -> Iterator[DestinationFileData]:
+    def create_destination_file_data_multiple() -> Iterator[_TestWritableFile]:
         import json
         from typing import Any
 
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=json.dumps(TestContentGenerator.generate_json01_data(), indent=2),
             path="gs://test-bucket/events/login_events_2024_01_15.json",
         )
@@ -117,36 +122,36 @@ def hello_world():
             "config_version": "2.0",
             "settings": {"debug": False, "timeout": 300, "retries": 3},
         }
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=json.dumps(json_data2, indent=2),
             path="configs/app_config_v2.json",
         )
 
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=TestContentGenerator.generate_md_data(),
             path="docs/test_readme.md",
         )
 
         # CSV file
 
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=TestContentGenerator.generate_csv_data(),
             path="gs://test-bucket/analytics/user_events_2024_01_15.csv",
         )
 
         # XML file
 
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=TestContentGenerator.generate_xml_data(),
             path="data/products_catalog.xml",
         )
 
     @staticmethod
-    def create_destination_file_data_empty() -> Iterator[DestinationFileData]:
+    def create_destination_file_data_empty() -> Iterator[_TestWritableFile]:
         return iter([])
 
     @staticmethod
-    def create_destination_file_data_large_content() -> DestinationFileData:
+    def create_destination_file_data_large_content() -> _TestWritableFile:
         import json
         from typing import Any
 
@@ -169,68 +174,68 @@ def hello_world():
             record["id"] = i
             large_array.append(record)
 
-        return DestinationFileData(
+        return _TestWritableFile(
             string=json.dumps(large_array, indent=2),
             path="large_files/big_data_export_2024_01_15.json",
         )
 
     @staticmethod
-    def create_destination_file_data_special_paths() -> Iterator[DestinationFileData]:
+    def create_destination_file_data_special_paths() -> Iterator[_TestWritableFile]:
         # Path with spaces
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "Path with spaces"}',
             path="test folder/sub folder/file with spaces.json",
         )
 
         # Path with unicode characters
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "Unicode path"}',
             path="测试/文件名/数据.json",
         )
 
         # Path with special characters
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "Special chars"}',
             path="data@2024/test#1/file[v1].json",
         )
 
         # Deeply nested path
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "Deep nesting"}',
             path="level1/level2/level3/level4/level5/level6/level7/level8/deep_file.json",
         )
 
         # Path with dots and dashes
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "Dots and dashes"}',
             path="data-2024.01.15/test-file.v2.backup.json",
         )
 
     @staticmethod
-    def create_destination_file_data_with_errors() -> Iterator[DestinationFileData]:
+    def create_destination_file_data_with_errors() -> Iterator[_TestWritableFile]:
         # Invalid JSON content
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"invalid": "json", missing_quote: "value"}',
             path="errors/invalid_json.json",
         )
 
         # Binary-like content
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string="\x00\x01\x02\x03\x04\x05Binary content\xff\xfe\xfd",
             path="errors/binary_data.bin",
         )
 
         # Empty string content
-        yield DestinationFileData(string="", path="errors/empty_file.txt")
+        yield _TestWritableFile(string="", path="errors/empty_file.txt")
 
         # Very long filename
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "long filename"}',
             path="errors/" + "a" * 200 + ".json",
         )
 
         # Path traversal attempt
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string='{"test": "path traversal"}',
             path="../../../etc/passwd",
         )
@@ -239,11 +244,11 @@ def hello_world():
 def test_single_file_write(tmp_path: Path) -> None:
     """Test writing a single file using the helper function."""
     # Get test data from helper function
-    destination_file_data: DestinationFileData = (
+    destination_file_data: _TestWritableFile = (
         TestContentGenerator.create_destination_file_data()
     )
     # Update the path in the fixture data to use tmp_path
-    file_data: DestinationFileData = DestinationFileData(
+    file_data: _TestWritableFile = _TestWritableFile(
         string=destination_file_data.string,
         path=str(tmp_path / "test_file.json"),
     )
@@ -260,14 +265,14 @@ def test_single_file_write(tmp_path: Path) -> None:
 def test_multiple_files_write(tmp_path: Path) -> None:
     """Test writing multiple files using the iterator helper function."""
     # Get test data from helper function
-    destination_file_data_multiple: Iterator[DestinationFileData] = (
+    destination_file_data_multiple: Iterator[_TestWritableFile] = (
         TestContentGenerator.create_destination_file_data_multiple()
     )
     # Update paths to use tmp_path
-    updated_data: list[DestinationFileData] = []
+    updated_data: list[_TestWritableFile] = []
     for idx, data in enumerate(destination_file_data_multiple):
         updated_data.append(
-            DestinationFileData(
+            _TestWritableFile(
                 string=data.string,
                 path=str(tmp_path / f"file_{idx}.txt"),
             ),
@@ -286,7 +291,7 @@ def test_multiple_files_write(tmp_path: Path) -> None:
 def test_empty_iterator() -> None:
     """Test handling of empty iterator."""
     # Get empty iterator from helper function
-    destination_file_data_empty: Iterator[DestinationFileData] = (
+    destination_file_data_empty: Iterator[_TestWritableFile] = (
         TestContentGenerator.create_destination_file_data_empty()
     )
     # Should complete without errors
@@ -296,11 +301,11 @@ def test_empty_iterator() -> None:
 def test_large_content_write(tmp_path: Path) -> None:
     """Test writing large content files."""
     # Get large content from helper function
-    destination_file_data_large_content: DestinationFileData = (
+    destination_file_data_large_content: _TestWritableFile = (
         TestContentGenerator.create_destination_file_data_large_content()
     )
     # Update path to use tmp_path
-    file_data: DestinationFileData = DestinationFileData(
+    file_data: _TestWritableFile = _TestWritableFile(
         string=destination_file_data_large_content.string,
         path=str(tmp_path / "large_file.json"),
     )
@@ -317,18 +322,18 @@ def test_large_content_write(tmp_path: Path) -> None:
 def test_special_paths(tmp_path: Path) -> None:
     """Test handling of special characters in paths."""
     # Get special paths data from helper function
-    destination_file_data_special_paths: Iterator[DestinationFileData] = (
+    destination_file_data_special_paths: Iterator[_TestWritableFile] = (
         TestContentGenerator.create_destination_file_data_special_paths()
     )
     # Convert to list and update paths
-    special_data: list[DestinationFileData] = list(destination_file_data_special_paths)
+    special_data: list[_TestWritableFile] = list(destination_file_data_special_paths)
 
     for data in special_data:
         # Create safe path under tmp_path
         safe_path: Path = tmp_path / "special" / Path(data.path).name
         safe_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_data: DestinationFileData = DestinationFileData(
+        file_data: _TestWritableFile = _TestWritableFile(
             string=data.string,
             path=str(safe_path),
         )
@@ -342,10 +347,10 @@ def test_special_paths(tmp_path: Path) -> None:
 def test_with_error_data(tmp_path: Path) -> None:
     """Test handling files that might contain problematic content."""
     # Get error data from helper function
-    error_data_iter: Iterator[DestinationFileData] = (
+    error_data_iter: Iterator[_TestWritableFile] = (
         TestContentGenerator.create_destination_file_data_with_errors()
     )
-    error_data: list[DestinationFileData] = list(error_data_iter)
+    error_data: list[_TestWritableFile] = list(error_data_iter)
 
     # Test only the valid files (skip path traversal attempts)
     for data in error_data[:-1]:  # Skip the last one which is path traversal
@@ -353,7 +358,7 @@ def test_with_error_data(tmp_path: Path) -> None:
         safe_path: Path = tmp_path / "errors" / Path(data.path).name
         safe_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_data: DestinationFileData = DestinationFileData(
+        file_data: _TestWritableFile = _TestWritableFile(
             string=data.string,
             path=str(safe_path),
         )
@@ -371,7 +376,7 @@ def test_to_filesystem_local_single_file() -> None:
     # Create test data
     test_content: str = "This is test content for the file"
     test_path: str = "/path/to/test/file.txt"
-    file_data: DestinationFileData = DestinationFileData(
+    file_data: _TestWritableFile = _TestWritableFile(
         string=test_content,
         path=test_path,
     )
@@ -396,18 +401,18 @@ def test_to_filesystem_local_multiple_files() -> None:
     from typing import Any
     from unittest.mock import mock_open, patch
 
-    # Create iterator with 3-4 DestinationFileData instances
-    file_data_list: list[DestinationFileData] = [
-        DestinationFileData(string="Content for file 1", path="/path/to/file1.txt"),
-        DestinationFileData(
+    # Create iterator with 3-4 writable-file instances
+    file_data_list: list[_TestWritableFile] = [
+        _TestWritableFile(string="Content for file 1", path="/path/to/file1.txt"),
+        _TestWritableFile(
             string="Content for file 2",
             path="/path/to/file2.json",
         ),
-        DestinationFileData(
+        _TestWritableFile(
             string="Content for file 3",
             path="/path/to/subdir/file3.csv",
         ),
-        DestinationFileData(
+        _TestWritableFile(
             string="Content for file 4",
             path="/path/to/another/file4.xml",
         ),
@@ -487,25 +492,25 @@ def test_to_filesystem_local_with_nested_paths() -> None:
     from unittest.mock import mock_open, patch
 
     # Create test data with various levels of nested paths
-    nested_file_data: list[DestinationFileData] = [
-        DestinationFileData(
+    nested_file_data: list[_TestWritableFile] = [
+        _TestWritableFile(
             string="Root level file content",
             path="/root/file.txt",
         ),
-        DestinationFileData(string="One level deep", path="/root/level1/file.txt"),
-        DestinationFileData(
+        _TestWritableFile(string="One level deep", path="/root/level1/file.txt"),
+        _TestWritableFile(
             string="Two levels deep",
             path="/root/level1/level2/file.txt",
         ),
-        DestinationFileData(
+        _TestWritableFile(
             string="Three levels deep",
             path="/root/level1/level2/level3/file.txt",
         ),
-        DestinationFileData(
+        _TestWritableFile(
             string="Different branch",
             path="/root/branch2/subbranch/file.txt",
         ),
-        DestinationFileData(
+        _TestWritableFile(
             string="Deeply nested path",
             path="/root/a/b/c/d/e/f/g/h/i/j/file.txt",
         ),
@@ -559,7 +564,7 @@ def test_to_filesystem_local_file_operations() -> None:
 
     test_content: str = "Test content for file operations verification"
     test_path: str = "/test/file/operations.txt"
-    file_data: DestinationFileData = DestinationFileData(
+    file_data: _TestWritableFile = _TestWritableFile(
         string=test_content,
         path=test_path,
     )
@@ -630,7 +635,7 @@ def test_to_filesystem_local_exception_handling() -> None:
     ]
 
     for test_case in test_cases:
-        file_data: DestinationFileData = DestinationFileData(
+        file_data: _TestWritableFile = _TestWritableFile(
             string=str(test_case["content"]),
             path=str(test_case["path"]),
         )
@@ -660,7 +665,7 @@ def test_to_filesystem_local_file_handle_cleanup() -> None:
 
     test_content: str = "Content that will fail to write"
     test_path: str = "/test/cleanup/file.txt"
-    file_data: DestinationFileData = DestinationFileData(
+    file_data: _TestWritableFile = _TestWritableFile(
         string=test_content,
         path=test_path,
     )
@@ -699,11 +704,11 @@ def test_to_filesystem_local_partial_write_failure() -> None:
 
     import pytest
 
-    file_data_list: list[DestinationFileData] = [
-        DestinationFileData(string="Success 1", path="/path/file1.txt"),
-        DestinationFileData(string="Success 2", path="/path/file2.txt"),
-        DestinationFileData(string="Will fail", path="/path/file3.txt"),
-        DestinationFileData(string="Never reached", path="/path/file4.txt"),
+    file_data_list: list[_TestWritableFile] = [
+        _TestWritableFile(string="Success 1", path="/path/file1.txt"),
+        _TestWritableFile(string="Success 2", path="/path/file2.txt"),
+        _TestWritableFile(string="Will fail", path="/path/file3.txt"),
+        _TestWritableFile(string="Never reached", path="/path/file4.txt"),
     ]
 
     # Counter to track number of open calls

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from libs.attio.errors import (
     ConflictError,
+    DeploymentMismatchError,
     SchemaMismatchError,
     classify_error,
     translate_modal_signature_error,
@@ -232,5 +233,27 @@ def test_classify_error_maps_modal_signature_mismatch_code() -> None:
     err = TypeError(
         "attio_upsert_person() got an unexpected keyword argument 'additional_emails'",
     )
-    mapped = classify_error(translate_modal_signature_error(err))
+    translated = translate_modal_signature_error(err)
+    assert isinstance(translated, DeploymentMismatchError)
+
+    mapped = classify_error(translated)
     assert mapped.code == "modal_signature_mismatch"
+    assert "deploy.py" in mapped.message
+    assert "uv run modal deploy deploy.py" in mapped.message
+
+
+def test_attio_errors_import_without_orchestration_modules() -> None:
+    """Adapters must be importable without loading the orchestration package."""
+
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import libs.attio.errors; import sys; "
+            "assert 'src.modal_app' not in sys.modules",
+        ],
+        check=True,
+    )

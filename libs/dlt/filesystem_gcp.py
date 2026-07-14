@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import gcsfs
 
+from libs.dlt.filesystem_types import WritableFile
 from libs.dlt.filesystem_local import to_filesystem_local
-from libs.filesystem.files import DestinationFileData
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -110,6 +110,11 @@ class GCPCredentials(NamedTuple):
         }
 
 
+class _TestWritableFile(NamedTuple):
+    string: str
+    path: str
+
+
 class CloudGoogle:
     """Helper class for Google Cloud Platform operations."""
 
@@ -160,7 +165,7 @@ class CloudGoogle:
 
     @staticmethod
     def to_filesystem(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
         bucket_url: str | None,
     ) -> str:
         """Export data to filesystem (GCS or local).
@@ -199,7 +204,7 @@ class CloudGoogle:
 
     @staticmethod
     def to_filesystem_gcs(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
     ) -> None:
         """Export data specifically to Google Cloud Storage.
 
@@ -238,7 +243,7 @@ class CloudGoogle:
 
     @staticmethod
     def export_to_filesystem(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
         bucket_url: str,
     ) -> str:
         """Export data to filesystem (GCS or local).
@@ -257,7 +262,7 @@ class CloudGoogle:
 
     @staticmethod
     def export_to_gcs(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
     ) -> None:
         """Export data specifically to Google Cloud Storage.
 
@@ -375,8 +380,8 @@ def test_to_filesystem_with_gcs_url() -> None:
         # Mock to_filesystem_gcs to avoid credential check
         mock_to_gcs.return_value = None
 
-        file_data: list[DestinationFileData] = [
-            DestinationFileData(string="test", path="test.json"),
+        file_data: list[_TestWritableFile] = [
+            _TestWritableFile(string="test", path="test.json"),
         ]
         result: str = CloudGoogle.to_filesystem(iter(file_data), "gs://my-bucket")
 
@@ -389,11 +394,11 @@ def test_to_filesystem_with_local_path() -> None:
     import tempfile
 
     # Create a list to hold the data passed to to_filesystem_local
-    captured_data: list[DestinationFileData] = []
+    captured_data: list[_TestWritableFile] = []
 
     def mock_to_filesystem_local(
         *,
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[_TestWritableFile],
     ) -> None:
         # Consume the iterator to capture the data
         captured_data.extend(list(destination_file_data))
@@ -409,8 +414,8 @@ def test_to_filesystem_with_local_path() -> None:
             # Use temp directory path
             local_path: Path = Path(tmpdir) / "local" / "path"
 
-            file_data: list[DestinationFileData] = [
-                DestinationFileData(string="test", path="test.json"),
+            file_data: list[_TestWritableFile] = [
+                _TestWritableFile(string="test", path="test.json"),
             ]
             result: str = CloudGoogle.to_filesystem(iter(file_data), str(local_path))
 
@@ -432,8 +437,8 @@ def test_to_filesystem_with_invalid_url() -> None:
     """Test to_filesystem raises ValueError for None bucket_url."""
     import pytest
 
-    file_data: list[DestinationFileData] = [
-        DestinationFileData(string="test", path="test.json"),
+    file_data: list[_TestWritableFile] = [
+        _TestWritableFile(string="test", path="test.json"),
     ]
     with pytest.raises(ValueError, match="Invalid bucket url: None"):
         CloudGoogle.to_filesystem(iter(file_data), None)  # type: ignore[arg-type]
@@ -462,12 +467,12 @@ def test_to_filesystem_gcs_success() -> None:
         mock_gcs_fs.return_value = mock_fs_instance
 
         # Create test data
-        file_data: list[DestinationFileData] = [
-            DestinationFileData(
+        file_data: list[_TestWritableFile] = [
+            _TestWritableFile(
                 string="test content 1",
                 path="gs://bucket/file1.json",
             ),
-            DestinationFileData(
+            _TestWritableFile(
                 string="test content 2",
                 path="gs://bucket/file2.json",
             ),
@@ -490,8 +495,8 @@ def test_to_filesystem_gcs_missing_credentials() -> None:
 
     import pytest
 
-    file_data: list[DestinationFileData] = [
-        DestinationFileData(string="test", path="test.json"),
+    file_data: list[_TestWritableFile] = [
+        _TestWritableFile(string="test", path="test.json"),
     ]
 
     with (
@@ -510,8 +515,8 @@ def test_to_filesystem_gcs_partial_credentials() -> None:
 
     import pytest
 
-    file_data: list[DestinationFileData] = [
-        DestinationFileData(string="test", path="test.json"),
+    file_data: list[_TestWritableFile] = [
+        _TestWritableFile(string="test", path="test.json"),
     ]
 
     with (
@@ -550,7 +555,7 @@ def test_to_filesystem_gcs_empty_iterator() -> None:
         mock_gcs_fs.return_value = mock_fs_instance
 
         # Empty iterator
-        file_data: list[DestinationFileData] = []
+        file_data: list[_TestWritableFile] = []
 
         # Should not raise any errors
         CloudGoogle.to_filesystem_gcs(iter(file_data))
@@ -584,8 +589,8 @@ def test_to_filesystem_gcs_write_error() -> None:
         mock_fs_instance.open.return_value.__enter__.return_value = mock_file
         mock_gcs_fs.return_value = mock_fs_instance
 
-        file_data: list[DestinationFileData] = [
-            DestinationFileData(string="test", path="gs://bucket/file.json"),
+        file_data: list[_TestWritableFile] = [
+            _TestWritableFile(string="test", path="gs://bucket/file.json"),
         ]
 
         with pytest.raises(OSError, match="Write failed"):
@@ -601,8 +606,8 @@ def test_export_to_filesystem() -> None:
         "to_filesystem",
         return_value="Success",
     ) as mock_to_fs:
-        file_data: list[DestinationFileData] = [
-            DestinationFileData(string="test", path="test.json"),
+        file_data: list[_TestWritableFile] = [
+            _TestWritableFile(string="test", path="test.json"),
         ]
         result: str = CloudGoogle.export_to_filesystem(iter(file_data), "gs://bucket")
 
@@ -615,8 +620,8 @@ def test_export_to_gcs() -> None:
     from unittest.mock import patch
 
     with patch.object(CloudGoogle, "to_filesystem_gcs") as mock_to_gcs:
-        file_data: list[DestinationFileData] = [
-            DestinationFileData(string="test", path="test.json"),
+        file_data: list[_TestWritableFile] = [
+            _TestWritableFile(string="test", path="test.json"),
         ]
         CloudGoogle.export_to_gcs(iter(file_data))
 
@@ -686,27 +691,27 @@ def test_to_filesystem_gcs_with_various_file_types() -> None:
     import json
     from unittest.mock import MagicMock, patch
 
-    def _create_test_destination_file_data() -> Iterator[DestinationFileData]:
-        """Helper function to create test DestinationFileData instances.
+    def _create_test_destination_file_data() -> Iterator[_TestWritableFile]:
+        """Helper function to create test writable-file instances.
 
         Yields various test cases including JSON, CSV, and text files.
         """
         # JSON file
         json_data: dict[str, str | int] = {"test": "data", "count": 42}
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=json.dumps(json_data),
             path="gs://test-bucket/data/test.json",
         )
 
         # CSV file
         csv_content: str = "name,age,city\nJohn,30,NYC\nJane,25,LA"
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string=csv_content,
             path="gs://test-bucket/data/users.csv",
         )
 
         # Text file
-        yield DestinationFileData(
+        yield _TestWritableFile(
             string="This is a test file content",
             path="gs://test-bucket/logs/test.log",
         )
@@ -741,11 +746,11 @@ def test_to_filesystem_creates_directory_for_local_path() -> None:
     import tempfile
 
     # Create a list to hold the data passed to to_filesystem_local
-    captured_data: list[DestinationFileData] = []
+    captured_data: list[_TestWritableFile] = []
 
     def mock_to_filesystem_local(
         *,
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[_TestWritableFile],
     ) -> None:
         # Consume the iterator to capture the data
         captured_data.extend(list(destination_file_data))
@@ -761,8 +766,8 @@ def test_to_filesystem_creates_directory_for_local_path() -> None:
             # Use temp directory path
             local_path: Path = Path(tmpdir) / "local" / "path" / "to" / "dir"
 
-            file_data: list[DestinationFileData] = [
-                DestinationFileData(string="test", path="test.json"),
+            file_data: list[_TestWritableFile] = [
+                _TestWritableFile(string="test", path="test.json"),
             ]
             CloudGoogle.to_filesystem(iter(file_data), str(local_path))
 

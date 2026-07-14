@@ -6,7 +6,6 @@ from pydantic import ValidationError as PydanticValidationError
 
 from libs.attio.contracts import ErrorEntry
 from libs.attio.sdk_boundary import describe_attio_error
-from src.modal_app import MODAL_APP
 
 
 class AttioError(Exception):
@@ -107,8 +106,8 @@ class ClassifiedError:
 def translate_modal_signature_error(error: Exception) -> Exception:
     if isinstance(error, TypeError) and "unexpected keyword argument" in str(error):
         return DeploymentMismatchError(
-            "Modal function signature mismatch. Deployed function is stale for current CLI payload. "
-            f"Redeploy with: modal app stop {MODAL_APP} && modal deploy deploy.py --name {MODAL_APP}",
+            "Modal function signature mismatch. Deployed function is stale for the current "
+            "CLI payload. Redeploy the configured app with `uv run modal deploy deploy.py`.",
         )
     return error
 
