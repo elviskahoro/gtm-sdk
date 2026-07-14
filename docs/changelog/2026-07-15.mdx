@@ -1,6 +1,6 @@
 ---
 title: "Refreshed integrations (week of July 14, 2026)"
-description: "Exa and AWS integrations upgraded to their latest client releases for improved reliability and access to newer upstream features."
+description: "The Exa and AWS integrations in gtm-sdk now run on the latest exa-py and boto3 client releases, picking up upstream fixes and new agent helpers."
 ---
 
 A quiet week focused on keeping third-party integrations current. No breaking changes — pull the latest gtm-sdk and you're set.
@@ -8,7 +8,7 @@ A quiet week focused on keeping third-party integrations current. No breaking ch
 ## Updates
 
 **Exa search and research on a newer client**
-The [Exa](/quickstart) integration now runs on the latest `exa-py` client, picking up upstream improvements to the agent surface (including the `create_and_wait` helper and Exa Connect data-source support) and clearer deprecation signals on legacy crawl-date parameters. Your existing `gtm exa …` commands continue to work unchanged.
+The [Exa](/quickstart) integration now runs on the latest `exa-py` client. You pick up upstream improvements to the agent surface — including the `create_and_wait` helper and Exa Connect data-source support — plus clearer deprecation signals on legacy crawl-date parameters. Your existing `gtm exa …` commands continue to work unchanged.
 
 **AWS integration bumped to the latest boto3 patch line**
-The boto3 dependency used by the S3-compatible filesystem and other AWS-facing paths has been rolled forward to the newest patch release, absorbing dozens of upstream service-model fixes since the initial launch. No configuration or code changes required.
+The latest boto3 patch release now backs the S3-compatible filesystem and other AWS-facing paths, absorbing dozens of upstream service-model fixes since the initial launch. No configuration or code changes required.
