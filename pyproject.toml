@@ -8,7 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "attio>=0.22.8",
-  "boto3>=1.42.95",
+  "boto3>=1.43.41",
   "dlt[duckdb,motherduck]>=1.0",
   # Imported directly by libs/motherduck (md: connections). Already transitive
   # via dlt[duckdb], but declared explicitly since we import the package.
