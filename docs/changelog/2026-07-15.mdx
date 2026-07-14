@@ -1,6 +1,6 @@
 ---
 title: "Integration client refresh (July 15, 2026)"
-description: "The Exa web research client picks up upstream agent-surface improvements. A routine AWS client patch bump also lands."
+description: "The Exa web research client picks up upstream agent-surface improvements and Exa Connect support, plus a routine AWS client patch bump."
 ---
 
 A light week focused on refreshing third-party integration clients.
@@ -11,4 +11,4 @@ A light week focused on refreshing third-party integration clients.
 The [Exa](/quickstart) web research integration now runs on `exa-py` 2.16, picking up upstream improvements to the agent surface — including the `create_and_wait` helper and Exa Connect data-source support — plus clearer deprecation signals on legacy crawl-date parameters. Your existing `gtm` commands continue to work unchanged.
 
 **Routine dependency refresh**
-The AWS client library (`boto3`) is bumped to the latest 1.43.x patch line to absorb upstream service-model fixes. No action required.
+The AWS client library (`boto3`) now tracks the latest 1.43.x patch line, absorbing upstream service-model fixes. No action required.
