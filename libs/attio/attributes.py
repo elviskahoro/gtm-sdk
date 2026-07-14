@@ -83,29 +83,6 @@ def list_attributes(
         return result
 
 
-def is_select_attribute_writable(
-    *,
-    target_object: str,
-    attribute_slug: str,
-) -> bool:
-    """Return whether ``attribute_slug`` on ``target_object`` accepts writes.
-
-    The options endpoint (:func:`list_select_options`) happily returns options
-    for an *archived* select attribute, so a label-diff against it gives false
-    confidence: every PATCH onto the archived slug 400s while the diff reports
-    "all labels are seeded options" (the ai-e6e / ai-3gx firmographic loss).
-
-    A select is writable only when it currently exists and is **not** archived.
-    Inspects the schema directly (``show_archived=True`` so an archived slug is
-    distinguishable from an absent one) rather than trusting the options call.
-    """
-    attrs = list_attributes(target_object, show_archived=True)
-    for attr in attrs:
-        if attr.api_slug == attribute_slug:
-            return not attr.is_archived
-    return False
-
-
 def list_select_options(*, target_object: str, attribute_slug: str) -> list[str]:
     """Return the option titles on a ``select`` attribute. Read-only."""
     with get_client() as client:

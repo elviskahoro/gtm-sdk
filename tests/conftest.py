@@ -18,7 +18,7 @@ from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _neuter_telemetry_network() -> Iterator[None]:
+def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
     """Stop telemetry unit tests from phoning home at interpreter shutdown.
 
     The telemetry tests (``tests/test_smoke_telemetry.py``,
@@ -73,7 +73,7 @@ def _neuter_telemetry_network() -> Iterator[None]:
         def export(self, batch: Any) -> Any:  # noqa: ARG002
             return LogRecordExportResult.SUCCESS
 
-        def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
+        def force_flush(self, timeout_millis: float = 30000) -> bool:  # noqa: ARG002
             return True
 
         def shutdown(self) -> None:
