@@ -1,0 +1,40 @@
+#!/bin/sh
+# Runs automatically whenever the Kilo Agent Manager creates a new worktree
+# (see AGENTS.md and https://kilo.ai/docs/automate/agent-manager#setup-scripts).
+#
+# Kilo injects WORKTREE_PATH (the new worktree's absolute path) and REPO_PATH
+# (the primary repo root) into this script's environment.
+set -e
+
+cd "$WORKTREE_PATH"
+
+# --- Symlink gitignored, per-checkout directories ---------------------------
+# .beads, .agents, and .claude are all gitignored (see .gitignore) — they are
+# local artifacts (bd init, Conductor) that git never checks out, so a fresh
+# worktree starts without any of them. Symlink each from the primary repo
+# instead of duplicating/reinitializing per worktree.
+#
+# .beads specifically is normally a symlink to ../.beads pointing at the
+# parent `ai/` repo's shared Dolt DB (see AGENTS.md: "This repo shares the
+# parent ai/ beads DB"). We resolve REPO_PATH/.beads to its real target
+# rather than copying the `../.beads` relative link, since Kilo worktrees
+# live two levels deeper (.kilo/worktrees/<branch>/) and a naive relative
+# copy would resolve to a nonexistent path.
+if [ -e "$REPO_PATH/.beads" ] && [ ! -e "$WORKTREE_PATH/.beads" ]; then
+  BEADS_REAL="$(cd "$REPO_PATH/.beads" && pwd -P)"
+  ln -s "$BEADS_REAL" "$WORKTREE_PATH/.beads"
+fi
+
+for dir in .agents .claude; do
+  if [ -e "$REPO_PATH/$dir" ] && [ ! -e "$WORKTREE_PATH/$dir" ]; then
+    ln -s "$REPO_PATH/$dir" "$WORKTREE_PATH/$dir"
+  fi
+done
+
+# Note: root-level .env / .env.* files (e.g. .env.local) are auto-copied by
+# Kilo before this script runs, so no manual copy is needed here. See
+# https://kilo.ai/docs/automate/agent-manager#environment-file-copying
+
+# --- Install Python deps -----------------------------------------------------
+# Use uv, never pip (see AGENTS.md "Package management").
+uv sync --frozen

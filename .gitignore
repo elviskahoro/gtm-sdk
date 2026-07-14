@@ -21,6 +21,11 @@ data/
 out/
 worktrees/
 
+# Kilo Agent Manager generated state — the setup-script/run-script under
+# .kilo/ are committed; managed worktrees and UI state are not.
+.kilo/worktrees/
+.kilo/agent-manager.json
+
 # Real webhook payloads — keep raw evt_*.json samples out of version control.
 # Use redacted/synthetic fixtures (sample-*.json) for documentation instead.
 api/samples/**/evt_*.json

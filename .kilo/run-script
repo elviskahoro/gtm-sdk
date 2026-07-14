@@ -1,0 +1,11 @@
+#!/bin/sh
+# Run button script for the Kilo Agent Manager (Cmd+E / Ctrl+E). Runs in the
+# selected worktree's directory. See
+# https://kilo.ai/docs/automate/agent-manager#run-script
+#
+# gtm-sdk has no dev server; the fast feedback loop here is the test suite.
+# Swap this out for `uv run gtm <subcommand>` if you want the run button to
+# exercise a specific CLI flow instead.
+set -e
+
+uv run pytest
