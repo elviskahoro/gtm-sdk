@@ -60,3 +60,6 @@ webhooks/registry.yaml
 scripts/lib/__pycache__/
 scripts/lib/**/*.pyc
 
+
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/

@@ -61,6 +61,8 @@ fi
 
 git submodule update --init --recursive
 uv sync
+
+uv run scripts/dagger_setup_tools.py || echo "dagger test failed (see above)"
 """
 
 [scripts.run.run]
