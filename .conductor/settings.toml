@@ -1,7 +1,30 @@
 "$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
 
 [scripts]
-setup = "PARENT_REPO=\"$(dirname \"$(git rev-parse --git-common-dir)\")/..\" && PRIMARY_REPO_ROOT=\"$(cd \"$PARENT_REPO\" && pwd)\"; [ ! -f .env.local ] && [ -f \"$PRIMARY_REPO_ROOT/.env.local\" ] && ln -s \"$PRIMARY_REPO_ROOT/.env.local\" .env.local; [ ! -L .agents ] && [ -d \"$PRIMARY_REPO_ROOT/.agents\" ] && ln -s \"$PRIMARY_REPO_ROOT/.agents\" .agents; [ ! -L .claude ] && [ -d \"$PRIMARY_REPO_ROOT/.claude\" ] && ln -s \"$PRIMARY_REPO_ROOT/.claude\" .claude; git submodule update --init --recursive && uv sync"
+setup = """
+set -e
+
+PARENT_REPO="$(dirname "$(git rev-parse --git-common-dir)")/.."
+PRIMARY_REPO_ROOT="$(cd "$PARENT_REPO" && pwd)"
+
+[ ! -f .env.local ] && [ -f "$PRIMARY_REPO_ROOT/.env.local" ] && ln -s "$PRIMARY_REPO_ROOT/.env.local" .env.local
+[ ! -L .agents ] && [ -d "$PRIMARY_REPO_ROOT/.agents" ] && ln -s "$PRIMARY_REPO_ROOT/.agents" .agents
+[ ! -L .claude ] && [ -d "$PRIMARY_REPO_ROOT/.claude" ] && ln -s "$PRIMARY_REPO_ROOT/.claude" .claude
+
+if [ ! -e .beads ] && [ -e "$PRIMARY_REPO_ROOT/.beads" ]; then
+  BEADS_REAL="$(cd "$PRIMARY_REPO_ROOT/.beads" && pwd -P)"
+  ln -s "$BEADS_REAL" .beads
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v bd >/dev/null 2>&1; then
+  curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
+fi
+bd version
+
+git submodule update --init --recursive
+uv sync
+"""
 
 [scripts.run.run]
 available_in = "local"
