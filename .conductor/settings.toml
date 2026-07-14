@@ -22,6 +22,12 @@ if ! command -v bd >/dev/null 2>&1; then
 fi
 bd version
 
+if ! command -v roborev >/dev/null 2>&1; then
+  curl -fsSL https://roborev.io/install.sh | bash
+fi
+roborev version
+git config --global alias.roborev '!roborev'
+
 git submodule update --init --recursive
 uv sync
 """

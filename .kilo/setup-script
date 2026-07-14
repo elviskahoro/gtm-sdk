@@ -35,6 +35,17 @@ done
 # Kilo before this script runs, so no manual copy is needed here. See
 # https://kilo.ai/docs/automate/agent-manager#environment-file-copying
 
+# --- Install roborev ---------------------------------------------------------
+# Required for the "git roborev review --wait" pre-push gate (see AGENTS.md
+# "Session Completion"). roborev ships a plain `roborev` binary, not a
+# `git-roborev` PATH shim, so alias it under git for that invocation to work.
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v roborev >/dev/null 2>&1; then
+  curl -fsSL https://roborev.io/install.sh | bash
+fi
+roborev version
+git config --global alias.roborev '!roborev'
+
 # --- Install Python deps -----------------------------------------------------
 # Use uv, never pip (see AGENTS.md "Package management").
 uv sync --frozen
