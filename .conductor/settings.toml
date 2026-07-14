@@ -4,6 +4,11 @@
 setup = """
 set -e
 
+SETUP_LOG="$HOME/.conductor-setup.log"
+: > "$SETUP_LOG"
+exec > >(tee -a "$SETUP_LOG") 2>&1
+echo "=== setup started $(date -u +%FT%TZ) ==="
+
 PARENT_REPO="$(dirname "$(git rev-parse --git-common-dir)")/.."
 PRIMARY_REPO_ROOT="$(cd "$PARENT_REPO" && pwd)"
 
@@ -62,7 +67,13 @@ fi
 git submodule update --init --recursive
 uv sync
 
-uv run scripts/dagger-tools-setup.py || echo "dagger test failed (see above)"
+if uv run scripts/dagger-tools-setup.py; then
+  echo "DAGGER_TEST=success $(date -u +%FT%TZ)"
+else
+  echo "DAGGER_TEST=failed $(date -u +%FT%TZ)"
+fi
+
+echo "=== setup finished $(date -u +%FT%TZ) ==="
 """
 
 [scripts.run.run]
