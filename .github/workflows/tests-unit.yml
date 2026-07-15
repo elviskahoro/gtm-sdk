@@ -56,9 +56,11 @@ jobs:
       - name: Install Dagger Python SDK
         run: |
           if [ -x "$HOME/.dagger-venv/bin/python" ]; then
-            echo "Namespace host cache: Dagger SDK venv already exists"
+            echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
           else
             echo "Namespace host cache: Dagger SDK venv is absent; creating it cold"
+            uv venv "$HOME/.dagger-venv"
+            uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
           fi
           uv_cache_dir="$(uv cache dir)"
           if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
@@ -66,8 +68,6 @@ jobs:
           else
             echo "Namespace host cache: uv cache is empty (${uv_cache_dir})"
           fi
-          uv venv "$HOME/.dagger-venv"
-          uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
           echo "$HOME/.dagger-venv/bin" >> "$GITHUB_PATH"
 
       - name: Report Namespace cache state
