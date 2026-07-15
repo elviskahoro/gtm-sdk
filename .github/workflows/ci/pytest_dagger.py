@@ -8,6 +8,11 @@ The pipeline runs `uv run pytest --junit-xml=junit.xml -o junit_family=xunit1`
 inside a python:3.13 container and exports `junit.xml` to the host so a
 follow-up step (e.g. trunk-io/analytics-uploader) can upload it.
 
+Dependencies install with `uv sync --locked`: the run fails loudly if
+`pyproject.toml` drifts from `uv.lock` instead of silently re-locking inside
+CI — run `uv lock` after editing dependencies. (`--locked`, not `--frozen`:
+frozen skips the freshness check and would happily install a stale lock.)
+
 The pipeline *fails* (non-zero exit) when pytest exits non-zero, while still
 exporting the report. A previous `... || true` swallowed pytest's exit code so
 the job went green even on a failing suite (ai-eun); we instead capture pytest's
@@ -59,6 +64,10 @@ SOURCE_EXCLUDES = [
     "out",
     "data",
     "worktrees",
+    # The report this pipeline exports to the host. Left in the repo root by a
+    # previous local run, it would feed back into the next run's /src snapshot
+    # (fresh timestamps every run) and needlessly invalidate the exec cache.
+    "junit.xml",
 ]
 
 
@@ -66,6 +75,15 @@ def build_container() -> dagger.Container:
     """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     uv_cache = dag.cache_volume("uv-cache")
+    # /src/.venv lives on a cache volume, NOT in the container filesystem. A
+    # 188-package venv (pyarrow/polars/duckdb) baked into an exec layer forces
+    # BuildKit to content-hash a multi-GB diff after pytest — observed in CI as
+    # a 7-minute stall on the first result read (the 3-byte pytest_rc fetch
+    # paid for the whole snapshot). As a mount the venv never enters a layer,
+    # and `uv sync` is an exact reconcile, so a stale volume self-corrects
+    # (including across python:3.13 image bumps). GIT_INIT_CMD's `add -A`
+    # keeps ignoring it because `.gitignore` covers `.venv/`.
+    venv_cache = dag.cache_volume("venv")
 
     return (
         dag.container()
@@ -74,11 +92,16 @@ def build_container() -> dagger.Container:
             ["bash", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"],
         )
         .with_env_variable("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
+        # The uv wheel cache and .venv are distinct mounts (separate
+        # filesystems), so uv's default hardlink install always fails and
+        # falls back to copying with a per-run warning; declare copy mode.
+        .with_env_variable("UV_LINK_MODE", "copy")
         .with_mounted_cache("/root/.cache/uv", uv_cache)
         .with_directory("/src", source)
         .with_workdir("/src")
+        .with_mounted_cache("/src/.venv", venv_cache)
         .with_exec(["bash", "-c", f"rm -rf .git && {GIT_INIT_CMD}"])
-        .with_exec(["uv", "sync", "--all-extras", "--dev"])
+        .with_exec(["uv", "sync", "--all-extras", "--dev", "--locked"])
         .with_exec(["bash", "-c", PYTEST_CMD])
     )
 

@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+# pytest report exported to the repo root by .github/workflows/ci/pytest_dagger.py
+junit.xml
 
 # OS
 .DS_Store
