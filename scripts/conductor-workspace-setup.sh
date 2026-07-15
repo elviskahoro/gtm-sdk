@@ -27,6 +27,41 @@ PRIMARY_REPO_ROOT="$(cd "${PARENT_REPO}" && pwd)"
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
+# Flox's in-place zsh activation reloads compinit whenever it changes fpath.
+# That makes every workspace's global ~/.bashrc activation subject to the
+# ownership of Homebrew's completion tree, and also layers every workspace
+# into every new shell.  Keep activation scoped to commands instead; remove
+# only the setup lines emitted by older versions of this script.
+cleanup_legacy_flox_activation() {
+  local bashrc="${HOME}/.bashrc"
+  [[ -f "${bashrc}" ]] || return 0
+
+  mkdir -p "${REPO_ROOT}/tmp"
+  local cleaned_bashrc
+  cleaned_bashrc="$(mktemp "${REPO_ROOT}/tmp/.conductor-bashrc.XXXXXX")"
+  awk '
+    $0 == "# gtm-sdk conductor setup: flox env on PATH for interactive shells" {
+      next
+    }
+    index($0, "flox activate --dir ") > 0 &&
+      index($0, " --mode run 2>/dev/null)") > 0 &&
+      substr($0, length($0) - 6) == "|| true" {
+      next
+    }
+    { print }
+  ' "${bashrc}" >"${cleaned_bashrc}"
+
+  if ! cmp -s "${bashrc}" "${cleaned_bashrc}"; then
+    bashrc_mode="$(stat -f '%Lp' "${bashrc}" 2>/dev/null || stat -c '%a' "${bashrc}")"
+    chmod "${bashrc_mode}" "${cleaned_bashrc}"
+    mv "${cleaned_bashrc}" "${bashrc}"
+  else
+    rm -f "${cleaned_bashrc}"
+  fi
+}
+
+cleanup_legacy_flox_activation
+
 # --- Flox bootstrap (Linux cloud sandboxes only) ---------------------------
 # Flox = Nix under the hood: declarative manifest (.flox/env/manifest.toml),
 # lockfile-pinned versions, binary-cache installs. Chosen over Dagger for
@@ -86,11 +121,6 @@ if command -v flox >/dev/null 2>&1; then
   FLOX_BIN="${REPO_ROOT}/.flox/run/$(uname -m | sed s/arm64/aarch64/)-$(uname -s | tr '[:upper:]' '[:lower:]').gtm-sdk-run/bin"
   [[ -d ${FLOX_BIN} ]] && export PATH="${FLOX_BIN}:${PATH}"
 
-  # Later interactive Conductor shells get the env via ~/.bashrc.
-  FLOX_ACTIVATE_LINE="eval \"\$(flox activate --dir '${REPO_ROOT}' --mode run 2>/dev/null)\" || true"
-  if ! grep -qF "${FLOX_ACTIVATE_LINE}" "${HOME}/.bashrc" 2>/dev/null; then
-    printf '\n# gtm-sdk conductor setup: flox env on PATH for interactive shells\n%s\n' "${FLOX_ACTIVATE_LINE}" >>"${HOME}/.bashrc"
-  fi
 else
   # Non-Flox fallback (macOS Conductor workspaces): original installers.
   if ! command -v dolt >/dev/null 2>&1; then
