@@ -70,3 +70,5 @@ def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
 # RUN #2: Cache validation - testing warm cache hits
 
 # RUN #3: Final cache validation - all warm caches should be populated
+
+# RUN #6: Warm cache - Dagger SDK venv should be restored
