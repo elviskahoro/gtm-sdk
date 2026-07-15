@@ -14,75 +14,10 @@ SETUP_LOG="$HOME/.conductor-setup.log"
 exec >> "$SETUP_LOG" 2>&1
 echo "=== setup started $(date -u +%FT%TZ) ==="
 
-PARENT_REPO="$(dirname "$(git rev-parse --git-common-dir)")/.."
-PRIMARY_REPO_ROOT="$(cd "$PARENT_REPO" && pwd)"
-
-[ ! -f .env.local ] && [ -f "$PRIMARY_REPO_ROOT/.env.local" ] && ln -s "$PRIMARY_REPO_ROOT/.env.local" .env.local
-[ ! -L .agents ] && [ -d "$PRIMARY_REPO_ROOT/.agents" ] && ln -s "$PRIMARY_REPO_ROOT/.agents" .agents
-[ ! -L .claude ] && [ -d "$PRIMARY_REPO_ROOT/.claude" ] && ln -s "$PRIMARY_REPO_ROOT/.claude" .claude
-
-export PATH="$HOME/.local/bin:$PATH"
-if ! command -v bd >/dev/null 2>&1; then
-  curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
-fi
-bd version
-
-if ! command -v roborev >/dev/null 2>&1; then
-  curl -fsSL https://roborev.io/install.sh | bash
-fi
-roborev version
-git config --global alias.roborev '!roborev'
-
-if ! command -v dolt >/dev/null 2>&1; then
-  sudo bash -c 'curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash'
-fi
-dolt version
-
-if command -v dnf >/dev/null 2>&1 && ! command -v infisical >/dev/null 2>&1; then
-  curl -1sLf 'https://artifacts-cli.infisical.com/setup.rpm.sh' | sudo -E bash
-  sudo dnf install -y infisical
-fi
-
-# Standalone cloud sandboxes have no parent ai/ repo, so there is no shared
-# .beads to symlink to. Prefer it when it's a real Dolt DB (existence alone
-# isn't enough: bogus dirs like a stray $HOME/.beads from a global bd install
-# pass the -e check but aren't a real project), otherwise seed a fresh local
-# DB from the shared DoltHub remote so the sandbox sees real issue history.
-if [ ! -e .beads ] && [ -e "$PRIMARY_REPO_ROOT/.beads" ] && bd -C "$PRIMARY_REPO_ROOT" status >/dev/null 2>&1; then
-  BEADS_REAL="$(cd "$PRIMARY_REPO_ROOT/.beads" && pwd -P)"
-  ln -s "$BEADS_REAL" .beads
-fi
-
-if [ ! -e .beads ]; then
-  DOLT_REMOTE_URL="https://doltremoteapi.dolthub.com/elviskahoro/gtm-sdk"
-  if [ -f .env.local ]; then
-    set -a && source .env.local && set +a
-  fi
-  if command -v infisical >/dev/null 2>&1 && [ -n "$INFISICAL_TOKEN" ] && [ -n "$INFISICAL_PROJECT_ID" ]; then
-    DOLTHUB_API_KEY="$(infisical secrets get DOLTHUB_API_KEY --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --env=dev --plain 2>/dev/null || true)"
-  fi
-  if [ -n "$DOLTHUB_API_KEY" ]; then
-    DOLT_REMOTE_USER="elviskahoro" DOLT_REMOTE_PASSWORD="$DOLTHUB_API_KEY" \
-      bd init --non-interactive --remote "$DOLT_REMOTE_URL" \
-      || echo "warning: could not seed beads DB from $DOLT_REMOTE_URL, falling back to a fresh local database"
-  fi
-  [ ! -e .beads ] && bd init --non-interactive --init-if-missing
-fi
-
-if ! command -v uv >/dev/null 2>&1; then
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$HOME/.local/bin:$PATH"
-fi
-uv --version
-
-git submodule update --init --recursive
-uv sync
-
-if uv run scripts/dagger-tools-setup.py; then
-  echo "DAGGER_TEST=success $(date -u +%FT%TZ)"
-else
-  echo "DAGGER_TEST=failed $(date -u +%FT%TZ)"
-fi
+# All real provisioning lives in a durable, reviewable script instead of this
+# heredoc. Tools come from the committed Flox environment (.flox/) on Linux
+# sandboxes; see scripts/conductor-workspace-setup.sh for the full story.
+bash scripts/conductor-workspace-setup.sh
 
 echo "=== setup finished $(date -u +%FT%TZ) ==="
 """

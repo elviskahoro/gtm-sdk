@@ -48,6 +48,8 @@ images to Modal is reproducible across operators. Modal tokens flow into the
 container as `dagger.set_secret(...)` values; the `infisical` CLI stays on the
 host. Set `DAGGER_DRY_RUN=1` to skip Dagger and invoke `infisical run -- uv run modal deploy` directly on the host — used by `tests/scripts/test_deploy_webhook.py` so CI doesn't need a Dagger engine or real Modal credentials.
 
+**Dagger does not work on Conductor cloud sandboxes, period** — its engine only ships as a privileged container on BuildKit/runc, and every `withExec` needs a nested runc container whose creation fails at the kernel level in those sandboxes (issue #284; do not reinvestigate). `DAGGER_DRY_RUN=1` is the documented path there. Local Mac Dagger deploys are unaffected.
+
 Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols. Do not commit the substituted form; an `atexit`/signal-driven cleanup restores the placeholder even if `modal deploy` fails or the script is interrupted (Ctrl-C, SIGTERM).
 
 The contract every concrete `src/<source>/webhook/*.py` `Webhook` class must satisfy lives at `libs/webhook/protocol.py` as `WebhookModelProtocol` (a `typing.Protocol`), and `tests/libs/webhook/test_protocol_conformance.py` enforces it across all five sources. Each handler's `TYPE_CHECKING` block aliases `WebhookModelTypeCheckShim` (a concrete `BaseModel` stand-in defined alongside the Protocol) as `WebhookModelToReplace` so pyright sees the full surface — Pydantic methods (`model_rebuild`/`model_validate`) and the contract methods — in the unsubstituted source tree. New sources: extend `protocol.py` only if you add a contract method; otherwise just implement the existing surface on the new `Webhook` class and add a parametrize entry to the conformance test.
@@ -70,6 +72,10 @@ The pitfalls below explain why `scripts/webhooks-handlers-redeploy.py` is shaped
 ### Registry
 
 `gtm webhook sync` regenerates `webhooks/registry.yaml` (gitignored) by joining `modal app list` with the Hookdeck API. Run it after any deploy or Hookdeck wiring change. Use `gtm webhook list` to inspect the cached registry. The file is gitignored because it contains personal Modal URLs and Hookdeck IDs that don't belong in OSS — see `webhooks/README.md`.
+
+## Workspace setup (Conductor)
+
+`.conductor/settings.toml`'s `setup` is a thin shim: it sets up `~/.conductor-setup.log` and runs `scripts/conductor-workspace-setup.sh`, where all provisioning lives. On Linux cloud sandboxes, `dolt`/`uv`/`infisical` come from the committed Flox environment (`.flox/env/manifest.toml` + `manifest.lock` pin versions; `flox activate --mode run` puts them on PATH) — edit the manifest via `flox install`/`flox edit`, never by hand-syncing versions. `bd` and `roborev` aren't in the Flox catalog yet and stay curl-installed. macOS workspaces without Flox fall back to the original curl installers unchanged. The sandboxes have no running systemd and no `/dev/fd`; the script creates the `/dev/fd` symlink and starts `nix-daemon` by hand — don't "simplify" those steps away.
 
 ## Telemetry
 
