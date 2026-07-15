@@ -108,7 +108,11 @@ fi
 dolt version
 uv --version
 
-# --- bd + roborev (not in the Flox catalog yet; see follow-up issue) --------
+# --- bd + roborev ------------------------------------------------------------
+# Flox-managed on Linux sandboxes via each tool's own flake.nix (pinned in
+# .flox/env/manifest.toml as bd.flake / roborev.flake), already on PATH from
+# the flox activate above. macOS (no unattended Flox install) falls back to
+# curl-installing the unpinned latest release, same as dolt/infisical/uv above.
 if ! command -v bd >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
 fi
