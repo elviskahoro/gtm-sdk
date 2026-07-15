@@ -11,6 +11,8 @@ uv.pkg-path = "uv"
 dolt.pkg-path = "dolt"
 infisical.pkg-path = "infisical"
 gh.pkg-path = "gh"
+bd.flake = "github:gastownhall/beads/v1.1.0"
+roborev.flake = "github:kenn-io/roborev/v0.62.1"
 # gum.pkg-path = "gum"
 # gum.version = "^0.14.5"
 
