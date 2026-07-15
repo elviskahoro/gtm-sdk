@@ -3,11 +3,9 @@
 # `review_guidelines` is embedded into every review prompt. Use it to encode
 # deliberate house decisions so the reviewer stops re-flagging them as findings.
 
-# Codex (the default agent) has no working auth in Conductor/Kilo cloud
-# sandboxes. Claude Code's standalone CLI authenticates non-interactively via
-# ANTHROPIC_API_KEY (see AGENTS.md "Secrets" for where to set it), so use it
-# instead — see ai-issue #272.
-agent = "claude-code"
+# Use the Codex CLI for review jobs. Roborev invokes the installed `codex`
+# executable and uses its configured Codex/OpenAI authentication.
+agent = "codex"
 
 review_guidelines = """
 - The anti-AI-co-author git hooks (scripts/git-hooks/prepare-commit-msg and
