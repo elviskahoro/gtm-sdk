@@ -27,41 +27,6 @@ PRIMARY_REPO_ROOT="$(cd "${PARENT_REPO}" && pwd)"
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
-# Flox's in-place zsh activation reloads compinit whenever it changes fpath.
-# That makes every workspace's global ~/.bashrc activation subject to the
-# ownership of Homebrew's completion tree, and also layers every workspace
-# into every new shell.  Keep activation scoped to commands instead; remove
-# only the setup lines emitted by older versions of this script.
-cleanup_legacy_flox_activation() {
-  local bashrc="${HOME}/.bashrc"
-  [[ -f "${bashrc}" ]] || return 0
-
-  mkdir -p "${REPO_ROOT}/tmp"
-  local cleaned_bashrc
-  cleaned_bashrc="$(mktemp "${REPO_ROOT}/tmp/.conductor-bashrc.XXXXXX")"
-  awk '
-    $0 == "# gtm-sdk conductor setup: flox env on PATH for interactive shells" {
-      next
-    }
-    index($0, "flox activate --dir ") > 0 &&
-      index($0, " --mode run 2>/dev/null)") > 0 &&
-      substr($0, length($0) - 6) == "|| true" {
-      next
-    }
-    { print }
-  ' "${bashrc}" >"${cleaned_bashrc}"
-
-  if ! cmp -s "${bashrc}" "${cleaned_bashrc}"; then
-    bashrc_mode="$(stat -f '%Lp' "${bashrc}" 2>/dev/null || stat -c '%a' "${bashrc}")"
-    chmod "${bashrc_mode}" "${cleaned_bashrc}"
-    mv "${cleaned_bashrc}" "${bashrc}"
-  else
-    rm -f "${cleaned_bashrc}"
-  fi
-}
-
-cleanup_legacy_flox_activation
-
 # --- Flox bootstrap (Linux cloud sandboxes only) ---------------------------
 # Flox = Nix under the hood: declarative manifest (.flox/env/manifest.toml),
 # lockfile-pinned versions, binary-cache installs. Chosen over Dagger for
@@ -110,18 +75,84 @@ if [[ "$(uname -s)" == "Linux" ]] && command -v dnf >/dev/null 2>&1 && sudo -n t
 fi
 
 # --- Tool provisioning ------------------------------------------------------
-if command -v flox >/dev/null 2>&1; then
+FLOX_TOOLS_VERIFIED=0
+FLOX_FAILURE_STAGE=""
+
+verify_flox_tool() {
+  local tool="$1"
+  shift
+  local tool_path
+
+  tool_path="$(command -v "${tool}" || true)"
+  case "${tool_path}" in
+    "${FLOX_BIN}"/*) ;;
+    "")
+      echo "error: Flox tool '${tool}' is missing from ${FLOX_BIN}" >&2
+      return 1
+      ;;
+    *)
+      echo "error: Flox tool '${tool}' resolved outside ${FLOX_BIN}: ${tool_path}" >&2
+      return 1
+      ;;
+  esac
+
+  if ! "${tool}" "$@"; then
+    echo "error: Flox tool '${tool}' failed its verification command" >&2
+    return 1
+  fi
+}
+
+provision_flox_tools() {
   # Materialize the committed environment (downloads pinned store paths on a
   # fresh sandbox; no-op when already realized) and put its bin dir on PATH
   # for the rest of this script.
   # --mode run everywhere: flox refuses to activate an env in dev mode while
   # another shell (e.g. one whose ~/.bashrc ran the line appended below) holds
   # a run-mode activation of the same env.
-  flox activate --dir "${REPO_ROOT}" --mode run -- true
+  if ! flox activate --dir "${REPO_ROOT}" --mode run -- true; then
+    FLOX_FAILURE_STAGE="activation or materialization"
+    return 1
+  fi
   FLOX_BIN="${REPO_ROOT}/.flox/run/$(uname -m | sed s/arm64/aarch64/)-$(uname -s | tr '[:upper:]' '[:lower:]').gtm-sdk-run/bin"
-  [[ -d ${FLOX_BIN} ]] && export PATH="${FLOX_BIN}:${PATH}"
+  [[ -d ${FLOX_BIN} ]] || {
+    echo "error: Flox bin directory is missing: ${FLOX_BIN}" >&2
+    FLOX_FAILURE_STAGE="bin directory discovery"
+    return 1
+  }
+  export PATH="${FLOX_BIN}:${PATH}"
 
+  while read -r tool version_flag; do
+    # shellcheck disable=SC2310 # A failed probe deliberately selects fallback provisioning.
+    verify_flox_tool "${tool}" "${version_flag}" || {
+      FLOX_FAILURE_STAGE="tool verification"
+      return 1
+    }
+  done <<'EOF'
+uv --version
+dolt version
+infisical --version
+gh --version
+bd version
+roborev version
+EOF
+
+  # Later interactive Conductor shells get the verified environment via ~/.bashrc.
+  FLOX_ACTIVATE_LINE="eval \"\$(flox activate --dir '${REPO_ROOT}' --mode run 2>/dev/null)\" || true"
+  if ! grep -qF "${FLOX_ACTIVATE_LINE}" "${HOME}/.bashrc" 2>/dev/null; then
+    printf '\n# gtm-sdk conductor setup: flox env on PATH for interactive shells\n%s\n' "${FLOX_ACTIVATE_LINE}" >>"${HOME}/.bashrc"
+  fi
+}
+
+# shellcheck disable=SC2310 # A failed Flox probe deliberately selects fallback provisioning.
+if command -v flox >/dev/null 2>&1 && provision_flox_tools; then
+  FLOX_TOOLS_VERIFIED=1
+  echo "info: provisioning source: Flox (${FLOX_BIN})"
 else
+  if command -v flox >/dev/null 2>&1; then
+    echo "warning: Flox ${FLOX_FAILURE_STAGE:-provisioning} failed; using fallback installers"
+    [[ -n ${FLOX_BIN:-} ]] && PATH="${PATH#"${FLOX_BIN}:"}"
+  fi
+  echo "info: provisioning source: fallback installers"
   # Non-Flox fallback (macOS Conductor workspaces): original installers.
   if ! command -v dolt >/dev/null 2>&1; then
     sudo bash -c 'curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash'
@@ -135,8 +166,10 @@ else
     export PATH="${HOME}/.local/bin:${PATH}"
   fi
 fi
-dolt version
-uv --version
+if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
+  dolt version
+  uv --version
+fi
 
 # --- bd + roborev ------------------------------------------------------------
 # Flox-managed on Linux sandboxes via each tool's own flake.nix (pinned in
@@ -144,14 +177,20 @@ uv --version
 # the flox activate above. macOS (no unattended Flox install) falls back to
 # curl-installing the unpinned latest release, same as dolt/infisical/uv above.
 if ! command -v bd >/dev/null 2>&1; then
+  echo "info: installing bd with fallback installer"
   curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
 fi
-bd version
+if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
+  bd version
+fi
 
 if ! command -v roborev >/dev/null 2>&1; then
+  echo "info: installing roborev with fallback installer"
   curl -fsSL https://roborev.io/install.sh | bash
 fi
-roborev version
+if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
+  roborev version
+fi
 git config --global alias.roborev '!roborev'
 
 # --- Beads DB bootstrap ------------------------------------------------------

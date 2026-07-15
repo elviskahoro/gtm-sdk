@@ -24,6 +24,6 @@ echo "=== setup finished $(date -u +%FT%TZ) ==="
 
 [scripts.run.run]
 available_in = "local"
-command = "flox activate --dir \"$PWD\" --mode run -- uv run elvis"
+command = "uv run elvis"
 default = true
 icon = "play"
