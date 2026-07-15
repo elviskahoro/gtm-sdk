@@ -65,3 +65,6 @@ def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
     assert "qemu" not in workflow.lower()
     assert "cache-from" not in workflow
     assert "cache-to" not in workflow
+
+
+# RUN #2: Cache validation - testing warm cache hits
