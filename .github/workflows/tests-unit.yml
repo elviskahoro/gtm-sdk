@@ -22,17 +22,20 @@ jobs:
       - name: Setup Dagger
         uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
 
-      # The Namespace runner image is Debian/PEP 668 externally-managed, so a bare
-      # `pip install` (and `uv pip install --system` alike) refuses to touch the
-      # system Python. Install uv, put it on PATH (the installer drops it in
-      # ~/.local/bin, not on PATH within this step), and install --system with
-      # --break-system-packages so the later `dagger run python ...` step can
-      # import dagger-io/anyio from the system interpreter.
+      # The Namespace runner image is Debian/PEP 668 externally-managed and its
+      # system Python (/usr) is not writable without root, so neither bare `pip`
+      # nor `uv pip install --system` works. Install uv (the installer drops it in
+      # ~/.local/bin, not on PATH within this step), create a root-free uv venv,
+      # install the host-side deps there, and prepend the venv's bin to
+      # $GITHUB_PATH so the later `dagger run python ...` step resolves `python`
+      # to this venv (which has dagger-io/anyio).
       - name: Install Dagger Python SDK
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           export PATH="$HOME/.local/bin:$PATH"
-          uv pip install --system --break-system-packages dagger-io anyio
+          uv venv "$HOME/.dagger-venv"
+          uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
+          echo "$HOME/.dagger-venv/bin" >> "$GITHUB_PATH"
 
       # `dagger run` pulls registry.dagger.io/engine:v<cli-version> on first use.
       # That registry intermittently brownouts (dagger/dagger#7548): a single blob
