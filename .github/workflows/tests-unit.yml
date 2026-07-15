@@ -59,7 +59,8 @@ jobs:
             echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
           else
             echo "Namespace host cache: Dagger SDK venv is absent; creating it cold"
-            uv venv "$HOME/.dagger-venv"
+            # --clear in case a stale venv exists from a previous cache snapshot
+            uv venv "$HOME/.dagger-venv" --clear
             uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
           fi
           uv_cache_dir="$(uv cache dir)"
