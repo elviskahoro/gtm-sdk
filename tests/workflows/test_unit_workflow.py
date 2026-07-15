@@ -1,4 +1,11 @@
-"""Static invariants for the Namespace-backed Unit-test workflow."""
+"""Static invariants for the Namespace-backed Unit-test workflow.
+
+These tests validate the workflow changes from issue #296:
+- Namespace-native checkout and caching actions
+- Preserved Dagger engine state and cache volumes
+- Diagnostic output for cache behavior measurement
+- No regression from previous setup
+"""
 
 from pathlib import Path
 
