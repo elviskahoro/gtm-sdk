@@ -75,7 +75,7 @@ The pitfalls below explain why `scripts/webhooks-handlers-redeploy.py` is shaped
 
 ## Workspace setup (Conductor)
 
-`.conductor/settings.toml`'s `setup` is a thin shim: it sets up `~/.conductor-setup.log` and runs `scripts/conductor-workspace-setup.sh`, where all provisioning lives. On Linux cloud sandboxes, `dolt`/`uv`/`infisical` come from the committed Flox environment (`.flox/env/manifest.toml` + `manifest.lock` pin versions; `flox activate --mode run` puts them on PATH) — edit the manifest via `flox install`/`flox edit`, never by hand-syncing versions. `bd` and `roborev` aren't in the Flox catalog yet and stay curl-installed. macOS workspaces without Flox fall back to the original curl installers unchanged. The sandboxes have no running systemd and no `/dev/fd`; the script creates the `/dev/fd` symlink and starts `nix-daemon` by hand — don't "simplify" those steps away.
+`.conductor/settings.toml`'s `setup` is a thin shim: it sets up `~/.conductor-setup.log` and runs `scripts/conductor-workspace-setup.sh`, where all provisioning lives. On Linux cloud sandboxes, `dolt`/`uv`/`infisical`/`gh` and flake-pinned `bd`/`roborev` come from the committed Flox environment (`.flox/env/manifest.toml` + `manifest.lock` pin versions; `flox activate --mode run` puts them on PATH) — edit the manifest via `flox install`/`flox edit`, never by hand-syncing versions. macOS workspaces without Flox fall back to the original curl installers unchanged. The sandboxes have no running systemd and no `/dev/fd`; the script creates the `/dev/fd` symlink and starts `nix-daemon` by hand — don't "simplify" those steps away.
 
 ## Telemetry
 
