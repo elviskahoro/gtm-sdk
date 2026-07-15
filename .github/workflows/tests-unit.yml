@@ -15,9 +15,21 @@ jobs:
     runs-on: namespace-profile-test
     steps:
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           fetch-depth: 0
+
+      # Namespace mounts these paths directly from the runner cache volume, so
+      # setup reuses the host-side Dagger SDK and uv artifacts without a
+      # GitHub-hosted cache upload/download phase. The Dagger pipeline owns its
+      # separate in-container `uv-cache` and `venv` volumes below.
+      - name: Cache host Dagger and uv data
+        id: namespace_cache
+        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
+        with:
+          path: |
+            ~/.dagger-venv
+            ~/.cache/uv
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -43,9 +55,29 @@ jobs:
       # (which has dagger-io/anyio).
       - name: Install Dagger Python SDK
         run: |
+          if [ -x "$HOME/.dagger-venv/bin/python" ]; then
+            echo "Namespace host cache: Dagger SDK venv already exists"
+          else
+            echo "Namespace host cache: Dagger SDK venv is absent; creating it cold"
+          fi
+          uv_cache_dir="$(uv cache dir)"
+          if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+            echo "Namespace host cache: uv cache contains artifacts (${uv_cache_dir})"
+          else
+            echo "Namespace host cache: uv cache is empty (${uv_cache_dir})"
+          fi
           uv venv "$HOME/.dagger-venv"
           uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
           echo "$HOME/.dagger-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Report Namespace cache state
+        run: |
+          echo "Namespace cache exact hit: ${{ steps.namespace_cache.outputs.cache-hit }}"
+          if [ -n "${NSC_CACHE_PATH:-}" ]; then
+            echo "Namespace cache volume: attached (${NSC_CACHE_PATH})"
+          else
+            echo "Namespace cache volume: absent"
+          fi
 
       - name: Resolve Dagger engine version
         id: dagger_engine
@@ -63,7 +95,7 @@ jobs:
       # "Retrying in 5/10/15 seconds" per-layer loop) before failing, killing
       # the job before any test runs (ai-4bz). Two-layer mitigation: (1) the
       # runner profile's container-image cache serves the pull locally after
-      # the first run (replaces the old tarball-in-actions/cache dance); (2) on
+      # the first run (replaces the old tarball cache dance); (2) on
       # a cold miss, retry the pull with a per-attempt `timeout` so a hung blob
       # cedes to a fresh attempt instead of wedging.
       - name: Ensure Dagger engine image (resilient to registry flakiness)
@@ -74,12 +106,12 @@ jobs:
           set -uo pipefail
           image="registry.dagger.io/engine:${ENGINE_VERSION}"
           if docker image inspect "${image}" >/dev/null 2>&1; then
-            echo "${image} already present in the local daemon"
+            echo "Dagger engine image cache: local hit (${image})"
             exit 0
           fi
           for attempt in $(seq 1 6); do
             if timeout 150 docker pull "${image}"; then
-              echo "Pulled ${image} on attempt ${attempt}"
+              echo "Dagger engine image cache: registry pull succeeded on attempt ${attempt} (${image})"
               exit 0
             fi
             echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
@@ -197,6 +229,17 @@ jobs:
           fi
           echo "_EXPERIMENTAL_DAGGER_RUNNER_HOST=docker-container://${name}" >>"${GITHUB_ENV}"
           echo "engine_name=${name}" >>"${GITHUB_OUTPUT}"
+
+      - name: Report Dagger engine state
+        if: always() && steps.dagger_engine.outputs.version != ''
+        run: |
+          if [ "${{ steps.dagger_engine_start.outputs.engine_name }}" != "" ]; then
+            echo "Persistent Dagger engine: adopted (${{ steps.dagger_engine_start.outputs.engine_name }})"
+          elif [ "${{ steps.dagger_engine_start.outcome }}" = "success" ]; then
+            echo "Persistent Dagger engine: cold auto-provision fallback"
+          else
+            echo "Persistent Dagger engine: setup step did not complete"
+          fi
 
       # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
       # inside the container) — the CLI reads it to ship traces to Dagger
