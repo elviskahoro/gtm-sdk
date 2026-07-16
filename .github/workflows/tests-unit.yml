@@ -155,7 +155,8 @@ jobs:
           uv pip install --no-deps --reinstall \
             --python "${project_env}/bin/python" .
           uv pip install --no-deps --reinstall \
-            --python "${project_env}/bin/python" dagger-io anyio
+            --python "${project_env}/bin/python" \
+            "dagger-io==0.21.7" "anyio==4.13.0"
 
       - name: Report Namespace cache state
         run: |

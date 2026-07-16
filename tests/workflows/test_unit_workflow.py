@@ -136,7 +136,8 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     assert "--no-install-project" in workflow
     assert "uv pip install --no-deps --reinstall" in workflow
     assert '--python "${project_env}/bin/python" .' in workflow
-    assert "dagger-io anyio" in workflow
+    assert "dagger-io==0.21.7" in workflow
+    assert "anyio==4.13.0" in workflow
     assert 'rm -rf "${project_env}"' in workflow
     assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
     assert "cache: uv" in workflow
