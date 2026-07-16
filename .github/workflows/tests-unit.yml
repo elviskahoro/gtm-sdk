@@ -45,12 +45,13 @@ jobs:
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
         with:
-          # Native uv support retains both its artifact cache and downloaded
-          # CPython toolchains. Keep the SDK venv explicit because it is a
-          # workflow-specific path, not uv-managed state.
+          # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. Cache the CPython
+          # toolchains explicitly because the SDK venv's bin/python symlinks
+          # into them.
           cache: uv
           path: |
             ~/.dagger-venv
+            ~/.local/share/uv/python
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -76,10 +77,10 @@ jobs:
           # 5/5 measured runs, issue #303). Clear contents only, and validate a
           # restored venv by importing the SDK: a stale cache snapshot can hold
           # a venv whose interpreter or packages are broken.
-          if "$HOME/.dagger-venv/bin/python" -c "import dagger, anyio" 2>/dev/null; then
+          if err="$("$HOME/.dagger-venv/bin/python" -c 'import dagger, anyio' 2>&1)"; then
             echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
           else
-            echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold"
+            echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold (validation error: ${err})"
             mkdir -p "$HOME/.dagger-venv"
             find "$HOME/.dagger-venv" -mindepth 1 -delete
             uv venv "$HOME/.dagger-venv"
