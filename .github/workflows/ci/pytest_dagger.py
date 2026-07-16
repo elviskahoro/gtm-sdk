@@ -4,9 +4,10 @@ Invoked the same way locally and in CI:
 
     dagger run python .github/workflows/ci/pytest_dagger.py
 
-The pipeline runs `uv run pytest --junit-xml=junit.xml -o junit_family=xunit1`
-inside a python:3.13 container and exports `junit.xml` to the host so a
-follow-up step (e.g. trunk-io/analytics-uploader) can upload it.
+The pipeline runs pytest with one xdist worker per available CPU inside a
+python:3.13 container and exports `junit.xml` to the host so a follow-up step
+(e.g. trunk-io/analytics-uploader) can upload it. File-level scheduling keeps
+tests that coordinate through repo-local files and locks on the same worker.
 
 Dependencies install with `uv sync --locked`: the run fails loudly if
 `pyproject.toml` drifts from `uv.lock` instead of silently re-locking inside
@@ -34,7 +35,8 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "uv run pytest --junit-xml=junit.xml -o junit_family=xunit1; "
+    "uv run pytest -n auto --dist=loadfile "
+    "--junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"
 )
 JUNIT_HOST_PATH = "junit.xml"
@@ -123,7 +125,10 @@ async def main() -> None:
             started = perf_counter()
             await ctr.file(PYTEST_RC_PATH).export(PYTEST_RC_HOST_PATH)
             rc = int(Path(PYTEST_RC_HOST_PATH).read_text().strip())
-            print(f"Dagger transfer pytest_rc: {perf_counter() - started:.2f}s")
+            print(
+                "Dagger pipeline evaluation + pytest_rc export: "
+                f"{perf_counter() - started:.2f}s",
+            )
         except (dagger.DaggerError, OSError, ValueError) as exc:
             sys.stderr.write(
                 f"warning: could not read pytest exit code from {PYTEST_RC_PATH} "
