@@ -4,10 +4,10 @@ Invoked the same way locally and in CI:
 
     dagger run python .github/workflows/ci/pytest_dagger.py
 
-The pipeline runs pytest with one xdist worker per available CPU inside a
-python:3.13 container and exports `junit.xml` to the host so a follow-up step
-(e.g. trunk-io/analytics-uploader) can upload it. File-level scheduling keeps
-tests that coordinate through repo-local files and locks on the same worker.
+The pipeline runs pytest inside a python:3.13 container and exports `junit.xml`
+to the host so a follow-up step (e.g. trunk-io/analytics-uploader) can upload
+it. Keep this serial on the two-vCPU Namespace profile: three warm CI runs with
+two xdist workers regressed median pytest time from 26.06s to 30.21s.
 
 Dependencies install with `uv sync --locked`: the run fails loudly if
 `pyproject.toml` drifts from `uv.lock` instead of silently re-locking inside
@@ -35,8 +35,7 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "uv run pytest -n auto --dist=loadfile "
-    "--junit-xml=junit.xml -o junit_family=xunit1; "
+    "uv run pytest --junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"
 )
 JUNIT_HOST_PATH = "junit.xml"

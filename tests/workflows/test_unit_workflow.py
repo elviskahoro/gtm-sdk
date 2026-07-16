@@ -118,9 +118,11 @@ def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
         assert "sys.exit(rc)" in source
 
 
-def test_unit_dagger_pipeline_uses_safe_cpu_parallelism() -> None:
+def test_unit_dagger_pipeline_uses_measured_two_cpu_configuration() -> None:
     source = PYTEST_DAGGER.read_text()
 
-    assert "uv run pytest -n auto --dist=loadfile" in source
+    assert "uv run pytest --junit-xml=junit.xml" in source
+    assert "-n auto" not in source
+    assert "--dist=loadfile" not in source
     assert "Dagger pipeline evaluation + pytest_rc export:" in source
     assert "Dagger transfer pytest_rc:" not in source
