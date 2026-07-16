@@ -50,7 +50,7 @@ JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
 HOST_DAGGER_SDK = Path.home() / ".dagger-sdk"
-HOST_PROJECT_ENV = HOST_DAGGER_SDK / "project-venv"
+HOST_PROJECT_ENV = HOST_DAGGER_SDK / "venv"
 HOST_UV_PYTHON = HOST_DAGGER_SDK / "uv-python"
 HOST_UV_CACHE = Path.home() / ".cache" / "uv"
 

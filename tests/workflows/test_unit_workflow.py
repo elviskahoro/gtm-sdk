@@ -189,6 +189,13 @@ def test_unit_dagger_pipeline_consumes_host_project_environment() -> None:
     assert '"/src/.venv"' not in dagger
 
 
+def test_unit_dagger_pipeline_mounts_the_namespace_project_venv() -> None:
+    dagger = PYTEST_DAGGER.read_text()
+
+    assert 'HOST_PROJECT_ENV = HOST_DAGGER_SDK / "venv"' in dagger
+    assert '".dagger-sdk" / "project-venv"' not in dagger
+
+
 def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
     for pipeline in (PYTEST_DAGGER, PYTEST_INTEGRATION_DAGGER):
         source = pipeline.read_text()
