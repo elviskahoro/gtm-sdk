@@ -111,11 +111,12 @@ def build_container() -> dagger.Container:
         .with_workdir("/src")
         .with_mounted_cache("/src/.venv", venv_cache)
         .with_exec(["bash", "-c", GIT_INIT_CMD])
+        # Script tests import the repo-local `scripts` package during
+        # collection, so this must install the editable project.
         .with_exec(
             [
                 "uv",
                 "sync",
-                "--no-install-project",
                 "--all-extras",
                 "--dev",
                 "--locked",

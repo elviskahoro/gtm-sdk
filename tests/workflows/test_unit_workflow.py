@@ -193,7 +193,7 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     assert "-p pytest_asyncio.plugin" in source
     assert "-p anyio.pytest_plugin" in source
     assert '"PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"' in source
-    assert '"--no-install-project",' in source
+    assert "--no-install-project" not in source
     assert '"--all-extras",' in source
     assert '"--locked",' in source
     for excluded in ('".git"', '".entire"', '".kilo"'):
