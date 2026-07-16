@@ -36,9 +36,10 @@ jobs:
           enable-cache: false
 
       # Ensure uv's cache directory exists before the Namespace cache action
-      # links its managed path.
+      # links its managed path. The metadata directory is mounted separately
+      # because uv's managed cache mode does not preserve arbitrary files.
       - name: Prepare host uv cache
-        run: mkdir -p "$(uv cache dir)"
+        run: mkdir -p "$(uv cache dir)" "$HOME/gtm-sdk-cache"
 
       # Namespace mounts these paths directly from the runner cache volume, so
       # setup reuses the host-side Dagger venv and uv-managed interpreter
@@ -59,6 +60,13 @@ jobs:
           path: |
             ~/.dagger-sdk/venv
             ~/.dagger-sdk/uv-python
+
+      - name: Cache host project metadata
+        id: namespace_metadata_cache
+        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
+        with:
+          path: |
+            ~/gtm-sdk-cache
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -135,9 +143,9 @@ jobs:
         run: |
           set -euo pipefail
           # Reuse the Namespace-persisted SDK venv for project dependencies;
-          # keep the cache fingerprint in uv's separately promoted cache path.
+          # keep the cache fingerprint in a separately mounted metadata path.
           project_env="$HOME/.dagger-sdk/venv"
-          cache_key_file="$(uv cache dir)/gtm-sdk-cache-key"
+          cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"

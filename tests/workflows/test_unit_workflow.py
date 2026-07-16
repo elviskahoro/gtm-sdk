@@ -37,6 +37,8 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     ) in workflow
     assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
+    assert workflow.count("namespacelabs/nscloud-cache-action@") == 2
+    assert "path: |\n            ~/gtm-sdk-cache" in workflow
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
     # Toolchain + venv are siblings under one Namespace mount — never target
@@ -143,7 +145,7 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
 
     assert "Warm project uv cache" in workflow
     assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'cache_key_file="$(uv cache dir)/gtm-sdk-cache-key"' in workflow
+    assert 'cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"' in workflow
     assert 'uv_cache_dir="$(uv cache dir)"' in workflow
     assert "sha256sum pyproject.toml uv.lock" in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
