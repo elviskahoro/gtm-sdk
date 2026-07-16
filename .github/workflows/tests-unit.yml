@@ -223,13 +223,15 @@ jobs:
           }
           engine_ready() {
             # The API socket is created only after BuildKit has opened its
-            # state. Poll it rather than applying a fixed three-second settle:
-            # corrupt cached databases fail before this point, while a usable
-            # cached engine becomes available as soon as it has initialized.
+            # state. Poll it rather than applying a fixed three-second settle,
+            # then query the API itself: a corrupt cached database must never
+            # be accepted merely because its socket was created briefly.
             for _ in $(seq 1 300); do
               case "$(docker inspect -f '{{.State.Status}}' "${name}" 2>/dev/null || true)" in
                 running)
-                  if docker exec "${name}" test -S /run/dagger/engine.sock 2>/dev/null; then
+                  if docker exec "${name}" test -S /run/dagger/engine.sock 2>/dev/null &&
+                    timeout 2 env "_EXPERIMENTAL_DAGGER_RUNNER_HOST=docker-container://${name}" \
+                      dagger query --no-mod --silent <<<'{ __typename }' >/dev/null 2>&1; then
                     return 0
                   fi
                   ;;
