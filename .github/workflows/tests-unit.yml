@@ -258,6 +258,7 @@ jobs:
           fi
           echo "_EXPERIMENTAL_DAGGER_RUNNER_HOST=docker-container://${name}" >>"${GITHUB_ENV}"
           echo "engine_name=${name}" >>"${GITHUB_OUTPUT}"
+          echo "state_dir=${state_dir}" >>"${GITHUB_OUTPUT}"
 
       - name: Report Dagger engine state
         if: always() && steps.dagger_engine.outputs.version != ''
@@ -279,6 +280,24 @@ jobs:
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
         run: dagger run python .github/workflows/ci/pytest_dagger.py
+
+      # Temporary measurement for the shutdown optimization: determine
+      # whether Dagger's final syncfs is paying for dirty pages or a fixed
+      # engine/Namespace-volume teardown cost. Remove after three dispatches.
+      - name: Pre-sync Dagger state diagnostics
+        if: always() && steps.dagger_engine_start.outputs.engine_name != ''
+        env:
+          STATE_DIR: ${{ steps.dagger_engine_start.outputs.state_dir }}
+        run: |
+          set -uo pipefail
+          sudo du -sh "${STATE_DIR}" || true
+          grep -E '^(Dirty|Writeback):' /proc/meminfo || true
+          started_at="$(date +%s%N)"
+          sync -f "${STATE_DIR}"
+          finished_at="$(date +%s%N)"
+          elapsed_ms="$(( (finished_at - started_at) / 1000000 ))"
+          echo "Dagger state pre-sync: ${elapsed_ms}ms"
+          grep -E '^(Dirty|Writeback):' /proc/meminfo || true
 
       # Begin the durable engine flush as soon as the final Dagger client has
       # disconnected. The detached process has no inherited stdio, so the
