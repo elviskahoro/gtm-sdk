@@ -81,6 +81,7 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "dag.host().directory(str(HOST_PROJECT_ENV))" in dagger
     assert "dag.host().directory(str(HOST_UV_PYTHON))" in dagger
     assert "dag.host().directory(str(HOST_UV_CACHE))" in dagger
+    assert 'dag.host().directory("scripts")' in dagger
     assert "Dagger uv cache: seeding from Namespace host cache" in dagger
     assert (
         '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
