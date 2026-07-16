@@ -43,10 +43,24 @@ def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnus
 
     Lazy ``from ... import OTLPSpanExporter`` inside ``libs/telemetry.py`` reads
     the source-module attribute at call time, so patching it there takes effect.
-    The collector path (``TELEMETRY_COLLECTOR_APP`` unset, the CI default) is
-    left alone: its ``_spawn_collector`` Modal RPC already swallows its own
-    errors and never prints the OTLP HTTP 404, and it is exercised directly by
-    the spawn-exporter unit tests.
+
+    The collector path (``TELEMETRY_COLLECTOR_APP`` unset — the hard-coded
+    DEFAULT) is neutered too. Any test that calls ``init_tracer`` /
+    ``init_log_exporter`` without explicitly setting
+    ``TELEMETRY_COLLECTOR_APP: ""`` builds a real Modal-spawn exporter behind a
+    BatchProcessor, and the ``atexit.register(provider.shutdown)`` flush then
+    runs ``modal.Function.from_name(...).spawn()`` at interpreter exit — a
+    network RPC that hangs/retries ~6.5 minutes in credential-less CI
+    containers (issue #305). ``_spawn_collector``'s try/except swallows
+    exceptions, but a hang isn't an exception. We patch the module-level
+    builder attributes (``_build_spawn_span_exporter`` /
+    ``_build_spawn_log_exporter``) rather than ``_spawn_collector`` itself
+    because the spawn-exporter unit tests
+    (``tests/libs/test_telemetry.py::test_spawn_span_exporter_encodes_and_spawns``
+    et al.) bind the REAL builders via direct module-level import and mock
+    ``modal.Function`` to assert the real ``_spawn_collector`` interaction —
+    patching the module attribute leaves their directly-imported references
+    untouched.
     """
     from unittest.mock import patch
 
@@ -70,6 +84,28 @@ def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnus
             return None
 
     class _NoNetworkLogExporter(_RealLogExporter):  # type: ignore[misc]
+        def export(self, batch: Any) -> Any:  # noqa: ARG002
+            return LogRecordExportResult.SUCCESS
+
+        def force_flush(self, timeout_millis: float = 30000) -> bool:  # noqa: ARG002
+            return True
+
+        def shutdown(self) -> None:
+            return None
+
+    # Plain classes are fine for the Modal-spawn side: BatchProcessors only
+    # duck-type export/force_flush/shutdown.
+    class _NoNetworkSpawnSpanExporter:
+        def export(self, spans: Any) -> Any:  # noqa: ARG002
+            return SpanExportResult.SUCCESS
+
+        def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
+            return True
+
+        def shutdown(self) -> None:
+            return None
+
+    class _NoNetworkSpawnLogExporter:
         def export(self, batch: Any) -> Any:  # noqa: ARG002
             return LogRecordExportResult.SUCCESS
 
