@@ -116,16 +116,3 @@ def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
         assert 'file("/src/junit.xml").export(JUNIT_HOST_PATH)' in source
         assert '"pytest_rc",' in source
         assert "sys.exit(rc)" in source
-
-
-# RUN #2: Cache validation - testing warm cache hits
-
-# RUN #3: Final cache validation - all warm caches should be populated
-
-# RUN #6: Warm cache - Dagger SDK venv should be restored
-
-# RUN #7: Post-#302 sequential cache validation (issue #303)
-
-# RUN #8: Strictly sequential post-#302 warm-cache sample (issue #303)
-
-# RUN #9: Second strictly sequential warm-cache confirmation (issue #303)
