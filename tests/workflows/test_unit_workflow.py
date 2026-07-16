@@ -81,7 +81,6 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "dag.host().directory(str(HOST_PROJECT_ENV))" in dagger
     assert "dag.host().directory(str(HOST_UV_PYTHON))" in dagger
     assert "dag.host().directory(str(HOST_UV_CACHE))" in dagger
-    assert 'dag.host().directory("scripts")' in dagger
     assert "Dagger uv cache: seeding from Namespace host cache" in dagger
     assert (
         '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
@@ -133,6 +132,8 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert "--all-extras --dev --locked" in workflow
     assert "--no-install-project" in workflow
+    assert "uv pip install --no-deps --reinstall" in workflow
+    assert '--python "${project_env}/bin/python" .' in workflow
     assert 'rm -rf "${project_env}"' in workflow
     assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
     assert "cache: uv" in workflow

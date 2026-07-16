@@ -147,6 +147,11 @@ jobs:
             printf '%s\n' "${cache_key}" >"${cache_key_file}"
             echo "Host project uv cache: refreshed (${cache_key})"
           fi
+          # Install only the local project package into the warmed environment.
+          # A non-editable install keeps Dagger workers independent of the
+          # runner checkout path without recreating the dependency graph.
+          uv pip install --no-deps --reinstall \
+            --python "${project_env}/bin/python" .
 
       - name: Report Namespace cache state
         run: |
