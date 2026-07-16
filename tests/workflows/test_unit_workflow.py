@@ -29,7 +29,8 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
         "# v1.6.0"
     ) in workflow
     assert "~/.dagger-venv" in workflow
-    assert "~/.cache/uv" in workflow
+    assert "cache: uv" in workflow
+    assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
 
 

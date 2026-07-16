@@ -27,9 +27,12 @@ jobs:
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
         with:
+          # Native uv support retains both its artifact cache and downloaded
+          # CPython toolchains. Keep the SDK venv explicit because it is a
+          # workflow-specific path, not uv-managed state.
+          cache: uv
           path: |
             ~/.dagger-venv
-            ~/.cache/uv
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -64,10 +67,16 @@ jobs:
             uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
           fi
           uv_cache_dir="$(uv cache dir)"
+          uv_python_dir="${UV_PYTHON_INSTALL_DIR:-$HOME/.local/share/uv/python}"
           if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
             echo "Namespace host cache: uv cache contains artifacts (${uv_cache_dir})"
           else
             echo "Namespace host cache: uv cache is empty (${uv_cache_dir})"
+          fi
+          if [ -d "${uv_python_dir}" ] && [ "$(find "${uv_python_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+            echo "Namespace host cache: uv Python toolchain is present (${uv_python_dir})"
+          else
+            echo "Namespace host cache: uv Python toolchain is absent (${uv_python_dir})"
           fi
           echo "$HOME/.dagger-venv/bin" >> "$GITHUB_PATH"
 
