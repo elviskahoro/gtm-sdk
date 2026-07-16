@@ -80,7 +80,7 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert '"uv-cache"' in dagger
     assert "dag.host().directory(str(HOST_PROJECT_ENV))" in dagger
     assert "dag.host().directory(str(HOST_UV_PYTHON))" in dagger
-    assert 'dag.host().directory(str(Path.home() / ".cache" / "uv"))' in dagger
+    assert "dag.host().directory(str(HOST_UV_CACHE))" in dagger
     assert "Dagger uv cache: seeding from Namespace host cache" in dagger
     assert (
         '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
@@ -104,6 +104,13 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
         '.with_env_variable("UV_PROJECT_ENVIRONMENT", str(HOST_PROJECT_ENV))' in dagger
     )
     assert '.with_env_variable("PYTHONPATH", "/src")' in dagger
+    assert (
+        ".with_mounted_directory(\n"
+        "            str(HOST_UV_CACHE),\n"
+        "            host_uv_cache,\n"
+        "            read_only=True,\n"
+        "        )" in dagger
+    )
     assert "--junit-xml=junit.xml" in dagger
     assert "echo $? > /src/pytest_rc" in dagger
     assert "sys.exit(rc)" in dagger

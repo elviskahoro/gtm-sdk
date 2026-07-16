@@ -49,6 +49,7 @@ PYTEST_RC_HOST_PATH = "pytest_rc"
 HOST_DAGGER_SDK = Path.home() / ".dagger-sdk"
 HOST_PROJECT_ENV = HOST_DAGGER_SDK / "project-venv"
 HOST_UV_PYTHON = HOST_DAGGER_SDK / "uv-python"
+HOST_UV_CACHE = Path.home() / ".cache" / "uv"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
 # scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`.
@@ -89,7 +90,7 @@ def build_container() -> dagger.Container:
     """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     uv_cache = dag.cache_volume("uv-cache")
-    host_uv_cache = dag.host().directory(str(Path.home() / ".cache" / "uv"))
+    host_uv_cache = dag.host().directory(str(HOST_UV_CACHE))
     # The host workflow warms these paths under the Namespace cache. Mount
     # them at their original absolute paths so the project's Python symlink
     # resolves through the sibling uv-managed interpreter directory. A
@@ -121,6 +122,14 @@ def build_container() -> dagger.Container:
         .with_mounted_directory(
             str(HOST_UV_PYTHON),
             host_uv_python,
+            read_only=True,
+        )
+        # uv's host venv uses symlink mode by default. Expose the artifact
+        # cache at its original path so those package links resolve in the
+        # container; the /root cache mount above is the path used by uv itself.
+        .with_mounted_directory(
+            str(HOST_UV_CACHE),
+            host_uv_cache,
             read_only=True,
         )
         .with_directory("/src", source)
