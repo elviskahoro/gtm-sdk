@@ -37,9 +37,9 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
+    "export PYTHONPATH=/src${PYTHONPATH:+:$PYTHONPATH}; "
     '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
-    "--import-mode=prepend "
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"

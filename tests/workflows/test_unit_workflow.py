@@ -185,7 +185,7 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     source = PYTEST_DAGGER.read_text()
 
     assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in source
-    assert "--import-mode=prepend" in source
+    assert "export PYTHONPATH=/src" in source
     assert "-n 4 --dist=loadfile" in source
     assert "-p xdist.plugin" in source
     assert "-p pytest_asyncio.plugin" in source
