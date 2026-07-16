@@ -1703,7 +1703,7 @@ wheels = [
 
 [[package]]
 name = "parallel-web"
-version = "0.5.1"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1713,9 +1713,9 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/35/55355e4d748959973bb921dc6547834cb16f732ab209fcc2bb1d69ec195f/parallel_web-0.5.1.tar.gz", hash = "sha256:e967f3bd1833c73db30ea11aa49f5b3248c10342af1fa768a4a290ff8f4301f6", size = 154941, upload-time = "2026-04-22T18:03:38.131Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/1d/fefb7d976d3ea2ae61b0d9d6d638c9f837cb9fb96532680b148f33f322a1/parallel_web-1.1.0.tar.gz", hash = "sha256:97d6dbe4aa49b8c2c93f71f818d8883bc45bee71928bd945b7f616cecaacec0d", size = 157720, upload-time = "2026-06-08T18:22:21.298Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/d7/2bcad8a9c6c878439bf922e49d82a3ef31e63ae323cbaab4ed9b2ec15c03/parallel_web-0.5.1-py3-none-any.whl", hash = "sha256:7db65556a362d44ae864b5e4881a239e96377bcefbf931616d9c3b80a6124c21", size = 164287, upload-time = "2026-04-22T18:03:36.854Z" },
+    { url = "https://files.pythonhosted.org/packages/df/ec/276c02247c973b02e254c9daac1844ccd38f385850c50e00ad46548eb5db/parallel_web-1.1.0-py3-none-any.whl", hash = "sha256:598aa5613c1146a3880a41592c343b0b9c0f51cff7c1ea6d10bc586d2df5e2f9", size = 167673, upload-time = "2026-06-08T18:22:20.068Z" },
 ]
 
 [[package]]
