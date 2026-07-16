@@ -124,6 +124,14 @@ def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnus
             "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter",
             _NoNetworkLogExporter,
         ),
+        patch(
+            "libs.telemetry._build_spawn_span_exporter",
+            lambda _target: _NoNetworkSpawnSpanExporter(),
+        ),
+        patch(
+            "libs.telemetry._build_spawn_log_exporter",
+            lambda _target: _NoNetworkSpawnLogExporter(),
+        ),
     ]
     for p in patchers:
         p.start()
