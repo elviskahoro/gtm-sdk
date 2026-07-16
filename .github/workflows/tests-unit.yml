@@ -141,8 +141,9 @@ jobs:
             echo "Host project uv cache: exact hit (${cache_key})"
           else
             echo "Host project uv cache: miss or stale; syncing dependencies (${cache_key})"
-            rm -rf "${project_env}"
-            uv venv --python 3.13 "${project_env}"
+            if [ ! -x "${project_env}/bin/python" ]; then
+              uv venv --python 3.13 "${project_env}"
+            fi
             UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
               --all-extras --dev --locked --no-install-project \
               --python "${project_env}/bin/python"
