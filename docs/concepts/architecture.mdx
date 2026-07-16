@@ -1,0 +1,83 @@
+---
+title: "Architecture"
+description: "The enforced cli → src → libs layering, the repo layout, hard rules and anti-patterns, and the decision tree for where new code goes."
+---
+
+gtm-sdk is three layers with one-way dependencies: the CLI calls orchestration,
+orchestration chains adapters, and adapters wrap exactly one external service each. The
+layering is enforced in review and by convention, not just described here.
+
+## Repo layout
+
+```text
+gtm-sdk/
+├── cli/         # Thin command surface (Typer). Parses flags, preflight, calls src/.
+├── src/         # Workflow orchestration. Chains libs/ adapters. Modal endpoints register here.
+├── libs/        # Single-SDK adapters. One folder per external service. NO cross-lib imports.
+├── data-gen/    # Reusable data products (independent, composable).
+├── webhooks/    # Standalone Modal webhook handlers, one app per (handler, source) pair.
+├── api/
+│   ├── specs/   # External API OpenAPI specs (cal.com, Sanity). Read-only reference.
+│   └── samples/ # Redacted real payloads (rb2b, cal.com, Fathom, Octolens) used as fixtures.
+├── tests/       # pytest, importlib mode. Mirrors cli/, libs/, src/.
+├── tmp/         # Gitignored scratch. ALL temporary files go here.
+├── docs/        # This documentation site (Mintlify).
+├── deploy.py    # Modal deploy entrypoint (must stay at root — avoids `attio` pkg shadowing).
+└── pyproject.toml
+```
+
+## Layer rules
+
+- `libs/<service>/` wraps **one** external SDK or API with idiomatic Python types and
+  functions. **No `libs/<x>` may import from `libs/<y>`** — if two adapters need to
+  coordinate, that belongs in `src/`.
+- `src/` chains adapters into workflows and owns side effects. Modal `@app.function` and
+  `@modal.fastapi_endpoint` decorators live here, never in `libs/`.
+- `cli/` is Typer-only: parse arguments → preflight → call into `src/` → render output.
+  No business logic.
+- `data-gen/` products are independent; they do not depend on each other.
+
+Anti-patterns to reject in review: orchestration inside `libs/`, business logic inside
+`cli/`, cross-lib imports.
+
+## Where new code goes
+
+1. **External SDK call?** → New file in `libs/<service>/`. Wrap one SDK only.
+2. **Multi-step flow or Modal endpoint?** → `src/<service>/`. If it defines endpoints,
+   register the module in `_ENDPOINT_MODULES` in `src/app.py`, or its decorators never
+   run.
+3. **User-facing command?** → `cli/<group>/` as a Typer subapp, wired into `cli/main.py`
+   via `app.add_typer(...)`.
+4. **Standalone data product?** → `data-gen/<product>/`, self-contained.
+5. **Webhook handler?** → `webhooks/<name>.py`, an independent Modal app (never
+   registered in `src/app.py`).
+
+<Note>
+  Adding a new top-level package also means updating
+  `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `libs*`,
+  `scripts*`, `src*`).
+</Note>
+
+## The adapter pattern
+
+Every keyed adapter exposes the same client shape: a `get_client()` (or module-level
+functions that build one) with a three-tier key resolution — explicit `api_key=`
+argument, then the `api_key_scope` contextvar, then the adapter's environment variable.
+[Secrets and API keys](/secrets) covers why.
+
+## Execution model
+
+The CLI is a thin client: provider-backed commands invoke functions deployed on Modal by
+name rather than calling provider APIs from your machine. Local-only commands
+(`gtm version`, `gmail url decode`, `granola export`, `sanity blog download`,
+`webhook list`) run in-process. The [CLI contract](/concepts/cli-contract) page describes
+the I/O and mutation-gating conventions shared by every command.
+
+## Related directories
+
+- `api/specs/` and `api/samples/` are read-only reference: OpenAPI specs for external
+  services and redacted real webhook payloads used as test fixtures. Webhook models are
+  validated against captured payloads, not hand-authored fixtures.
+- `data-gen/` currently ships one product (`marketplace`, behind
+  `uv sync --extra marketplace`).
+- `tests/` mirrors the source layout; see [Development](/contributing/development).

@@ -25,9 +25,21 @@ def download(
         "--out-dir",
         help="Output directory; posts are written under <out-dir>/blogs/<slug>/.",
     ),
-    project_id: str = typer.Option(DEFAULT_PROJECT_ID, "--project-id"),
-    dataset: str = typer.Option(DEFAULT_DATASET, "--dataset"),
-    api_version: str = typer.Option(DEFAULT_API_VERSION, "--api-version"),
+    project_id: str = typer.Option(
+        DEFAULT_PROJECT_ID,
+        "--project-id",
+        help="Sanity project ID",
+    ),
+    dataset: str = typer.Option(
+        DEFAULT_DATASET,
+        "--dataset",
+        help="Sanity dataset name",
+    ),
+    api_version: str = typer.Option(
+        DEFAULT_API_VERSION,
+        "--api-version",
+        help="Sanity API version date string",
+    ),
     token: str | None = typer.Option(
         None,
         "--token",

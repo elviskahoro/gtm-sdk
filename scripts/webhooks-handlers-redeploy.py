@@ -5,7 +5,7 @@
 Port of scripts/redeploy-webhook.sh. Host-side Python does discovery,
 preflights, atomic locking, backup, placeholder substitution, restore, and
 restore verification. The ``modal deploy`` invocation itself runs inside a
-Dagger container (matching ``scripts/hookdeck-dump-connection-events.py``)
+Dagger container (matching ``scripts/hookdeck-connection_events-dump.py``)
 so the env that ships images to Modal is reproducible operator-to-operator.
 
 Every footgun catalogued in AGENTS.md "Scripted deploy pitfalls" is encoded

@@ -33,7 +33,11 @@ def create(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Start a FindAll entity discovery run."""
     if json_input:
@@ -103,7 +107,11 @@ def result(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Get results from a completed FindAll run."""
     if json_input:
@@ -157,7 +165,11 @@ def status(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Check the status of a FindAll run."""
     if json_input:

@@ -19,9 +19,9 @@ Prerequisites (the script checks and tells you if either is missing):
   2. Logged in:             entire login
 
 Usage:
-  scripts/setup-entire-hooks.py          # directly executable (uv shebang)
-  uv run scripts/setup-entire-hooks.py   # equivalent
-  scripts/setup-entire-hooks.py --force  # replace pre-existing custom hooks
+  scripts/entire-hooks-setup.py          # directly executable (uv shebang)
+  uv run scripts/entire-hooks-setup.py   # equivalent
+  scripts/entire-hooks-setup.py --force  # replace pre-existing custom hooks
 """
 
 from __future__ import annotations
