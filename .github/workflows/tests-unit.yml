@@ -221,29 +221,34 @@ jobs:
               -e DAGGER_CLOUD_TOKEN \
               "registry.dagger.io/engine:${ENGINE_VERSION}"
           }
-          engine_running() {
-            for _ in $(seq 1 30); do
-              if [ "$(docker inspect -f '{{.State.Running}}' "${name}" 2>/dev/null)" = "true" ]; then
-                # A corrupt-state buildkitd starts, then exits a second or two
-                # in when it fails to open its databases — require the
-                # container to survive a short settle so the wipe-and-retry
-                # path below catches that case instead of a red `dagger run`.
-                sleep 3
-                [ "$(docker inspect -f '{{.State.Running}}' "${name}" 2>/dev/null)" = "true" ] && return 0
-                return 1
-              fi
-              sleep 1
+          engine_ready() {
+            # The API socket is created only after BuildKit has opened its
+            # state. Poll it rather than applying a fixed three-second settle:
+            # corrupt cached databases fail before this point, while a usable
+            # cached engine becomes available as soon as it has initialized.
+            for _ in $(seq 1 300); do
+              case "$(docker inspect -f '{{.State.Status}}' "${name}" 2>/dev/null || true)" in
+                running)
+                  if docker exec "${name}" test -S /run/dagger/engine.sock 2>/dev/null; then
+                    return 0
+                  fi
+                  ;;
+                exited | dead | removing | "")
+                  return 1
+                  ;;
+              esac
+              sleep 0.1
             done
             return 1
           }
           start_engine
-          if ! engine_running; then
+          if ! engine_ready; then
             echo "::warning::engine failed to start on cached state; wiping ${state_dir} and retrying cold"
             docker logs "${name}" 2>&1 | tail -50 || true
             sudo rm -rf "${state_dir}"
             mkdir -p "${state_dir}"
             start_engine
-            if ! engine_running; then
+            if ! engine_ready; then
               # Both attempts failing means the problem is not cached state
               # (the second start had none) — e.g. the engine rejecting the
               # GC config above. Degrade to a cold auto-provisioned engine
