@@ -2,7 +2,7 @@
 
 These tests validate the workflow changes from issue #296:
 - Namespace-native checkout and caching actions
-- Fresh Dagger engine provisioning with preserved host-side caches
+- Preserved Dagger engine state and cache volumes
 - Diagnostic output for cache behavior measurement
 - No regression from previous setup
 """
@@ -54,28 +54,25 @@ def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
     assert "enable-cache: false" in workflow
 
 
-def test_unit_workflow_uses_a_fresh_dagger_engine_and_preserves_host_caches() -> None:
+def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()
 
     assert "runs-on: namespace-profile-test" in workflow
     assert "version: 0.21.7" in workflow
     assert "NSC_CACHE_PATH" in workflow
-    assert "- name: Prune stale Dagger engine state" in workflow
-    assert 'sudo rm -rf "${NSC_CACHE_PATH}/dagger-engine"' in workflow
-    assert 'docker rm -f "dagger-engine-${ENGINE_VERSION}" >/dev/null 2>&1 || true' in workflow
-    assert "The CLI now auto-provisions a fresh engine per run" in workflow
-    assert "Start Dagger engine with persistent state" not in workflow
-    assert "_EXPERIMENTAL_DAGGER_RUNNER_HOST" not in workflow
-    assert "Start graceful Dagger engine shutdown" not in workflow
-    assert "Await graceful Dagger engine shutdown" not in workflow
-    assert "docker stop -t 300" not in workflow
+    assert '-v "${state_dir}:/var/lib/dagger"' in workflow
+    assert "docker-container://${name}" in workflow
+    assert "engine_name=${name}" in workflow
+    assert "engine failed to start on cached state" in workflow
+    assert "falling back to a cold auto-provisioned engine" in workflow
     assert "timeout 150 docker pull" in workflow
     assert "for attempt in $(seq 1 6)" in workflow
     assert "DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}" in workflow
     assert "dagger run python .github/workflows/ci/pytest_dagger.py" in workflow
     assert "trunk-io/analytics-uploader@" in workflow
     assert "junit-paths: junit.xml" in workflow
+    assert 'docker stop -t 300 "${ENGINE_NAME}"' in workflow
     assert '"uv-cache"' in dagger
     assert '"venv"' in dagger
     assert '.with_mounted_cache("/root/.cache/uv", uv_cache)' in dagger
@@ -96,6 +93,50 @@ def test_unit_workflow_supports_manual_dispatch() -> None:
     # marker commits pollute history and roborev/PR flows.
     workflow = WORKFLOW.read_text()
     assert "workflow_dispatch:" in workflow
+
+
+def test_unit_workflow_overlaps_graceful_engine_stop_with_results_upload() -> None:
+    workflow = WORKFLOW.read_text()
+
+    run_tests = workflow.index("- name: Run pytest in Dagger")
+    start_stop = workflow.index("- name: Start graceful Dagger engine shutdown")
+    upload_results = workflow.index("- name: Upload Test Results to Trunk.io")
+    await_stop = workflow.index("- name: Await graceful Dagger engine shutdown")
+
+    assert run_tests < start_stop < upload_results < await_stop
+    assert "nohup bash -c " in workflow
+    assert 'docker stop -t 300 "${ENGINE_NAME}"' in workflow
+    assert (
+        "if: always() && steps.dagger_engine_start.outputs.engine_name != ''"
+        in workflow
+    )
+
+
+def test_unit_workflow_checks_asynchronous_engine_shutdown() -> None:
+    workflow = WORKFLOW.read_text()
+    shutdown_workflow = workflow[
+        workflow.index("- name: Start graceful Dagger engine shutdown") :
+    ]
+
+    assert (
+        "DAGGER_STOP_STATUS_FILE: ${{ runner.temp }}/dagger-engine-stop.status"
+        in workflow
+    )
+    assert "DAGGER_STOP_LOG_FILE: ${{ runner.temp }}/dagger-engine-stop.log" in workflow
+    assert (
+        "DAGGER_STOP_STARTED_FILE: ${{ runner.temp }}/dagger-engine-stop.started"
+        in workflow
+    )
+    assert "for _ in $(seq 1 310)" in workflow
+    assert "shutdown process exited before writing status" in workflow
+    assert "timed out waiting for graceful engine shutdown" in workflow
+    assert "graceful engine shutdown failed with exit code" in workflow
+    assert "docker inspect -f '{{.State.Running}}'" in workflow
+    assert "docker inspect -f '{{.State.ExitCode}}'" in workflow
+    assert "engine exited non-gracefully with status" in workflow
+    assert 'docker logs --timestamps "${ENGINE_NAME}"' in workflow
+    assert "docker kill" not in shutdown_workflow
+    assert 'docker rm -f "${ENGINE_NAME}"' not in shutdown_workflow
 
 
 def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
