@@ -85,6 +85,7 @@ def build_container() -> dagger.Container:
     """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     uv_cache = dag.cache_volume("uv-cache")
+    host_uv_cache = dag.host().directory(str(Path.home() / ".cache" / "uv"))
     # /src/.venv lives on a cache volume, NOT in the container filesystem. A
     # 188-package venv (pyarrow/polars/duckdb) baked into an exec layer forces
     # BuildKit to content-hash a multi-GB diff after pytest — observed in CI as
@@ -106,7 +107,11 @@ def build_container() -> dagger.Container:
         # filesystems), so uv's default hardlink install always fails and
         # falls back to copying with a per-run warning; declare copy mode.
         .with_env_variable("UV_LINK_MODE", "copy")
-        .with_mounted_cache("/root/.cache/uv", uv_cache)
+        .with_mounted_cache(
+            "/root/.cache/uv",
+            uv_cache,
+            source=host_uv_cache,
+        )
         .with_directory("/src", source)
         .with_workdir("/src")
         .with_mounted_cache("/src/.venv", venv_cache)
@@ -129,6 +134,7 @@ def build_container() -> dagger.Container:
 
 async def main() -> None:
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
+        print("Dagger uv cache: seeding from Namespace host cache (~/.cache/uv)")
         ctr = build_container()
 
         # Read pytest's real exit code (captured in PYTEST_CMD) first so we know
