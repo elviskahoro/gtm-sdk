@@ -131,7 +131,7 @@ Apps never talk to Dash0 directly. The app-side exporter in `libs/telemetry.py` 
       --env=prod -- uv run modal app logs otel-collector
     ```
 
-    Look for errors like `exporters config: *conf.ExportersConfig.Validate()...`, which indicates a config build error.
+    Look for errors like "exporters config: *conf.ExportersConfig.Validate()...", which indicate a config build error.
   </Accordion>
   <Accordion title="No telemetry in Dash0">
     1. Verify the collector is running: `uv run modal serve src/otel_collector.py`
