@@ -223,13 +223,13 @@ jobs:
       # a fresh local engine when the token is unavailable.
       - name: Run pytest in Dagger
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}
         run: |
           if [ -n "${DAGGER_CLOUD_TOKEN:-}" ]; then
             echo "Dagger Cloud: enabled"
             dagger --cloud run python .github/workflows/ci/pytest_dagger.py
           else
-            echo "Dagger Cloud: disabled (DAGGER_CLOUD_TOKEN is unavailable)"
+            echo "Dagger Cloud: disabled (DAGGER_CLOUD_COMPUTE_TOKEN is unavailable)"
             DAGGER_NO_NAG=1 dagger run python .github/workflows/ci/pytest_dagger.py
           fi
 

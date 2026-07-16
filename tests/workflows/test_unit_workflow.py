@@ -73,7 +73,7 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "docker stop" not in workflow
     assert "timeout 150 docker pull" in workflow
     assert "for attempt in $(seq 1 6)" in workflow
-    assert "DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}" in workflow
+    assert "DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}" in workflow
     assert "dagger --cloud run python .github/workflows/ci/pytest_dagger.py" in workflow
     assert (
         "DAGGER_NO_NAG=1 dagger run python .github/workflows/ci/pytest_dagger.py"
