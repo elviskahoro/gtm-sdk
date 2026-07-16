@@ -10,10 +10,11 @@ it. On the ARM64 8x16 Namespace runner, local measurements favored four
 explicit xdist workers over both serial and eight workers: serial 13.16s, four
 workers 10.74s, eight workers 12.08s.
 
-Dependencies install with `uv sync --locked`: the run fails loudly if
-`pyproject.toml` drifts from `uv.lock` instead of silently re-locking inside
-CI — run `uv lock` after editing dependencies. (`--locked`, not `--frozen`:
-frozen skips the freshness check and would happily install a stale lock.)
+The workflow warms a lockfile-fingerprinted project environment on the host
+before opening Dagger. The pipeline mounts that dependency-only environment and its sibling
+uv-managed Python toolchain at their original absolute paths, then runs
+interpreter directly with `/src` on `PYTHONPATH`; this avoids both network downloads and reinstalling the
+188-package environment inside every fresh Dagger engine.
 
 The pipeline *fails* (non-zero exit) when pytest exits non-zero, while still
 exporting the report. A previous `... || true` swallowed pytest's exit code so
@@ -36,7 +37,10 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "uv run --no-sync pytest "
+    "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\"); import scripts.lib' "
+    ">/tmp/sitecustomize.py; "
+    "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
+    '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
@@ -45,6 +49,10 @@ PYTEST_CMD = (
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
+HOST_DAGGER_SDK = Path.home() / ".dagger-sdk"
+HOST_PROJECT_ENV = HOST_DAGGER_SDK / "project-venv"
+HOST_UV_PYTHON = HOST_DAGGER_SDK / "uv-python"
+HOST_UV_CACHE = Path.home() / ".cache" / "uv"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
 # scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`.
@@ -84,17 +92,15 @@ SOURCE_EXCLUDES = [
 def build_container() -> dagger.Container:
     """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
+    scripts = dag.host().directory("scripts")
     uv_cache = dag.cache_volume("uv-cache")
-    host_uv_cache = dag.host().directory(str(Path.home() / ".cache" / "uv"))
-    # /src/.venv lives on a cache volume, NOT in the container filesystem. A
-    # 188-package venv (pyarrow/polars/duckdb) baked into an exec layer forces
-    # BuildKit to content-hash a multi-GB diff after pytest — observed in CI as
-    # a 7-minute stall on the first result read (the 3-byte pytest_rc fetch
-    # paid for the whole snapshot). As a mount the venv never enters a layer,
-    # and `uv sync` is an exact reconcile, so a stale volume self-corrects
-    # (including across python:3.13 image bumps). GIT_INIT_CMD's `add -A`
-    # keeps ignoring it because `.gitignore` covers `.venv/`.
-    venv_cache = dag.cache_volume("venv")
+    host_uv_cache = dag.host().directory(str(HOST_UV_CACHE))
+    # The host workflow warms these paths under the Namespace cache. Mount
+    # them at their original absolute paths so the project's Python symlink
+    # resolves through the sibling uv-managed interpreter directory. A
+    # mounted directory is session input, not a multi-GB container layer.
+    host_project_env = dag.host().directory(str(HOST_PROJECT_ENV))
+    host_uv_python = dag.host().directory(str(HOST_UV_PYTHON))
 
     return (
         dag.container()
@@ -112,21 +118,36 @@ def build_container() -> dagger.Container:
             uv_cache,
             source=host_uv_cache,
         )
-        .with_directory("/src", source)
-        .with_workdir("/src")
-        .with_mounted_cache("/src/.venv", venv_cache)
-        .with_exec(["bash", "-c", GIT_INIT_CMD])
-        # Script tests import the repo-local `scripts` package during
-        # collection, so this must install the editable project.
-        .with_exec(
-            [
-                "uv",
-                "sync",
-                "--all-extras",
-                "--dev",
-                "--locked",
-            ],
+        .with_mounted_directory(
+            str(HOST_PROJECT_ENV),
+            host_project_env,
+            read_only=True,
         )
+        .with_mounted_directory(
+            str(HOST_UV_PYTHON),
+            host_uv_python,
+            read_only=True,
+        )
+        # uv's host venv uses symlink mode by default. Expose the artifact
+        # cache at its original path so those package links resolve in the
+        # container; the /root cache mount above is the path used by uv itself.
+        .with_mounted_directory(
+            str(HOST_UV_CACHE),
+            host_uv_cache,
+            read_only=True,
+        )
+        .with_directory("/src", source)
+        # Keep the small repo-local helper package under a separate import
+        # root so an incomplete `/src` snapshot cannot shadow `scripts.lib`.
+        .with_directory("/opt/gtm-sdk/scripts", scripts)
+        .with_workdir("/src")
+        # The editable project path recorded in the host venv points at the
+        # runner checkout, not /src. Tests import the checked-out source
+        # directly, so make that path explicit instead of copying/rebuilding
+        # the host environment.
+        .with_env_variable("UV_PROJECT_ENVIRONMENT", str(HOST_PROJECT_ENV))
+        .with_env_variable("PYTHONPATH", "/src")
+        .with_exec(["bash", "-c", GIT_INIT_CMD])
         .with_env_variable("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
         .with_exec(["bash", "-c", PYTEST_CMD])
     )

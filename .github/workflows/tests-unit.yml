@@ -126,8 +126,10 @@ jobs:
       - name: Warm project uv cache
         run: |
           set -euo pipefail
-          project_env="$HOME/.dagger-sdk/project-venv"
-          cache_key_file="${project_env}/.gtm-sdk-cache-key"
+          # Reuse the Namespace-persisted SDK venv for project dependencies;
+          # sibling project-venv directories are not promoted by this profile.
+          project_env="$HOME/.dagger-sdk/venv"
+          cache_key_file="$HOME/.dagger-sdk/.gtm-sdk-cache-key"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"
@@ -139,14 +141,23 @@ jobs:
             echo "Host project uv cache: exact hit (${cache_key})"
           else
             echo "Host project uv cache: miss or stale; syncing dependencies (${cache_key})"
-            rm -rf "${project_env}"
-            uv venv --python 3.13 "${project_env}"
+            if [ ! -x "${project_env}/bin/python" ]; then
+              uv venv --python 3.13 "${project_env}"
+            fi
             UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
-              --all-extras --dev --locked \
+              --all-extras --dev --locked --no-install-project \
               --python "${project_env}/bin/python"
             printf '%s\n' "${cache_key}" >"${cache_key_file}"
             echo "Host project uv cache: refreshed (${cache_key})"
           fi
+          # Install only the local project package into the warmed environment.
+          # A non-editable install keeps Dagger workers independent of the
+          # runner checkout path without recreating the dependency graph.
+          uv pip install --no-deps --reinstall \
+            --python "${project_env}/bin/python" .
+          uv pip install --no-deps --reinstall \
+            --python "${project_env}/bin/python" \
+            "dagger-io==0.21.7" "anyio==4.13.0"
 
       - name: Report Namespace cache state
         run: |
@@ -157,26 +168,70 @@ jobs:
             echo "Namespace cache volume: absent"
           fi
 
-      # `--cloud` runs the pipeline on a managed Dagger Cloud engine instead of
-      # starting one inside the runner, so the runner never pulls
-      # registry.dagger.io/engine and is immune to that registry's brownouts
-      # (dagger/dagger#7548) that previously stalled the first-use pull and killed
-      # the job before any test ran (ai-bic, superseding the cache+timeout
-      # mitigation in #221). The Python SDK's dagger.connection() reuses the
-      # CLI's session, so host context (source dir, secrets, uv-cache volume)
-      # streams to the cloud engine unchanged.
-      #
-      # Token model: `--cloud` authenticates with a Dagger Cloud token, which the
-      # CLI reads only from DAGGER_CLOUD_TOKEN. During early access the org's
-      # single Dagger Cloud token serves both compute (--cloud) and telemetry, so
-      # DAGGER_CLOUD_COMPUTE_TOKEN currently carries the *same value* as the
-      # DAGGER_CLOUD_TOKEN secret. It is kept as a separate secret so the two can
-      # diverge later if Dagger issues a distinct compute token, without touching
-      # this workflow. See https://docs.dagger.io/reference/configuration/cloud/
-      - name: Run pytest in Dagger (Cloud engine)
+      - name: Resolve Dagger engine version
+        id: dagger_engine
+        run: |
+          set -uo pipefail
+          version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+          if [ -z "${version}" ]; then
+            echo "::warning::could not determine Dagger engine version; skipping engine caching"
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+
+      # `dagger run` needs registry.dagger.io/engine:v<cli-version>, and that
+      # registry intermittently brownouts (dagger/dagger#7548): a single blob
+      # stalls and `docker pull` retries it internally for minutes (the
+      # "Retrying in 5/10/15 seconds" per-layer loop) before failing, killing
+      # the job before any test runs (ai-4bz). Two-layer mitigation: (1) the
+      # runner profile's container-image cache serves the pull locally after
+      # the first run (replaces the old tarball cache dance); (2) on
+      # a cold miss, retry the pull with a per-attempt `timeout` so a hung blob
+      # cedes to a fresh attempt instead of wedging.
+      - name: Ensure Dagger engine image (resilient to registry flakiness)
+        if: steps.dagger_engine.outputs.version != ''
+        env:
+          ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
+        run: |
+          set -uo pipefail
+          image="registry.dagger.io/engine:${ENGINE_VERSION}"
+          if docker image inspect "${image}" >/dev/null 2>&1; then
+            echo "Dagger engine image cache: local hit (${image})"
+            exit 0
+          fi
+          for attempt in $(seq 1 6); do
+            if timeout 150 docker pull "${image}"; then
+              echo "Dagger engine image cache: registry pull succeeded on attempt ${attempt} (${image})"
+              exit 0
+            fi
+            echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
+            sleep 20
+          done
+          echo "::error::failed to pull ${image} after 6 attempts"
+          exit 1
+
+      # Use a fresh auto-provisioned engine for every job. The Namespace
+      # profile's local Docker cache retains the outer engine image, while the
+      # host uv and SDK caches above remain independently persistent. Dagger's
+      # inner BuildKit layers and cache volumes intentionally do not persist.
+
+      # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
+      # inside the container) — the CLI reads it to ship traces to Dagger
+      # Cloud. The value is stored in Infisical and synced into repo
+      # `secrets.*` by Infisical's GitHub App integration (same path as
+      # TRUNK_API_TOKEN / MODAL_TOKEN_*). Cloud tracing is optional: forked PRs
+      # and manually dispatched runs may not receive repository secrets, so use
+      # a fresh local engine when the token is unavailable.
+      - name: Run pytest in Dagger
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}
-        run: dagger --cloud run python .github/workflows/ci/pytest_dagger.py
+        run: |
+          if [ -n "${DAGGER_CLOUD_TOKEN:-}" ]; then
+            echo "Dagger Cloud: enabled"
+            dagger --cloud run python .github/workflows/ci/pytest_dagger.py
+          else
+            echo "Dagger Cloud: disabled (DAGGER_CLOUD_COMPUTE_TOKEN is unavailable)"
+            DAGGER_NO_NAG=1 dagger run python .github/workflows/ci/pytest_dagger.py
+          fi
 
       # If this step errors "Unauthorized access, your Trunk organization URL
       # slug or token may be incorrect", it is almost always a dead/revoked
