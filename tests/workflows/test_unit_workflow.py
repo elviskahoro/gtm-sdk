@@ -44,15 +44,16 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     assert '"$HOME/.dagger-sdk/uv-python"' in workflow
     assert 'dagger_venv="$HOME/.dagger-sdk/venv"' in workflow
     assert 'mkdir -p "$HOME/gtm-sdk-cache"' in workflow
+    assert 'touch "$HOME/gtm-sdk-cache/gtm-sdk-cache-key"' in workflow
     assert workflow.index(
-        'mkdir -p "$HOME/gtm-sdk-cache"',
+        'touch "$HOME/gtm-sdk-cache/gtm-sdk-cache-key"',
     ) < workflow.index(
         "namespacelabs/nscloud-cache-action@",
     )
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
     assert "~/.dagger-sdk/venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
-    assert "~/gtm-sdk-cache" in cache_paths
+    assert "~/gtm-sdk-cache/gtm-sdk-cache-key" in cache_paths
     assert "~/.dagger-venv" not in cache_paths
     assert "local/share/uv/python" not in cache_paths
 
