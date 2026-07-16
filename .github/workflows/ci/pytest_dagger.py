@@ -39,6 +39,7 @@ from dagger import dag
 PYTEST_CMD = (
     '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
+    "--pythonpath=/src "
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"
