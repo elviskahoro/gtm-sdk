@@ -17,9 +17,64 @@ from attio.errors import SDKError  # noqa: E402
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
+def pytest_sessionfinish(
+    session: pytest.Session,  # noqa: ARG001
+    exitstatus: int,  # noqa: ARG001
+) -> None:
+    """Issue #310 forensics: if interpreter exit stalls, dump all thread stacks.
+
+    CI intermittently shows a ~28s gap between the pytest summary and the
+    interpreter exiting inside the credential-less Dagger container — some
+    atexit hook or non-daemon thread join blocking on a ~30s network timeout.
+    Gated on CI_EXIT_FORENSICS (set only by
+    ``.github/workflows/ci/pytest_dagger.py``) so local runs are unaffected.
+    faulthandler's watchdog is a raw C thread (not a Python thread), so it
+    survives interpreter finalization and fires even while atexit hooks /
+    thread joins are blocking. exit=False + repeat=True → a stack dump to
+    stderr every 10s for as long as shutdown is stuck; a normal ~2s exit
+    prints nothing.
+    """
+    if os.environ.get("CI_EXIT_FORENSICS") != "1":
+        return
+    import faulthandler
+
+    faulthandler.dump_traceback_later(10, repeat=True, exit=False, file=sys.stderr)
+
+
+_TELEMETRY_PATCHERS: list[Any] = []
+
+# The unpatched spawn-exporter builders, captured by pytest_configure before
+# it installs the no-op patchers. Because the patchers now start BEFORE test
+# modules import (see pytest_configure's docstring), a module-level
+# ``from libs.telemetry import _build_spawn_span_exporter`` in a test file
+# would bind the no-op — tests that exercise the real spawn path (with a
+# mocked ``modal.Function``) must use the ``real_spawn_builders`` fixture.
+_REAL_SPAWN_BUILDERS: dict[str, Any] = {}
+
+
+@pytest.fixture(scope="session")
+def real_spawn_builders() -> Any:
+    """The real (unpatched) Modal-spawn exporter builders as a namespace with
+    ``span`` and ``log`` attributes."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(**_REAL_SPAWN_BUILDERS)
+
+
+def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
     """Stop telemetry unit tests from phoning home at interpreter shutdown.
+
+    This runs from ``pytest_configure``/``pytest_unconfigure`` — NOT a
+    session-scope autouse fixture — because fixtures only start at the first
+    test's setup, which is too late: ``src/app.py`` calls
+    ``init_log_exporter(MODAL_APP)`` at module import time, and pytest imports
+    it during *collection*. With a fixture, that import built a REAL
+    Modal-spawn log exporter (+ ``atexit.register(provider.shutdown)``) before
+    the patchers started, and its batch flush at interpreter exit blocked
+    ~28s on a credential-less ``modal.Function.spawn()`` RPC — the residual
+    post-pytest exit tail of issue #310 (the intermittency was whether any
+    log records were buffered at exit). ``pytest_configure`` runs before
+    collection, so collection-time imports get the no-op builders too.
 
     The telemetry tests (``tests/test_smoke_telemetry.py``,
     ``tests/libs/test_telemetry.py``) call ``init_tracer`` / ``init_log_exporter``
@@ -57,10 +112,10 @@ def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnus
     ``_build_spawn_log_exporter``) rather than ``_spawn_collector`` itself
     because the spawn-exporter unit tests
     (``tests/libs/test_telemetry.py::test_spawn_span_exporter_encodes_and_spawns``
-    et al.) bind the REAL builders via direct module-level import and mock
-    ``modal.Function`` to assert the real ``_spawn_collector`` interaction —
-    patching the module attribute leaves their directly-imported references
-    untouched.
+    et al.) exercise the REAL builders — via the ``real_spawn_builders``
+    fixture above, since a direct module-level import would now bind the
+    no-op — and mock ``modal.Function`` to assert the real
+    ``_spawn_collector`` interaction.
     """
     from unittest.mock import patch
 
@@ -125,31 +180,38 @@ def _neuter_telemetry_network() -> Iterator[None]:  # pyright: ignore[reportUnus
     ) -> _NoNetworkSpawnLogExporter:
         return _NoNetworkSpawnLogExporter()
 
-    patchers = [
-        patch(
-            "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
-            _NoNetworkSpanExporter,
-        ),
-        patch(
-            "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter",
-            _NoNetworkLogExporter,
-        ),
-        patch(
-            "libs.telemetry._build_spawn_span_exporter",
-            _build_noop_spawn_span_exporter,
-        ),
-        patch(
-            "libs.telemetry._build_spawn_log_exporter",
-            _build_noop_spawn_log_exporter,
-        ),
-    ]
-    for p in patchers:
+    import libs.telemetry as _telemetry
+
+    _REAL_SPAWN_BUILDERS["span"] = _telemetry._build_spawn_span_exporter  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    _REAL_SPAWN_BUILDERS["log"] = _telemetry._build_spawn_log_exporter  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    _TELEMETRY_PATCHERS.extend(
+        [
+            patch(
+                "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
+                _NoNetworkSpanExporter,
+            ),
+            patch(
+                "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter",
+                _NoNetworkLogExporter,
+            ),
+            patch(
+                "libs.telemetry._build_spawn_span_exporter",
+                _build_noop_spawn_span_exporter,
+            ),
+            patch(
+                "libs.telemetry._build_spawn_log_exporter",
+                _build_noop_spawn_log_exporter,
+            ),
+        ],
+    )
+    for p in _TELEMETRY_PATCHERS:
         p.start()
-    try:
-        yield
-    finally:
-        for p in patchers:
-            p.stop()
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
+    while _TELEMETRY_PATCHERS:
+        _TELEMETRY_PATCHERS.pop().stop()
 
 
 # Attio API keys are 64 chars per the API's own validation

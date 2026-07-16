@@ -10,8 +10,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from libs.telemetry import (
-    _build_spawn_log_exporter,  # type: ignore[reportPrivateUsage]
-    _build_spawn_span_exporter,  # type: ignore[reportPrivateUsage]
     _collector_function,  # type: ignore[reportPrivateUsage]
     _endpoint_is_hyperdx_url,  # type: ignore[reportPrivateUsage]
     _hyperdx_auth_headers,  # type: ignore[reportPrivateUsage]
@@ -342,27 +340,27 @@ class TestCollectorConfiguration:
 class TestSpanExporters:
     """Test span/log exporter builders."""
 
-    def test_build_spawn_span_exporter(self):
+    def test_build_spawn_span_exporter(self, real_spawn_builders):
         """Spawn span exporter can be created."""
         # Modal is imported inside the function, so we patch it there
         import sys
 
         mock_modal = MagicMock()
         with patch.dict(sys.modules, {"modal": mock_modal}):
-            exporter = _build_spawn_span_exporter(("test-app", "test-func"))
+            exporter = real_spawn_builders.span(("test-app", "test-func"))
             assert exporter is not None
             # Verify it has required methods
             assert hasattr(exporter, "export")
             assert hasattr(exporter, "shutdown")
             assert hasattr(exporter, "force_flush")
 
-    def test_build_spawn_log_exporter(self):
+    def test_build_spawn_log_exporter(self, real_spawn_builders):
         """Spawn log exporter can be created."""
         import sys
 
         mock_modal = MagicMock()
         with patch.dict(sys.modules, {"modal": mock_modal}):
-            exporter = _build_spawn_log_exporter(("test-app", "test-func"))
+            exporter = real_spawn_builders.log(("test-app", "test-func"))
             assert exporter is not None
             # Verify it has required methods
             assert hasattr(exporter, "export")

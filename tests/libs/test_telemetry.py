@@ -582,10 +582,13 @@ def test_endpoint_is_hyperdx_url_matches_host_not_substring():
 # --- Collector fan-out (app side) ------------------------------------------
 
 from libs.telemetry import (  # noqa: E402 — grouped with the collector tests below
-    _build_spawn_log_exporter,  # trunk-ignore(pyright/reportPrivateUsage)
-    _build_spawn_span_exporter,  # trunk-ignore(pyright/reportPrivateUsage)
     _collector_function,  # trunk-ignore(pyright/reportPrivateUsage)
 )
+
+# The real spawn-exporter builders are NOT importable here: conftest's
+# pytest_configure patches the module attributes to no-ops before this module
+# imports (issue #310). Tests that exercise the real spawn path take the
+# ``real_spawn_builders`` fixture from tests/conftest.py instead.
 
 
 def _clear_collector_env(monkeypatch) -> None:
@@ -640,11 +643,11 @@ def _patch_modal_function(monkeypatch):
     return spawned
 
 
-def test_spawn_span_exporter_encodes_and_spawns(monkeypatch):
+def test_spawn_span_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders):
     spawned = _patch_modal_function(monkeypatch)
     from opentelemetry.sdk.trace.export import SpanExportResult
 
-    exporter = _build_spawn_span_exporter(("otel-collector", "fan_out"))
+    exporter = real_spawn_builders.span(("otel-collector", "fan_out"))
     result = exporter.export([])  # empty batch -> empty OTLP request bytes
     assert result == SpanExportResult.SUCCESS
     assert ("from_name", "otel-collector", "fan_out") in spawned
@@ -655,11 +658,11 @@ def test_spawn_span_exporter_encodes_and_spawns(monkeypatch):
     assert isinstance(payload, bytes)
 
 
-def test_spawn_log_exporter_encodes_and_spawns(monkeypatch):
+def test_spawn_log_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders):
     spawned = _patch_modal_function(monkeypatch)
     from opentelemetry.sdk._logs.export import LogRecordExportResult
 
-    exporter = _build_spawn_log_exporter(("otel-collector", "fan_out"))
+    exporter = real_spawn_builders.log(("otel-collector", "fan_out"))
     result = exporter.export([])
     assert result == LogRecordExportResult.SUCCESS
     spawn_calls = [s for s in spawned if s and s[0] != "from_name"]
@@ -669,7 +672,7 @@ def test_spawn_log_exporter_encodes_and_spawns(monkeypatch):
     assert isinstance(payload, bytes)
 
 
-def test_spawn_exporter_swallows_spawn_error(monkeypatch):
+def test_spawn_exporter_swallows_spawn_error(monkeypatch, real_spawn_builders):
     """A failed spawn must not raise out of export() — telemetry non-load-bearing."""
     import modal
 
@@ -679,26 +682,62 @@ def test_spawn_exporter_swallows_spawn_error(monkeypatch):
         raise RuntimeError("modal unreachable")
 
     monkeypatch.setattr(modal.Function, "from_name", staticmethod(_boom))
-    exporter = _build_spawn_span_exporter(("otel-collector", "fan_out"))
+    exporter = real_spawn_builders.span(("otel-collector", "fan_out"))
     assert exporter.export([]) == SpanExportResult.FAILURE
 
 
-def test_conftest_neuters_module_level_spawn_exporter_builders() -> None:
-    """The session fixture must keep the module-level builder attributes
-    patched to no-op factories: a real Modal-spawn exporter wired into a
-    BatchProcessor hangs interpreter exit ~6.5 min in credential-less CI
-    (issue #305). The direct imports at the top of this file intentionally
-    keep the REAL builders testable."""
+def test_conftest_neuters_module_level_spawn_exporter_builders(
+    real_spawn_builders,
+) -> None:
+    """conftest's ``pytest_configure`` must keep the module-level builder
+    attributes patched to no-op factories: a real Modal-spawn exporter wired
+    into a BatchProcessor hangs interpreter exit ~6.5 min in credential-less
+    CI (issue #305). The ``real_spawn_builders`` fixture intentionally keeps
+    the REAL builders testable."""
     import libs.telemetry as telemetry_module
 
     assert (
         telemetry_module._build_spawn_span_exporter  # trunk-ignore(pyright/reportPrivateUsage)
-        is not _build_spawn_span_exporter
+        is not real_spawn_builders.span
     )
     assert (
         telemetry_module._build_spawn_log_exporter  # trunk-ignore(pyright/reportPrivateUsage)
-        is not _build_spawn_log_exporter
+        is not real_spawn_builders.log
     )
+
+
+def test_collection_time_src_app_log_exporter_is_neutered() -> None:
+    """``src/app.py`` calls ``init_log_exporter(MODAL_APP)`` at module import
+    time, and pytest imports it during collection — BEFORE any fixture runs.
+    conftest therefore starts the neutering patchers in ``pytest_configure``;
+    if they ever move back to a session fixture, the collection-time import
+    wires a REAL Modal-spawn log exporter whose atexit batch flush blocks ~28s
+    on a credential-less ``modal.Function.spawn()`` RPC (issue #310). Walks the
+    OTEL SDK's private attrs (pinned via uv.lock) to assert the exporter that
+    actually got registered is the conftest no-op, not the real one."""
+    from src.modal_app import MODAL_APP
+
+    logger = telemetry_module._otlp_loggers.get(MODAL_APP)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    if logger is None:
+        # Only a full-suite run imports src.app at collection (via the modal
+        # wrapper test modules) under the collector-mode default env. In a
+        # filtered run there is no collection-time logger to inspect — and
+        # initializing one here would exercise test-time patching, which the
+        # neuter test above already covers — so there is nothing to assert.
+        pytest.skip(
+            "src.app was not imported at collection time in this run; "
+            "the collection-time regression is only observable full-suite",
+        )
+    exporters = [
+        proc._batch_processor._exporter  # noqa: SLF001
+        for proc in logger._multi_log_record_processor._log_record_processors  # noqa: SLF001
+    ]
+    assert exporters, "src.app's logger must have at least one processor"
+    for exporter in exporters:
+        assert type(exporter).__name__ == "_NoNetworkSpawnLogExporter", (
+            f"collection-time init_log_exporter built {type(exporter).__name__}; "
+            "the conftest neutering did not cover pytest collection (issue #310)"
+        )
 
 
 def test_init_tracer_uses_collector_when_configured(monkeypatch):
