@@ -149,21 +149,125 @@ jobs:
           echo "::error::failed to pull ${image} after 6 attempts"
           exit 1
 
-      # The persistent Dagger engine (issue #290) was rolled back after
-      # measurement (issue #312): with the #305/#310 telemetry exit-stalls
-      # fixed, its fixed cost per run (4s start + 20-25s awaited graceful
-      # stop, of which the upload overlap reclaimed only ~3s) exceeded its
-      # benefit (~5s warmer pytest step vs a cold auto-provisioned engine).
-      # The CLI now auto-provisions a fresh engine per run, pulling the image
-      # that the preflight above already guaranteed locally. This step clears
-      # the dead BuildKit state the persistent engine left on the cache
-      # volume: ~3GB that would otherwise push the volume toward Namespace's
-      # size limit, where a reset would nuke the still-valuable uv cache too.
-      - name: Prune stale Dagger engine state
+      # The CLI auto-provisions its engine as `docker run --name
+      # dagger-engine-v<ver> -v /var/lib/dagger ...` — an ANONYMOUS volume on
+      # an ephemeral runner, so all BuildKit state (python:3.13 base, the uv
+      # install layer, the uv/venv cache volumes) died with every job and each
+      # run re-downloaded ~190 packages. Start the same container ourselves
+      # with /var/lib/dagger on the profile's Namespace cache volume
+      # ($NSC_CACHE_PATH, exported by the runner when the profile has a cache
+      # volume attached) so BuildKit state persists across runs. The CLI is
+      # pointed at it two ways: the exact auto-provision name (adopted on name
+      # match) AND _EXPERIMENTAL_DAGGER_RUNNER_HOST — if the CLI's name
+      # derivation ever drifts the env var still wins, and the stop step below
+      # asserts a single engine so drift goes red instead of silently cold.
+      #
+      # Concurrency: Namespace gives each job a private fork of the cache
+      # volume (snapshot isolation; last clean instance exit is promoted), so
+      # two concurrent runners never share a live /var/lib/dagger or race the
+      # prune below — worst case is one side's warm-up being discarded.
+      #
+      # State is keyed per engine version (BuildKit state is not guaranteed
+      # compatible across engine versions); other versions' subdirs are pruned
+      # because stale state pushes the volume toward its size limit, and
+      # Namespace resets a volume that exceeds it — nuking the live cache too.
+      # If the engine fails to start on cached state, wipe the subdir and retry
+      # cold once: a corrupt cache must cost a slow run, never a red one.
+      # Cache-bust escape hatch: rename the version subdir (append e.g. "-e2").
+      - name: Start Dagger engine with persistent state
+        id: dagger_engine_start
+        if: steps.dagger_engine.outputs.version != ''
+        env:
+          ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
+          # Engine-side trace shipping needs the token at `docker run` time —
+          # parity with the CLI's own `-e DAGGER_CLOUD_TOKEN` when it
+          # auto-provisions.
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
         run: |
-          if [ -n "${NSC_CACHE_PATH:-}" ] && [ -d "${NSC_CACHE_PATH}/dagger-engine" ]; then
-            sudo rm -rf "${NSC_CACHE_PATH}/dagger-engine"
-            echo "Pruned stale persistent-engine state from the cache volume"
+          set -uo pipefail
+          name="dagger-engine-${ENGINE_VERSION}"
+          if [ -z "${NSC_CACHE_PATH:-}" ]; then
+            echo "::warning::no Namespace cache volume attached to this profile; falling back to a cold auto-provisioned engine"
+            exit 0
+          fi
+          fstype="$(findmnt -no FSTYPE --target "${NSC_CACHE_PATH}" || true)"
+          case "${fstype}" in
+            ext4 | xfs) ;;
+            *)
+              echo "::warning::cache volume fstype '${fstype}' not known-good for BuildKit overlayfs; falling back to a cold auto-provisioned engine"
+              exit 0
+              ;;
+          esac
+          root="${NSC_CACHE_PATH}/dagger-engine"
+          state_dir="${root}/${ENGINE_VERSION}"
+          mkdir -p "${root}"
+          # A failed prune must be visible: stale-version state accumulating
+          # is exactly what pushes the volume into Namespace's reset path.
+          if ! sudo find "${root}" -mindepth 1 -maxdepth 1 -type d ! -name "${ENGINE_VERSION}" -exec rm -rf {} +; then
+            echo "::warning::failed to prune stale engine-state subdirs under ${root}; volume may drift toward its size limit"
+          fi
+          mkdir -p "${state_dir}"
+          # Dagger's default GC sizes itself from statfs of /var/lib/dagger,
+          # and Namespace volumes report dynamic sizes — defaults would grow
+          # unbounded until Namespace resets the volume. Cap explicitly.
+          cat >"${root}/engine.json" <<'EOF'
+          {"gc": {"maxUsedSpace": "20GB", "reservedSpace": "2GB", "minFreeSpace": "4GB", "sweepSize": "50%"}}
+          EOF
+          start_engine() {
+            docker rm -f "${name}" >/dev/null 2>&1 || true
+            docker run -d --privileged --name "${name}" \
+              -v "${state_dir}:/var/lib/dagger" \
+              -v "${root}/engine.json:/etc/dagger/engine.json" \
+              -e DAGGER_CLOUD_TOKEN \
+              "registry.dagger.io/engine:${ENGINE_VERSION}"
+          }
+          engine_running() {
+            for _ in $(seq 1 30); do
+              if [ "$(docker inspect -f '{{.State.Running}}' "${name}" 2>/dev/null)" = "true" ]; then
+                # A corrupt-state buildkitd starts, then exits a second or two
+                # in when it fails to open its databases — require the
+                # container to survive a short settle so the wipe-and-retry
+                # path below catches that case instead of a red `dagger run`.
+                sleep 3
+                [ "$(docker inspect -f '{{.State.Running}}' "${name}" 2>/dev/null)" = "true" ] && return 0
+                return 1
+              fi
+              sleep 1
+            done
+            return 1
+          }
+          start_engine
+          if ! engine_running; then
+            echo "::warning::engine failed to start on cached state; wiping ${state_dir} and retrying cold"
+            docker logs "${name}" 2>&1 | tail -50 || true
+            sudo rm -rf "${state_dir}"
+            mkdir -p "${state_dir}"
+            start_engine
+            if ! engine_running; then
+              # Both attempts failing means the problem is not cached state
+              # (the second start had none) — e.g. the engine rejecting the
+              # GC config above. Degrade to a cold auto-provisioned engine
+              # like the other fallback paths; persistence failures must cost
+              # a slow run, never a red one. Remove our container first or the
+              # CLI's name-matching adoption would start the same broken one.
+              echo "::warning::engine failed to start even on fresh state; falling back to a cold auto-provisioned engine"
+              docker logs "${name}" 2>&1 | tail -50 || true
+              docker rm -f "${name}" >/dev/null 2>&1 || true
+              exit 0
+            fi
+          fi
+          echo "_EXPERIMENTAL_DAGGER_RUNNER_HOST=docker-container://${name}" >>"${GITHUB_ENV}"
+          echo "engine_name=${name}" >>"${GITHUB_OUTPUT}"
+
+      - name: Report Dagger engine state
+        if: always() && steps.dagger_engine.outputs.version != ''
+        run: |
+          if [ "${{ steps.dagger_engine_start.outputs.engine_name }}" != "" ]; then
+            echo "Persistent Dagger engine: adopted (${{ steps.dagger_engine_start.outputs.engine_name }})"
+          elif [ "${{ steps.dagger_engine_start.outcome }}" = "success" ]; then
+            echo "Persistent Dagger engine: cold auto-provision fallback"
+          else
+            echo "Persistent Dagger engine: setup step did not complete"
           fi
 
       # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
@@ -175,6 +279,44 @@ jobs:
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
         run: dagger run python .github/workflows/ci/pytest_dagger.py
+
+      # Begin the durable engine flush as soon as the final Dagger client has
+      # disconnected. The detached process has no inherited stdio, so the
+      # runner can upload results while Dagger closes its databases and calls
+      # syncfs on the persistent Namespace volume. The final step below still
+      # observes the full exit status and enforces the same 300s grace period.
+      - name: Start graceful Dagger engine shutdown
+        id: dagger_engine_stop
+        if: always() && steps.dagger_engine_start.outputs.engine_name != ''
+        env:
+          ENGINE_NAME: ${{ steps.dagger_engine_start.outputs.engine_name }}
+          DAGGER_STOP_LOG_FILE: ${{ runner.temp }}/dagger-engine-stop.log
+          DAGGER_STOP_STARTED_FILE: ${{ runner.temp }}/dagger-engine-stop.started
+          DAGGER_STOP_STATUS_FILE: ${{ runner.temp }}/dagger-engine-stop.status
+        run: |
+          set -uo pipefail
+          rm -f "${DAGGER_STOP_LOG_FILE}" "${DAGGER_STOP_STARTED_FILE}" "${DAGGER_STOP_STATUS_FILE}"
+          engines="$(docker ps --format '{{.Names}}' | grep '^dagger-engine-' || true)"
+          if [ -z "${engines}" ]; then
+            echo "::error::engine '${ENGINE_NAME}' is no longer running — it crashed or was stopped mid-run (see docker logs below), so its state never flushed cleanly"
+            docker logs "${ENGINE_NAME}" 2>&1 | tail -50 || true
+            exit 1
+          fi
+          if [ "${engines}" != "${ENGINE_NAME}" ]; then
+            echo "::error::expected exactly one running engine '${ENGINE_NAME}', found: ${engines} — the dagger CLI provisioned its own engine, so the persistent cache was not used"
+            echo "${engines}" | xargs -r docker stop -t 300 || true
+            exit 1
+          fi
+          date +%s >"${DAGGER_STOP_STARTED_FILE}"
+          nohup bash -c '
+            set +e
+            docker stop -t 300 "${ENGINE_NAME}"
+            rc=$?
+            status_tmp="${DAGGER_STOP_STATUS_FILE}.tmp.$$"
+            printf "%s\n" "${rc}" >"${status_tmp}"
+            mv "${status_tmp}" "${DAGGER_STOP_STATUS_FILE}"
+          ' >"${DAGGER_STOP_LOG_FILE}" 2>&1 </dev/null &
+          echo "pid=$!" >>"${GITHUB_OUTPUT}"
 
       # If this step errors "Unauthorized access, your Trunk organization URL
       # slug or token may be incorrect", it is almost always a dead/revoked
@@ -189,3 +331,61 @@ jobs:
           junit-paths: junit.xml
           org-slug: sanhedrin
           token: ${{ secrets.TRUNK_API_TOKEN }}
+
+      # buildkitd needs well past Docker's 10s default grace to close its
+      # databases and sync the persistent volume. Always join the detached
+      # stop, including after a failed/cancelled test or results upload, and
+      # surface the engine logs instead of silently accepting a torn cache.
+      - name: Await graceful Dagger engine shutdown
+        if: always() && steps.dagger_engine_start.outputs.engine_name != ''
+        env:
+          ENGINE_NAME: ${{ steps.dagger_engine_start.outputs.engine_name }}
+          DAGGER_STOP_LOG_FILE: ${{ runner.temp }}/dagger-engine-stop.log
+          DAGGER_STOP_STARTED_FILE: ${{ runner.temp }}/dagger-engine-stop.started
+          DAGGER_STOP_STATUS_FILE: ${{ runner.temp }}/dagger-engine-stop.status
+          DAGGER_STOP_PID: ${{ steps.dagger_engine_stop.outputs.pid }}
+        run: |
+          set -uo pipefail
+          if [ -z "${DAGGER_STOP_PID}" ] || [ ! -f "${DAGGER_STOP_STARTED_FILE}" ]; then
+            echo "::error::graceful engine shutdown did not start"
+            docker logs --timestamps "${ENGINE_NAME}" 2>&1 | tail -100 || true
+            exit 1
+          fi
+          for _ in $(seq 1 310); do
+            if [ -f "${DAGGER_STOP_STATUS_FILE}" ]; then
+              break
+            fi
+            if ! kill -0 "${DAGGER_STOP_PID}" 2>/dev/null; then
+              echo "::error::shutdown process exited before writing status"
+              cat "${DAGGER_STOP_LOG_FILE}" || true
+              docker logs --timestamps "${ENGINE_NAME}" 2>&1 | tail -100 || true
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ ! -f "${DAGGER_STOP_STATUS_FILE}" ]; then
+            echo "::error::timed out waiting for graceful engine shutdown"
+            cat "${DAGGER_STOP_LOG_FILE}" || true
+            docker logs --timestamps "${ENGINE_NAME}" 2>&1 | tail -100 || true
+            exit 1
+          fi
+          rc="$(cat "${DAGGER_STOP_STATUS_FILE}")"
+          if [ "${rc}" != "0" ]; then
+            echo "::error::graceful engine shutdown failed with exit code ${rc}"
+            cat "${DAGGER_STOP_LOG_FILE}" || true
+            docker logs --timestamps "${ENGINE_NAME}" 2>&1 | tail -100 || true
+            exit 1
+          fi
+          if [ "$(docker inspect -f '{{.State.Running}}' "${ENGINE_NAME}" 2>/dev/null || true)" = "true" ]; then
+            echo "::error::engine '${ENGINE_NAME}' is still running after successful docker stop"
+            exit 1
+          fi
+          engine_exit_code="$(docker inspect -f '{{.State.ExitCode}}' "${ENGINE_NAME}" 2>/dev/null || true)"
+          if [ "${engine_exit_code}" != "0" ]; then
+            echo "::error::engine exited non-gracefully with status '${engine_exit_code}'"
+            docker logs --timestamps "${ENGINE_NAME}" 2>&1 | tail -100 || true
+            exit 1
+          fi
+          started_at="$(cat "${DAGGER_STOP_STARTED_FILE}")"
+          elapsed="$(( $(date +%s) - started_at ))"
+          echo "Dagger engine stopped gracefully in ${elapsed}s (overlapped with results upload)"
