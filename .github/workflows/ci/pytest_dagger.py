@@ -37,7 +37,7 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\")' "
+    "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\"); import scripts.lib' "
     ">/tmp/sitecustomize.py; "
     "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
     '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
