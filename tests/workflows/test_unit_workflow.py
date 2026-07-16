@@ -39,6 +39,12 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     assert "cache: uv" in workflow
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
+    # Toolchain must live under the venv tree (one Namespace mount), not as a
+    # sibling path that can miss independently of ~/.dagger-venv.
+    assert '"$HOME/.dagger-venv/uv-python"' in workflow
+    cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
+    assert "~/.dagger-venv" in cache_paths
+    assert "local/share/uv/python" not in cache_paths
 
 
 def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
@@ -50,7 +56,8 @@ def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
         "namespacelabs/nscloud-cache-action@",
     )
     # setup-uv's own GitHub-cache layer stays off; the Namespace cache action
-    # is the sole owner of uv's cache dir and toolchains.
+    # is the sole owner of uv's cache dir. The managed CPython toolchain is
+    # nested under ~/.dagger-venv (also on that volume), not a separate path.
     assert "enable-cache: false" in workflow
 
 
@@ -150,6 +157,11 @@ def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
     assert "UV_VENV_CLEAR" not in workflow
     assert 'find "$HOME/.dagger-venv" -mindepth 1 -delete' in workflow
     assert "import dagger, anyio" in workflow
+    # Nested toolchain makes the venv root non-empty before bin/ is written.
+    assert 'uv venv --allow-existing --python 3.13 "$HOME/.dagger-venv"' in workflow
+    assert "uv python install --reinstall 3.13" in workflow
+    assert "interpreter escaped venv tree" in workflow
+    assert "uv Python toolchain is nested under venv" in workflow
 
 
 def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
