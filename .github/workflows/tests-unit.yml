@@ -36,7 +36,7 @@ jobs:
           enable-cache: false
 
       # Ensure uv's cache directory exists before the Namespace cache action
-      # links its managed path. The metadata directory is mounted separately
+      # links its managed path. The metadata directory is its own mount path
       # because uv's managed cache mode does not preserve arbitrary files.
       - name: Prepare host uv cache
         run: |
@@ -48,6 +48,17 @@ jobs:
       # without a GitHub-hosted cache upload/download phase. Keep the paths
       # explicit: mounting the parent ~/.dagger-sdk intermittently dropped the
       # project cache metadata while retaining the large venv contents (#327).
+      #
+      # Namespace cache-volume semantics (#330): every job receives a FORK of
+      # a committed volume generation; a clean job exit commits the fork as
+      # the new parent (last write wins), and Namespace explicitly serves a
+      # STALE generation rather than delaying startup ("applications should
+      # not assume that the cache contents match exactly the last committed
+      # version"). Long-lived paths (venv, uv artifacts) exist in old
+      # generations too, so they hit even on a stale fork, while a
+      # recently-added path can be reported missing on the same fork. All
+      # paths therefore live in ONE action invocation / spacectl mount scope:
+      # one mount response, one cache-hit output, no split writeback scopes.
       - name: Cache host Dagger and uv data
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
@@ -57,18 +68,39 @@ jobs:
           # (~/.dagger-sdk/{venv,uv-python}). uv cannot copy the interpreter
           # into the venv (astral-sh/uv#17754), and pointing `uv venv` at the
           # mount root itself detaches the Namespace bind (issue #303) so
-          # contents never persist.
+          # contents never persist. ~/gtm-sdk-cache holds the project cache
+          # fingerprint; it is its own mount path (NOT nested under
+          # ~/.dagger-sdk, see #327) but registered in this same invocation.
           cache: uv
           path: |
             ~/.dagger-sdk/venv
             ~/.dagger-sdk/uv-python
-
-      - name: Cache host project metadata
-        id: namespace_metadata_cache
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
-        with:
-          path: |
             ~/gtm-sdk-cache
+
+      # Capture the mounted state BEFORE any step mutates it, so a stale or
+      # unwritten fork is diagnosable from logs alone (#330): bind-mount
+      # presence, the fork's cache-dir inventory + mtimes (generation age),
+      # and whether the fingerprint survived the cache boundary.
+      - name: Report mounted cache diagnostics
+        run: |
+          set -uo pipefail
+          echo "Namespace mount cache-hit output: ${{ steps.namespace_cache.outputs.cache-hit }}"
+          findmnt -R "$HOME/gtm-sdk-cache" || echo "findmnt: $HOME/gtm-sdk-cache is not a mount point"
+          findmnt -R "$HOME/.dagger-sdk/venv" || echo "findmnt: $HOME/.dagger-sdk/venv is not a mount point"
+          if [ -n "${NSC_CACHE_PATH:-}" ]; then
+            echo "Cache volume inventory (${NSC_CACHE_PATH}):"
+            ls -la "${NSC_CACHE_PATH}" || true
+          else
+            echo "Cache volume inventory: NSC_CACHE_PATH is unset"
+          fi
+          echo "Mounted metadata directory contents:"
+          ls -la "$HOME/gtm-sdk-cache" || true
+          cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"
+          if [ -f "${cache_key_file}" ]; then
+            echo "Fingerprint at mount time: $(cat "${cache_key_file}")"
+          else
+            echo "Fingerprint at mount time: absent"
+          fi
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -152,13 +184,25 @@ jobs:
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"
           } | sha256sum | cut -d' ' -f1)"
+          # Report every failed precondition, not just the aggregate miss —
+          # "fingerprint dropped but venv survived" and "fork predates
+          # everything" need different fixes (#330).
+          miss_reasons=""
+          [ -x "${project_env}/bin/python" ] || miss_reasons="${miss_reasons} interpreter-missing"
+          if [ -f "${cache_key_file}" ]; then
+            [ "$(cat "${cache_key_file}")" = "${cache_key}" ] || miss_reasons="${miss_reasons} fingerprint-mismatch"
+          else
+            miss_reasons="${miss_reasons} fingerprint-missing"
+          fi
           if [ -x "${project_env}/bin/python" ] &&
-            [ -f "${cache_key_file}" ] &&
-            [ "$(cat "${cache_key_file}")" = "${cache_key}" ] &&
-            "${project_env}/bin/python" -c 'import pytest' 2>/dev/null; then
+            ! "${project_env}/bin/python" -c 'import pytest' 2>/dev/null; then
+            miss_reasons="${miss_reasons} pytest-import-failed"
+          fi
+          if [ -z "${miss_reasons}" ]; then
             echo "Host project uv cache: exact hit (${cache_key})"
           else
             echo "Host project uv cache: miss or stale; syncing dependencies (${cache_key})"
+            echo "Host project uv cache miss reasons:${miss_reasons}"
             if [ ! -x "${project_env}/bin/python" ]; then
               uv venv --python 3.13 "${project_env}"
             fi
