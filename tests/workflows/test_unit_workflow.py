@@ -34,6 +34,19 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
 
 
+def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
+    # `cache: uv` planning execs `uv cache dir` (spacectl), so setup-uv must
+    # already be on PATH — wrong order kills the job before any test runs
+    # (run 29462473211: `exec: "uv": executable file not found in $PATH`).
+    workflow = WORKFLOW.read_text()
+    assert workflow.index("astral-sh/setup-uv@") < workflow.index(
+        "namespacelabs/nscloud-cache-action@",
+    )
+    # setup-uv's own GitHub-cache layer stays off; the Namespace cache action
+    # is the sole owner of uv's cache dir and toolchains.
+    assert "enable-cache: false" in workflow
+
+
 def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()
