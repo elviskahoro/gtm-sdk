@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual trigger for cache/perf measurement runs (issues #303/#305) —
+  # avoids the `# RUN #N` marker-commit pattern.
   workflow_dispatch: {}
 
 permissions:

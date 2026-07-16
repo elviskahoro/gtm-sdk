@@ -81,6 +81,13 @@ def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
     assert "cache-to" not in workflow
 
 
+def test_unit_workflow_supports_manual_dispatch() -> None:
+    # Measurement work (issues #303/#305) needs sequential runs on demand;
+    # marker commits pollute history and roborev/PR flows.
+    workflow = WORKFLOW.read_text()
+    assert "workflow_dispatch:" in workflow
+
+
 # RUN #2: Cache validation - testing warm cache hits
 
 # RUN #3: Final cache validation - all warm caches should be populated
