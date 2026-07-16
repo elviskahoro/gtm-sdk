@@ -2,7 +2,7 @@
 
 These tests validate the workflow changes from issues #296 and #321:
 - Namespace-native checkout and caching actions
-- Fresh Dagger engines with preserved host-side caches
+- Fresh Dagger engines with host-seeded uv caches
 - Diagnostic output for cache behavior measurement
 - No regression from previous setup
 """
@@ -63,13 +63,16 @@ def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
     assert "enable-cache: false" in workflow
 
 
-def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
+def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()
 
     assert "runs-on: namespace-profile-test" in workflow
     assert "version: 0.21.7" in workflow
-    assert "NSC_CACHE_PATH" in workflow
+    assert "/var/lib/dagger" not in workflow
+    assert "_EXPERIMENTAL_DAGGER_RUNNER_HOST" not in workflow
+    assert "docker-container://" not in workflow
+    assert "docker stop" not in workflow
     assert "timeout 150 docker pull" in workflow
     assert "for attempt in $(seq 1 6)" in workflow
     assert "DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}" in workflow
@@ -78,7 +81,12 @@ def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
     assert "junit-paths: junit.xml" in workflow
     assert '"uv-cache"' in dagger
     assert '"venv"' in dagger
-    assert '.with_mounted_cache("/root/.cache/uv", uv_cache)' in dagger
+    assert 'dag.host().directory(str(Path.home() / ".cache" / "uv"))' in dagger
+    assert "Dagger uv cache: seeding from Namespace host cache" in dagger
+    assert (
+        '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
+        in dagger
+    )
     assert '.with_mounted_cache("/src/.venv", venv_cache)' in dagger
     assert "--junit-xml=junit.xml" in dagger
     assert "echo $? > /src/pytest_rc" in dagger
