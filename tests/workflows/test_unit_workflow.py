@@ -50,16 +50,14 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
 
 
 def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
-    # `cache: uv` planning execs `uv cache dir` (spacectl), so setup-uv must
-    # already be on PATH — wrong order kills the job before any test runs
-    # (run 29462473211: `exec: "uv": executable file not found in $PATH`).
+    # `cache: uv` planning execs `uv cache dir`, so setup-uv must already be on
+    # PATH before the Namespace cache action runs.
     workflow = WORKFLOW.read_text()
     assert workflow.index("astral-sh/setup-uv@") < workflow.index(
         "namespacelabs/nscloud-cache-action@",
     )
-    # setup-uv's own GitHub-cache layer stays off; the Namespace cache action
-    # is the sole owner of uv's cache dir. The managed CPython toolchain is a
-    # sibling of the SDK venv under ~/.dagger-sdk (also on that volume).
+    # setup-uv's own GitHub-cache layer stays off; Namespace owns uv artifacts
+    # and the Dagger SDK/toolchain.
     assert "enable-cache: false" in workflow
 
 
@@ -110,7 +108,8 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     assert "--all-extras --dev --locked" in workflow
     assert 'rm -rf "${project_env}"' in workflow
     assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
-    assert "path: |\n            ~/.dagger-sdk" in workflow
+    assert "cache: uv" in workflow
+    assert "~/.cache/uv" in workflow
 
 
 def test_unit_workflow_supports_manual_dispatch() -> None:

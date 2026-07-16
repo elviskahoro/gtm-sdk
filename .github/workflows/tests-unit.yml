@@ -32,15 +32,13 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           # The Namespace cache step below owns uv's cache dir and toolchains;
-          # setup-uv's own GitHub-cache layer must never double-own the same
-          # paths (`auto` already resolves to false on Namespace runners —
-          # this pins that behavior).
+          # setup-uv's own cache layer stays disabled to avoid double ownership.
           enable-cache: false
 
       # Namespace mounts these paths directly from the runner cache volume, so
       # setup reuses the host-side Dagger SDK and uv artifacts without a
       # GitHub-hosted cache upload/download phase. The Dagger pipeline owns its
-      # separate in-container `uv-cache` and `venv` volumes below.
+      # separate in-container cache volumes below.
       - name: Cache host Dagger and uv data
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
