@@ -3,7 +3,7 @@
 The rest of this package models *inbound* webhook payloads
 (:class:`libs.octolens.models.Webhook`); this is the only *outbound* caller. It
 pulls historical mentions from ``POST /api/v2/mentions`` for the dlt/dlthub
-backfill (``scripts/octolens-backfill-mentions.py --source api``).
+backfill (``scripts/octolens-mentions-backfill.py --source api``).
 
 Auth is a Bearer API key (Octolens Settings → API, ``read`` scope) provided as
 ``OCTOLENS_API_KEY``. The v2 API is rate-limited to **500 requests/hour/org**;

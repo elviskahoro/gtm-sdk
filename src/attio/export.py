@@ -58,6 +58,7 @@ from libs.attio.tracking_events import (
     find_or_create_tracking_event,
 )
 from libs.logging.structured import log
+from libs.telemetry import annotate_span, span
 from src.attio.ops import (
     AttioOp,
     CompanyRef,
@@ -912,54 +913,70 @@ def execute(plan: Iterable[AttioOp]) -> ExecutionResult:
     """
     table = LookupTable()
     outcomes: list[OpOutcome] = []
-    for i, op in enumerate(plan):
-        handler = OP_HANDLERS.get(type(op))
-        if handler is None:
-            return ExecutionResult(
-                success=False,
-                outcomes=outcomes,
-                fail_index=i,
-                fail_reason=f"unknown_op: {type(op).__name__}",
-            )
-        try:
-            envelope = handler(op, table)
-        except Exception as exc:  # noqa: BLE001 — turn any handler crash into a failed outcome
-            log(
-                "attio.handler_exception",
-                op_index=i,
-                op_type=type(op).__name__,
-                error_type=type(exc).__name__,
-                error_msg=str(exc),
-                traceback=traceback.format_exc(),
-            )
-            envelope = _exception_envelope(exc)
-        is_optional = bool(getattr(op, "optional", False))
-        outcomes.append(
-            OpOutcome(
-                op_index=i,
-                op_type=type(op).__name__,
-                success=envelope.success,
-                record_id=envelope.record_id,
-                envelope=envelope,
-                optional=is_optional and not envelope.success,
-            ),
-        )
-        if not envelope.success:
-            if is_optional:
-                # Best-effort op failed: log, keep going, leave it out of the
-                # LookupTable so downstream refs degrade rather than link.
-                log(
-                    "attio.optional_op_failed",
-                    op_index=i,
-                    op_type=type(op).__name__,
-                    error_codes=[e.code for e in envelope.errors],
+    # Materialize so the ``attio.execute`` span can carry op_count and the loop
+    # can still iterate. Callers pass a list (``webhook.attio_get_operations()``)
+    # so this changes nothing operationally.
+    ops = list(plan)
+    with span("attio.execute", op_count=len(ops)):
+        for i, op in enumerate(ops):
+            op_type = type(op).__name__
+            handler = OP_HANDLERS.get(type(op))
+            if handler is None:
+                return ExecutionResult(
+                    success=False,
+                    outcomes=outcomes,
+                    fail_index=i,
+                    fail_reason=f"unknown_op: {op_type}",
                 )
-                continue
-            return ExecutionResult(
-                success=False,
-                outcomes=outcomes,
-                fail_index=i,
-                fail_reason="op_failed",
+            # One child span per op — this is the waterfall (e.g. an rb2b visit
+            # fans out to UpsertCompany → UpsertPerson → UpsertTrackingEvent).
+            with span(op_type, op_index=i) as op_span:
+                try:
+                    envelope = handler(op, table)
+                except Exception as exc:  # noqa: BLE001 — turn any handler crash into a failed outcome
+                    log(
+                        "attio.handler_exception",
+                        op_index=i,
+                        op_type=op_type,
+                        error_type=type(exc).__name__,
+                        error_msg=str(exc),
+                        traceback=traceback.format_exc(),
+                    )
+                    annotate_span(op_span, error=exc, success=False)
+                    envelope = _exception_envelope(exc)
+                else:
+                    annotate_span(
+                        op_span,
+                        success=envelope.success,
+                        record_id=envelope.record_id,
+                    )
+            is_optional = bool(getattr(op, "optional", False))
+            outcomes.append(
+                OpOutcome(
+                    op_index=i,
+                    op_type=op_type,
+                    success=envelope.success,
+                    record_id=envelope.record_id,
+                    envelope=envelope,
+                    optional=is_optional and not envelope.success,
+                ),
             )
-        table.record(op, envelope.record_id)
-    return ExecutionResult(success=True, outcomes=outcomes)
+            if not envelope.success:
+                if is_optional:
+                    # Best-effort op failed: log, keep going, leave it out of the
+                    # LookupTable so downstream refs degrade rather than link.
+                    log(
+                        "attio.optional_op_failed",
+                        op_index=i,
+                        op_type=op_type,
+                        error_codes=[e.code for e in envelope.errors],
+                    )
+                    continue
+                return ExecutionResult(
+                    success=False,
+                    outcomes=outcomes,
+                    fail_index=i,
+                    fail_reason="op_failed",
+                )
+            table.record(op, envelope.record_id)
+        return ExecutionResult(success=True, outcomes=outcomes)

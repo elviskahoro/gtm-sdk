@@ -1,4 +1,4 @@
-"""Unit tests for ``scripts/octolens-backfill-mentions.py``.
+"""Unit tests for ``scripts/octolens-mentions-backfill.py``.
 
 The script filename is hyphenated, so it's loaded via ``importlib`` rather than
 imported. Covers the cross-source cache guard (a CSV build can't be silently
@@ -16,7 +16,7 @@ import pytest
 from libs.octolens.models import ApiMention
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "octolens-backfill-mentions.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "octolens-mentions-backfill.py"
 
 
 def _load_module() -> ModuleType:

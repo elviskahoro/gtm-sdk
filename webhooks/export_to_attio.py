@@ -16,7 +16,7 @@ from libs.logging.structured import (
     set_source,
     webhook_request_context,
 )
-from libs.telemetry import init_log_exporter
+from libs.telemetry import init_log_exporter, init_tracer, span
 from src.attio.export import execute
 from src.secrets_bootstrap import bootstrap_secret, hydrate
 
@@ -43,7 +43,7 @@ from src.rb2b.webhook.visit import (
 
 if TYPE_CHECKING:
     # Type-check stand-in for the deploy-time placeholder. The
-    # `scripts/webhooks-redeploy.py` substitution pass rewrites every occurrence of
+    # `scripts/webhooks-handlers-redeploy.py` substitution pass rewrites every occurrence of
     # `WebhookModelToReplace` to a concrete `Webhook` class before
     # `modal deploy`. The TYPE_CHECKING block is skipped at runtime, so the
     # rewritten image inherits from the real Pydantic Webhook subclass; for
@@ -73,6 +73,13 @@ set_source(APP_NAME)
 # No-op if no OTLP env vars are set — Modal stdout capture stays the
 # always-on transport.
 init_log_exporter(APP_NAME)
+
+# Initialize the OTEL tracer so the per-request span tree (root ``webhook`` span
+# → ``attio.execute`` → one child span per op) exports alongside the flat log
+# events. Collector fan-out is the default, so spans reach the same providers
+# (incl. Logfire) as logs via ``fan_out(signal="traces")``. Non-load-bearing:
+# a no-op if opentelemetry isn't installed or the collector is opted out.
+init_tracer(APP_NAME)
 
 image: Image = modal.Image.debian_slim().uv_pip_install(
     "attio>=0.21.2",
@@ -135,25 +142,31 @@ def _handle(webhook: WebhookModel, request: Request) -> str:
     request-context wiring and `webhook.completed` timing are reachable from
     plain-Python tests without going through Modal's local-call machinery.
     """
-    with webhook_request_context(request):
+    with webhook_request_context(request) as request_id:
         started = time.perf_counter()
-        try:
-            body = _export(webhook)
-        except Exception as exc:
+        # Root span for the request. Child spans opened deeper (``attio.execute``
+        # and the per-op spans in ``src/attio/export.py``) nest under it because
+        # everything runs synchronously in this thread. An exception that
+        # propagates out of ``_export`` re-raises through this context manager,
+        # which records it and flips the span status to ERROR automatically.
+        with span("webhook", source=APP_NAME, request_id=request_id):
+            try:
+                body = _export(webhook)
+            except Exception as exc:
+                log(
+                    "webhook.completed",
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                    status="error",
+                    error_type=type(exc).__name__,
+                    error_msg=str(exc),
+                )
+                raise
             log(
                 "webhook.completed",
                 duration_ms=int((time.perf_counter() - started) * 1000),
-                status="error",
-                error_type=type(exc).__name__,
-                error_msg=str(exc),
+                status="ok",
             )
-            raise
-        log(
-            "webhook.completed",
-            duration_ms=int((time.perf_counter() - started) * 1000),
-            status="ok",
-        )
-        return body
+            return body
 
 
 @app.function(

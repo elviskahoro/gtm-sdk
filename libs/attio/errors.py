@@ -132,7 +132,7 @@ _SCOPE_REMEDIATION = (
     "The Attio token authenticated but lacks the scope/permission for this "
     "write. If this is a select-option or attribute seed, the token needs "
     "`object_configuration:read-write` (or pre-bootstrap the schema with "
-    "scripts/attio-bootstrap-tracking_events.py). Verify the token's scopes "
+    "scripts/attio-tracking_events-bootstrap.py). Verify the token's scopes "
     "with GET /v2/self."
 )
 

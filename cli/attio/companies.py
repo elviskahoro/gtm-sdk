@@ -31,7 +31,11 @@ def add(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Add a company to Attio."""
     if json_input:
@@ -88,7 +92,11 @@ def search(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Search for companies in Attio."""
     if json_input:
@@ -152,7 +160,11 @@ def update(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Update an existing company in Attio."""
     if json_input:
@@ -205,20 +217,56 @@ def update(
 
 @app.command("create-attribute-type")
 def create_attribute_type(
-    title: str | None = typer.Option(None, "--title"),
-    api_slug: str | None = typer.Option(None, "--api-slug"),
-    attribute_type: str = typer.Option("select", "--type"),
-    description: str = typer.Option("", "--description"),
-    is_multiselect: bool = typer.Option(True, "--is-multiselect/--no-is-multiselect"),
-    is_required: bool = typer.Option(False, "--is-required/--no-is-required"),
-    is_unique: bool = typer.Option(False, "--is-unique/--no-is-unique"),
-    apply: bool = typer.Option(False, "--apply"),
+    title: str | None = typer.Option(
+        None,
+        "--title",
+        help="Display title for the new attribute",
+    ),
+    api_slug: str | None = typer.Option(
+        None,
+        "--api-slug",
+        help="API slug for the new attribute (derived from title when omitted)",
+    ),
+    attribute_type: str = typer.Option(
+        "select",
+        "--type",
+        help="Attio attribute type (e.g. select, text, number)",
+    ),
+    description: str = typer.Option(
+        "",
+        "--description",
+        help="Attribute description shown in Attio",
+    ),
+    is_multiselect: bool = typer.Option(
+        True,
+        "--is-multiselect/--no-is-multiselect",
+        help="Allow multiple values per record",
+    ),
+    is_required: bool = typer.Option(
+        False,
+        "--is-required/--no-is-required",
+        help="Require a value on every record",
+    ),
+    is_unique: bool = typer.Option(
+        False,
+        "--is-unique/--no-is-unique",
+        help="Enforce unique values across records",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Perform the write to Attio (default is preview)",
+    ),
     json_input: str | None = typer.Option(
         None,
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Create an attribute on companies."""
     if json_input:

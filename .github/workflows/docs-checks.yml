@@ -1,0 +1,75 @@
+name: Docs checks
+
+# Validates the Mintlify docs site and gates CLI-reference drift.
+# Plain runner (no Dagger): the checks are a Node CLI plus two Python
+# scripts — Dagger's hermeticity buys nothing here and adds engine flake.
+# Deliberately NOT in trunk's merge.required_statuses: path-filtered
+# workflows deadlock the merge queue when required (see trunk.yaml notes).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - cli/**
+      - scripts/docs-cli_reference-generate.py
+      - scripts/docs-pages-lint.py
+      - .github/workflows/docs-checks.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - docs/**
+      - cli/**
+      - scripts/docs-cli_reference-generate.py
+      - scripts/docs-pages-lint.py
+      - .github/workflows/docs-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  mint-checks:
+    name: Mintlify validate + broken links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: docs/.node-version
+
+      # mint is deliberately unpinned: it tracks the hosted Mintlify platform,
+      # and validating against a stale pin would drift from production.
+      - name: Install mint
+        run: npm install -g mint
+
+      - name: Validate build
+        working-directory: docs
+        run: mint validate
+
+      - name: Check internal links
+        working-directory: docs
+        run: mint broken-links
+
+  cli-reference-drift:
+    name: CLI reference drift + page lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+
+      - name: Install Python deps
+        run: uv sync --frozen --all-extras --group dev
+
+      - name: CLI reference drift gate
+        run: uv run scripts/docs-cli_reference-generate.py --check
+
+      - name: Docs page lint
+        run: uv run scripts/docs-pages-lint.py

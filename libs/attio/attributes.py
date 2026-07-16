@@ -14,7 +14,7 @@ def list_attributes(
     """Return the attributes on ``target_object``.
 
     Read-only. Powers live-vs-declared schema diffing (see
-    ``scripts/attio-bootstrap-social_mentions.py --diff``). For
+    ``scripts/attio-social_mentions-bootstrap.py --diff``). For
     ``record-reference`` attributes the wire format returns target object *IDs*;
     this resolves them back to api_slugs via a single ``get_v2_objects`` lookup
     so callers can compare against slug-based declarations. Returns ``[]`` when
@@ -83,29 +83,6 @@ def list_attributes(
         return result
 
 
-def is_select_attribute_writable(
-    *,
-    target_object: str,
-    attribute_slug: str,
-) -> bool:
-    """Return whether ``attribute_slug`` on ``target_object`` accepts writes.
-
-    The options endpoint (:func:`list_select_options`) happily returns options
-    for an *archived* select attribute, so a label-diff against it gives false
-    confidence: every PATCH onto the archived slug 400s while the diff reports
-    "all labels are seeded options" (the ai-e6e / ai-3gx firmographic loss).
-
-    A select is writable only when it currently exists and is **not** archived.
-    Inspects the schema directly (``show_archived=True`` so an archived slug is
-    distinguishable from an absent one) rather than trusting the options call.
-    """
-    attrs = list_attributes(target_object, show_archived=True)
-    for attr in attrs:
-        if attr.api_slug == attribute_slug:
-            return not attr.is_archived
-    return False
-
-
 def list_select_options(*, target_object: str, attribute_slug: str) -> list[str]:
     """Return the option titles on a ``select`` attribute. Read-only."""
     with get_client() as client:
@@ -171,8 +148,22 @@ def create_attribute(
     is_required: bool = False,
     is_unique: bool = False,
     allowed_objects: list[str] | None = None,
+    relationship: dict[str, object] | None = None,
     apply: bool,
 ) -> AttributeCreateResult:
+    """Idempotently create (or restore/retitle) an attribute on ``target_object``.
+
+    ``relationship`` makes a ``record-reference`` attribute two-way: Attio
+    creates an entangled inverse attribute on the related object. Shape:
+    ``{"object": "people", "title": "...", "api_slug": "...",
+    "is_multiselect": bool}``. The inverse's ``is_multiselect`` matters —
+    a single-valued inverse imposes a 1:1 constraint where a second source
+    record referencing the same target atomically strips the first (beads
+    memory ``attio-inverse-relationship-multiselect``). Relationship can
+    ONLY be set at creation: Attio rejects it on PATCH, and slugs of
+    archived attributes stay reserved, so an existing one-way attribute
+    cannot be upgraded — it must be deleted in the UI and recreated.
+    """
     with get_client() as client:
         try:
             # show_archived=True so an archived slug is visible here. Without it,
@@ -236,6 +227,8 @@ def create_attribute(
                 "is_multiselect": is_multiselect,
                 "config": config,
             }
+            if relationship is not None:
+                payload["relationship"] = relationship
             client.attributes.post_v2_target_identifier_attributes(
                 target="objects",
                 identifier=target_object,

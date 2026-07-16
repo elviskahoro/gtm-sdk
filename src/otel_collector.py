@@ -12,7 +12,7 @@ Architecture (see ``libs/telemetry.py`` for the app side):
                                                           ├─▶ Dash0     (Dash0-Dataset header)
                                                           ├─▶ HyperDX
                                                           ├─▶ Logfire
-                                                          └─▶ LangSmith (x-api-key + Langsmith-Project header)
+                                                          └─▶ Grafana   (Basic auth, not Bearer)
 
 Why this shape: apps reach the collector through Modal's authenticated RPC
 (``.spawn``), so there is **no inbound web URL** — the otelcol OTLP receiver is
@@ -36,6 +36,7 @@ This is a **standalone** Modal app (its own ``modal.App``), NOT registered in
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import socket
@@ -75,8 +76,19 @@ _OTELCOL_TARBALL = f"otelcol_{_OTELCOL_VERSION}_linux_amd64.tar.gz"
 # no version in the name), covering every otelcol-core artifact for the release.
 _OTELCOL_CHECKSUMS = "opentelemetry-collector-releases_otelcol_checksums.txt"
 
+# Grafana Cloud's OTLP gateway is region-scoped; this shared regional host (like
+# the hard-coded HyperDX/Logfire defaults) is not user-specific and appears in
+# Grafana's public docs. Override per deployment with ``GRAFANA_OTLP_ENDPOINT``.
+_GRAFANA_DEFAULT_ENDPOINT = "https://otlp-gateway-prod-us-east-3.grafana.net/otlp"
+
 # Every provider credential the collector forwards with. These live on the
 # collector only — never on the app containers (which just spawn ``fan_out``).
+#
+# ``GRAFANA_OTLP_AUTH`` is DERIVED at deploy time (see ``_collector_secret_payload``)
+# rather than copied from a same-named host env var; ``GRAFANA_OTLP_ENDPOINT`` is
+# an optional non-secret override. The raw ``GRAFANA_API_KEY`` / ``GRAFANA_INSTANCE_ID``
+# inputs are deliberately NOT listed here — they are deploy-time-only and must
+# never reach the collector container.
 _PROVIDER_SECRET_KEYS = (
     "DASH0_AUTH_TOKEN",
     "DASH0_OTLP_ENDPOINT",
@@ -85,19 +97,51 @@ _PROVIDER_SECRET_KEYS = (
     "HYPERDX_OTLP_ENDPOINT",
     "LOGFIRE_WRITE_TOKEN",
     "LOGFIRE_OTLP_ENDPOINT",
-    "LANGSMITH_API_KEY",
-    "LANGSMITH_OTLP_ENDPOINT",
-    "LANGSMITH_PROJECT",
+    "GRAFANA_OTLP_ENDPOINT",
+    "GRAFANA_OTLP_AUTH",
 )
 
 
+def _grafana_basic_auth(instance_id: str, token: str) -> str | None:
+    """Encode Grafana Cloud's OTLP HTTP Basic credential: ``base64("<id>:<token>")``.
+
+    Grafana Cloud's OTLP gateway authenticates with HTTP **Basic** auth, not the
+    Bearer token every other provider here uses — so the header value is
+    ``Basic <base64(instance_id:token)>``. Returns the base64 credential WITHOUT
+    the ``"Basic "`` prefix (the prefix is added in ``build_collector_config``),
+    or ``None`` when either input is missing.
+
+    ``instance_id`` is the numeric OTLP-gateway user from the Grafana Cloud
+    "OpenTelemetry" config page — NOT the org id embedded in the ``glc_`` token.
+    Because base64 spans both the (non-secret) instance id and the (secret) token,
+    it cannot be assembled via otelcol's ``${env:VAR}`` substitution, so we derive
+    it at deploy time and ship only the encoded result (keeping the raw token out
+    of both the container env and the rendered config).
+    """
+    if not instance_id or not token:
+        return None
+    return base64.b64encode(f"{instance_id}:{token}".encode()).decode("ascii")
+
+
 def _collector_secret_payload() -> dict[str, str | None]:
-    """Collect the present provider creds from the host env (deploy-time)."""
+    """Collect the present provider creds from the host env (deploy-time).
+
+    Grafana is special-cased: its Basic credential is derived from the raw
+    ``GRAFANA_INSTANCE_ID`` + ``GRAFANA_API_KEY`` host env vars and shipped as the
+    pre-encoded ``GRAFANA_OTLP_AUTH`` (see ``_grafana_basic_auth``), so the raw
+    ``glc_`` token never reaches the collector container.
+    """
     payload: dict[str, str | None] = {}
     for opt in _PROVIDER_SECRET_KEYS:
         v = os.environ.get(opt, "").strip()
         if v:
             payload[opt] = v
+    grafana_auth = _grafana_basic_auth(
+        os.environ.get("GRAFANA_INSTANCE_ID", "").strip(),
+        os.environ.get("GRAFANA_API_KEY", "").strip(),
+    )
+    if grafana_auth:
+        payload["GRAFANA_OTLP_AUTH"] = grafana_auth
     return payload
 
 
@@ -126,6 +170,24 @@ def _base_endpoint(url: str) -> str:
     return trimmed
 
 
+def _grafana_base_endpoint(url: str) -> str:
+    """Base endpoint for Grafana Cloud, which serves OTLP under a ``/otlp`` prefix.
+
+    Unlike the other providers (whose OTLP ingress sits at the host root, so
+    ``_base_endpoint`` is enough), Grafana Cloud's gateway requires
+    ``.../otlp/v1/{signal}``. Strip any ``/v1/<signal>`` suffix, then guarantee
+    the ``/otlp`` segment so a bare-host override — e.g.
+    ``https://otlp-gateway-prod-eu-west-2.grafana.net`` for a different region,
+    written the way the other providers' endpoints look — still resolves to the
+    correct ``.../otlp/v1/{signal}`` instead of silently dropping the ``/otlp``
+    path and 404-ing every batch.
+    """
+    base = _base_endpoint(url)
+    if not base.endswith("/otlp"):
+        base = f"{base}/otlp"
+    return base
+
+
 def _retrying_otlphttp(endpoint: str, headers: dict[str, str]) -> dict[str, Any]:
     """An otlphttp exporter block with batching-friendly retry + sending queue."""
     return {
@@ -140,12 +202,12 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
     """Build the otelcol config (as a dict) for whichever providers are present.
 
     Returns a config with an otlp/http receiver on localhost, a batch processor,
-    and one ``otlphttp/<provider>`` exporter per configured provider. Trace-only
-    providers (LangSmith) feed the traces pipeline alone; the rest feed both
-    traces and logs. The logs pipeline is omitted when nothing feeds it. Auth
-    tokens are referenced via
-    ``${env:VAR}`` so the raw secret never lands in the rendered config; only
-    non-secret values (endpoints, the Dash0 dataset name) are inlined.
+    and one ``otlphttp/<provider>`` exporter per configured provider. Every
+    provider feeds both the traces and logs pipelines. The logs pipeline is
+    omitted when no provider is configured (an empty exporter list is invalid).
+    Auth tokens are referenced via ``${env:VAR}`` so the raw secret never lands
+    in the rendered config; only non-secret values (endpoints, the Dash0
+    dataset name) are inlined.
 
     JSON is valid YAML, so ``_render_config`` dumps this dict as JSON and otelcol
     loads it directly — no YAML dependency needed.
@@ -153,9 +215,6 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
     e = env if env is not None else dict(os.environ)
     exporters: dict[str, Any] = {}
     names: list[str] = []
-    # Exporters that only implement the traces signal; excluded from the logs
-    # pipeline (their /v1/logs endpoint 404s, which would just churn the queue).
-    traces_only: set[str] = set()
 
     if e.get("HYPERDX_API_KEY"):
         base = _base_endpoint(
@@ -187,44 +246,32 @@ def build_collector_config(env: dict[str, str] | None = None) -> dict[str, Any]:
         )
         names.append("otlphttp/logfire")
 
-    if e.get("LANGSMITH_API_KEY"):
-        # LangSmith's OTLP ingestion deviates from the Bearer-token providers
-        # above: it authenticates with an ``x-api-key`` header and scopes traces
-        # with a ``Langsmith-Project`` header. Its OTLP base lives under ``/otel``
-        # (the SDK's ``LANGSMITH_ENDPOINT`` plus that path); otlphttp appends
-        # ``/v1/traces`` itself, so we hand it the ``/otel`` base unchanged.
-        # LangSmith implements traces only — ``/otel/v1/logs`` returns 404
-        # (Unimplemented) — so it's traces_only and skips the logs pipeline.
-        base = _base_endpoint(
-            e.get("LANGSMITH_OTLP_ENDPOINT") or "https://api.smith.langchain.com/otel",
+    # Grafana Cloud uses HTTP Basic auth (not Bearer). ``GRAFANA_OTLP_AUTH`` is the
+    # pre-encoded ``base64(instance_id:token)`` derived at deploy time (see
+    # ``_grafana_basic_auth``); we reference it via ``${env:...}`` exactly like the
+    # Bearer providers so the credential never lands in the rendered config.
+    if e.get("GRAFANA_OTLP_AUTH"):
+        base = _grafana_base_endpoint(
+            e.get("GRAFANA_OTLP_ENDPOINT") or _GRAFANA_DEFAULT_ENDPOINT,
         )
-        exporters["otlphttp/langsmith"] = _retrying_otlphttp(
+        exporters["otlphttp/grafana"] = _retrying_otlphttp(
             base,
-            {
-                "x-api-key": "${env:LANGSMITH_API_KEY}",
-                "Langsmith-Project": e.get("LANGSMITH_PROJECT") or "gtm-sdk",
-            },
+            {"Authorization": "Basic ${env:GRAFANA_OTLP_AUTH}"},
         )
-        names.append("otlphttp/langsmith")
-        traces_only.add("otlphttp/langsmith")
+        names.append("otlphttp/grafana")
 
-    # Every exporter handles traces; only non-traces_only ones also take logs.
-    # Omit the logs pipeline entirely when nothing feeds it (otelcol rejects a
-    # pipeline with an empty exporter list) — e.g. a LangSmith-only collector.
-    # In that (non-production) case the receiver has no /v1/logs route, so any
-    # log batch the app spawns is rejected and dropped (``_post_local`` logs the
-    # non-2xx). That's acceptable: telemetry is non-load-bearing, real
-    # deployments always include a log-capable provider, and the app side is
-    # deliberately provider-agnostic so it cannot gate logs on its own.
-    log_names = [n for n in names if n not in traces_only]
+    # Every configured provider feeds both the traces and logs pipelines. Omit
+    # the logs pipeline when no provider is configured — otelcol rejects a
+    # pipeline with an empty exporter list, and ``_ensure_otelcol_running``
+    # likewise declines to start otelcol at all in that case.
     pipelines: dict[str, Any] = {
         "traces": {"receivers": ["otlp"], "processors": ["batch"], "exporters": names},
     }
-    if log_names:
+    if names:
         pipelines["logs"] = {
             "receivers": ["otlp"],
             "processors": ["batch"],
-            "exporters": log_names,
+            "exporters": names,
         }
     return {
         "receivers": {

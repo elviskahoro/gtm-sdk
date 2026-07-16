@@ -2,7 +2,7 @@
 """Webhook event-sequence tests.
 
 The webhook handler files contain a `WebhookModelToReplace` placeholder that
-`scripts/webhooks-redeploy.py` substitutes at deploy time. To test `_export()`
+`scripts/webhooks-handlers-redeploy.py` substitutes at deploy time. To test `_export()`
 in-process we run the same substitution against a temporary copy of the
 handler and load it via `importlib`. This mirrors what production sees and
 avoids stubbing out the FastAPI handler shape.
@@ -26,13 +26,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 HANDLERS_DIR = REPO_ROOT / "webhooks"
 SAMPLES_DIR = REPO_ROOT / "api" / "samples"
 
-# The deploy script lives at `scripts/webhooks-redeploy.py`. The hyphen and the
-# fact that `scripts/` is intentionally excluded from
+# The deploy script lives at `scripts/webhooks-handlers-redeploy.py`. The hyphen
+# and the fact that `scripts/` is intentionally excluded from
 # `[tool.setuptools.packages.find]` mean it cannot be imported via a normal
-# `from scripts.webhooks_redeploy import ...` statement. Load it via importlib
-# so this test exercises the exact same `PLACEHOLDER` / discovery code the
-# deploy script uses — drift between the two would silently regress.
-_DEPLOY_SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-redeploy.py"
+# `from scripts.webhooks_handlers_redeploy import ...` statement. Load it via
+# importlib so this test exercises the exact same `PLACEHOLDER` / discovery code
+# the deploy script uses — drift between the two would silently regress.
+_DEPLOY_SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-handlers-redeploy.py"
 _DEPLOY_MODULE_NAME = "_webhooks_redeploy_under_test"
 
 
@@ -65,7 +65,7 @@ def _load_substituted_handler(
     # ever gets renamed without updating every callsite.
     assert PLACEHOLDER in src, (
         f"{handler_name}.py is missing the {PLACEHOLDER!r} placeholder "
-        "that scripts/webhooks-redeploy.py substitutes at deploy time"
+        "that scripts/webhooks-handlers-redeploy.py substitutes at deploy time"
     )
     substituted = src.replace(PLACEHOLDER, source_alias)
     target = tmp_path / f"{handler_name}.py"
@@ -465,8 +465,9 @@ def _fixture_for(source_alias: str) -> str:
 
 def _matrix() -> list[tuple[str, str]]:
     """Discover (handler, source_alias) pairs the same way the deploy script
-    does. This guarantees the test covers exactly what `webhooks-redeploy.py`
-    would deploy — not a hand-maintained list that drifts."""
+    does. This guarantees the test covers exactly what
+    `webhooks-handlers-redeploy.py` would deploy — not a hand-maintained list
+    that drifts."""
     pairs: list[tuple[str, str]] = []
     for handler_name in _discover_handlers():
         handler_path = HANDLERS_DIR / f"{handler_name}.py"

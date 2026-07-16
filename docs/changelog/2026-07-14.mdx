@@ -1,0 +1,19 @@
+---
+title: "Stability and reliability polish (July 14, 2026)"
+description: "Post-launch reliability updates: stricter Attio select-attribute writability checks and a cooldown window on automated dependency updates."
+---
+
+A small post-launch pass focused on reliability and supply-chain safety.
+
+## Bug fixes
+
+**Stricter Attio attribute writability checks**
+The [Attio CRM sync](/quickstart) now correctly gates writes on both archival state *and* attribute type when deciding whether a select attribute is writable. Upserts that previously slipped through against non-select attributes are now rejected cleanly.
+
+## Updates
+
+**Safer dependency updates**
+Automated dependency PRs now honor a cooldown window before adopting freshly published package versions, reducing exposure to compromised or yanked releases in the supply chain.
+
+**Cleaner telemetry test surface**
+Internal telemetry test helpers now match the OpenTelemetry base class signatures they extend, keeping instrumentation exports stable across upgrades of the collector. No action required — see the [Dash0](/telemetry/dash0-setup) and [Grafana Cloud](/telemetry/grafana-setup) guides for setup.

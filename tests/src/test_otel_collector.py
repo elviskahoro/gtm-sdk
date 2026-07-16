@@ -4,9 +4,12 @@ from typing import Any
 
 import src.otel_collector as otel_collector
 from src.otel_collector import (  # exercising collector internals directly
+    _GRAFANA_DEFAULT_ENDPOINT,  # trunk-ignore(pyright/reportPrivateUsage)
+    _PROVIDER_SECRET_KEYS,  # trunk-ignore(pyright/reportPrivateUsage)
     _base_endpoint,  # trunk-ignore(pyright/reportPrivateUsage)
     _collector_secret_payload,  # trunk-ignore(pyright/reportPrivateUsage)
     _ensure_otelcol_running,  # trunk-ignore(pyright/reportPrivateUsage)
+    _grafana_basic_auth,  # trunk-ignore(pyright/reportPrivateUsage)
     _post_local,  # trunk-ignore(pyright/reportPrivateUsage)
     build_collector_config,
 )
@@ -23,9 +26,14 @@ _ALL_PROVIDER_ENV = {
     "DASH0_OTLP_ENDPOINT": "https://ingress.us-west-2.aws.dash0.com",
     "DASH0_DATASET": "prod",
     "LOGFIRE_WRITE_TOKEN": "lf",  # nosec: B105
-    "LANGSMITH_API_KEY": "ls",  # nosec: B105
-    "LANGSMITH_PROJECT": "gtm-sdk",
+    # Grafana ships the pre-encoded Basic credential (derived at deploy time),
+    # not the raw glc token — see _grafana_basic_auth.
+    "GRAFANA_OTLP_AUTH": "MTIzNDU2Omdsy19rZXk=",  # nosec: B105
 }
+
+# Raw Grafana deploy-time inputs (never shipped to the container). Kept separate
+# from _ALL_PROVIDER_ENV so payload tests can delete them explicitly.
+_GRAFANA_RAW_INPUTS = ("GRAFANA_INSTANCE_ID", "GRAFANA_API_KEY")
 
 
 def test_build_config_fans_out_to_all_providers():
@@ -35,17 +43,12 @@ def test_build_config_fans_out_to_all_providers():
         "otlphttp/hyperdx",
         "otlphttp/dash0",
         "otlphttp/logfire",
-        "otlphttp/langsmith",
+        "otlphttp/grafana",
     }
     pipelines = cfg["service"]["pipelines"]
-    # Traces fan out to every provider...
+    # Both pipelines fan out to every configured provider.
     assert set(pipelines["traces"]["exporters"]) == set(exporters)
-    # ...but LangSmith has no OTLP logs endpoint, so the logs pipeline skips it.
-    assert set(pipelines["logs"]["exporters"]) == {
-        "otlphttp/hyperdx",
-        "otlphttp/dash0",
-        "otlphttp/logfire",
-    }
+    assert set(pipelines["logs"]["exporters"]) == set(exporters)
     for signal in ("traces", "logs"):
         pipeline = pipelines[signal]
         assert pipeline["receivers"] == ["otlp"]
@@ -73,14 +76,14 @@ def test_build_config_endpoints_and_headers():
     )
     assert exp["otlphttp/dash0"]["headers"]["Dash0-Dataset"] == "prod"
     assert exp["otlphttp/logfire"]["endpoint"] == "https://logfire-us.pydantic.dev"
-    # LangSmith uses x-api-key (not Bearer) + a Langsmith-Project header.
+    # Grafana uses Basic auth (not Bearer), and the endpoint falls back to the
+    # hard-coded regional default when GRAFANA_OTLP_ENDPOINT is unset. The Basic
+    # credential is referenced via ${env:...} — never inlined.
+    assert exp["otlphttp/grafana"]["endpoint"] == _GRAFANA_DEFAULT_ENDPOINT
     assert (
-        exp["otlphttp/langsmith"]["endpoint"] == "https://api.smith.langchain.com/otel"
+        exp["otlphttp/grafana"]["headers"]["Authorization"]
+        == "Basic ${env:GRAFANA_OTLP_AUTH}"
     )
-    assert (
-        exp["otlphttp/langsmith"]["headers"]["x-api-key"] == "${env:LANGSMITH_API_KEY}"
-    )
-    assert exp["otlphttp/langsmith"]["headers"]["Langsmith-Project"] == "gtm-sdk"
     # Every exporter has retry + sending queue.
     for block in exp.values():
         assert block["retry_on_failure"]["enabled"] is True
@@ -96,29 +99,10 @@ def test_build_config_dash0_dataset_defaults():
     assert cfg["exporters"]["otlphttp/dash0"]["headers"]["Dash0-Dataset"] == "default"
 
 
-def test_build_config_langsmith_project_defaults():
-    env = {
-        "LANGSMITH_API_KEY": "ls",  # nosec: B105
-    }
-    cfg = build_collector_config(env)
-    headers = cfg["exporters"]["otlphttp/langsmith"]["headers"]
-    assert headers["Langsmith-Project"] == "gtm-sdk"
-
-
-def test_build_config_langsmith_excluded_from_logs_pipeline():
-    # LangSmith implements OTLP traces only (/otel/v1/logs 404s), so it must be
-    # absent from the logs pipeline even when other providers are present.
-    cfg = build_collector_config(_ALL_PROVIDER_ENV)
-    assert "otlphttp/langsmith" in cfg["service"]["pipelines"]["traces"]["exporters"]
-    assert "otlphttp/langsmith" not in cfg["service"]["pipelines"]["logs"]["exporters"]
-
-
-def test_build_config_langsmith_only_has_no_logs_pipeline():
-    # A LangSmith-only collector has nothing to feed the logs pipeline, which
-    # otelcol would reject if emitted empty — so it must be omitted entirely.
-    cfg = build_collector_config({"LANGSMITH_API_KEY": "ls"})  # nosec: B105
-    pipelines = cfg["service"]["pipelines"]
-    assert set(pipelines["traces"]["exporters"]) == {"otlphttp/langsmith"}
+def test_build_config_no_providers_omits_logs_pipeline():
+    # otelcol rejects a pipeline with an empty exporter list, so with no
+    # providers configured the logs pipeline must be omitted entirely.
+    pipelines = build_collector_config({})["service"]["pipelines"]
     assert "logs" not in pipelines
 
 
@@ -141,6 +125,35 @@ def test_build_config_strips_full_signal_url_to_base():
     # otlphttp appends the signal path itself, so we must hand it the base.
     assert (
         cfg["exporters"]["otlphttp/hyperdx"]["endpoint"] == "https://in-otel.hyperdx.io"
+    )
+
+
+def test_build_config_grafana_endpoint_override_is_stripped_to_base():
+    env = {
+        "GRAFANA_OTLP_AUTH": "MTIzNDU2Omdsy19rZXk=",  # nosec: B105
+        # otlphttp appends /v1/{signal} itself, so a pasted full-signal URL
+        # must be stripped back to the base first.
+        "GRAFANA_OTLP_ENDPOINT": "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp/v1/traces",
+    }
+    cfg = build_collector_config(env)
+    assert (
+        cfg["exporters"]["otlphttp/grafana"]["endpoint"]
+        == "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
+    )
+
+
+def test_build_config_grafana_bare_host_gets_otlp_path():
+    # Grafana Cloud serves OTLP under /otlp; a bare-host override (written like
+    # the other providers' root-ingress endpoints) must still resolve to
+    # .../otlp/v1/{signal}, not silently drop the /otlp segment.
+    env = {
+        "GRAFANA_OTLP_AUTH": "MTIzNDU2Omdsy19rZXk=",  # nosec: B105
+        "GRAFANA_OTLP_ENDPOINT": "https://otlp-gateway-prod-eu-west-2.grafana.net",
+    }
+    cfg = build_collector_config(env)
+    assert (
+        cfg["exporters"]["otlphttp/grafana"]["endpoint"]
+        == "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp"
     )
 
 
@@ -232,7 +245,7 @@ def test_post_local_logs_non_2xx(monkeypatch, capsys):
 
 
 def test_collector_secret_payload_reads_env(monkeypatch):
-    for k in _ALL_PROVIDER_ENV:
+    for k in (*_PROVIDER_SECRET_KEYS, *_GRAFANA_RAW_INPUTS):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("DASH0_AUTH_TOKEN", "d0")
     monkeypatch.setenv("DASH0_OTLP_ENDPOINT", "https://ingress.dash0.com")
@@ -242,3 +255,33 @@ def test_collector_secret_payload_reads_env(monkeypatch):
         "DASH0_OTLP_ENDPOINT": "https://ingress.dash0.com",
         "LOGFIRE_WRITE_TOKEN": "lf",  # trunk-ignore(bandit/B105): test fixture
     }
+
+
+def test_grafana_basic_auth_encodes_instance_and_token():
+    import base64
+
+    cred = _grafana_basic_auth("1718830", "glc_secret")  # nosec: B106
+    assert cred is not None
+    # Round-trips to the canonical "<instance_id>:<token>" Basic form.
+    assert base64.b64decode(cred).decode() == "1718830:glc_secret"
+    # Missing either half yields no credential (provider stays disabled).
+    assert _grafana_basic_auth("", "glc_secret") is None  # nosec: B106
+    assert _grafana_basic_auth("1718830", "") is None
+
+
+def test_collector_secret_payload_derives_grafana_auth(monkeypatch):
+    """The raw glc token + instance id are collapsed to a pre-encoded Basic
+    credential at deploy time; the raw inputs never enter the shipped payload."""
+    for k in (*_PROVIDER_SECRET_KEYS, *_GRAFANA_RAW_INPUTS):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("GRAFANA_INSTANCE_ID", "1718830")
+    monkeypatch.setenv("GRAFANA_API_KEY", "glc_secret")  # nosec: B105
+
+    payload = _collector_secret_payload()
+
+    assert payload == {
+        "GRAFANA_OTLP_AUTH": _grafana_basic_auth("1718830", "glc_secret"),
+    }
+    # Raw inputs must not leak through to the collector container.
+    assert "GRAFANA_API_KEY" not in payload
+    assert "GRAFANA_INSTANCE_ID" not in payload

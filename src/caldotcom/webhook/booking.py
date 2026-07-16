@@ -636,7 +636,7 @@ class Webhook(CalcomWebhook):
         # this method is shared by every handler's preflight (Attio/GCS/Slack),
         # so adding them would gate the Attio/GCS deploys on Slack secrets they
         # never touch. The Slack deploy gets its own preflight, scoped to
-        # ``export_to_slack``, in ``scripts/webhooks-redeploy.py``.
+        # ``export_to_slack``, in ``scripts/webhooks-handlers-redeploy.py``.
         #
         # The decoupling is one-directional: the Slack preflight still iterates
         # this source's required + optional keys, so deploying export_to_slack

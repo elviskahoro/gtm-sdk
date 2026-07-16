@@ -17,9 +17,40 @@ from attio.errors import SDKError  # noqa: E402
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _neuter_telemetry_network() -> Iterator[None]:
+_TELEMETRY_PATCHERS: list[Any] = []
+
+# The unpatched spawn-exporter builders, captured by pytest_configure before
+# it installs the no-op patchers. Because the patchers now start BEFORE test
+# modules import (see pytest_configure's docstring), a module-level
+# ``from libs.telemetry import _build_spawn_span_exporter`` in a test file
+# would bind the no-op — tests that exercise the real spawn path (with a
+# mocked ``modal.Function``) must use the ``real_spawn_builders`` fixture.
+_REAL_SPAWN_BUILDERS: dict[str, Any] = {}
+
+
+@pytest.fixture(scope="session")
+def real_spawn_builders() -> Any:
+    """The real (unpatched) Modal-spawn exporter builders as a namespace with
+    ``span`` and ``log`` attributes."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(**_REAL_SPAWN_BUILDERS)
+
+
+def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
     """Stop telemetry unit tests from phoning home at interpreter shutdown.
+
+    This runs from ``pytest_configure``/``pytest_unconfigure`` — NOT a
+    session-scope autouse fixture — because fixtures only start at the first
+    test's setup, which is too late: ``src/app.py`` calls
+    ``init_log_exporter(MODAL_APP)`` at module import time, and pytest imports
+    it during *collection*. With a fixture, that import built a REAL
+    Modal-spawn log exporter (+ ``atexit.register(provider.shutdown)``) before
+    the patchers started, and its batch flush at interpreter exit blocked
+    ~28s on a credential-less ``modal.Function.spawn()`` RPC — the residual
+    post-pytest exit tail of issue #310 (the intermittency was whether any
+    log records were buffered at exit). ``pytest_configure`` runs before
+    collection, so collection-time imports get the no-op builders too.
 
     The telemetry tests (``tests/test_smoke_telemetry.py``,
     ``tests/libs/test_telemetry.py``) call ``init_tracer`` / ``init_log_exporter``
@@ -43,10 +74,24 @@ def _neuter_telemetry_network() -> Iterator[None]:
 
     Lazy ``from ... import OTLPSpanExporter`` inside ``libs/telemetry.py`` reads
     the source-module attribute at call time, so patching it there takes effect.
-    The collector path (``TELEMETRY_COLLECTOR_APP`` unset, the CI default) is
-    left alone: its ``_spawn_collector`` Modal RPC already swallows its own
-    errors and never prints the OTLP HTTP 404, and it is exercised directly by
-    the spawn-exporter unit tests.
+
+    The collector path (``TELEMETRY_COLLECTOR_APP`` unset — the hard-coded
+    DEFAULT) is neutered too. Any test that calls ``init_tracer`` /
+    ``init_log_exporter`` without explicitly setting
+    ``TELEMETRY_COLLECTOR_APP: ""`` builds a real Modal-spawn exporter behind a
+    BatchProcessor, and the ``atexit.register(provider.shutdown)`` flush then
+    runs ``modal.Function.from_name(...).spawn()`` at interpreter exit — a
+    network RPC that hangs/retries ~6.5 minutes in credential-less CI
+    containers (issue #305). ``_spawn_collector``'s try/except swallows
+    exceptions, but a hang isn't an exception. We patch the module-level
+    builder attributes (``_build_spawn_span_exporter`` /
+    ``_build_spawn_log_exporter``) rather than ``_spawn_collector`` itself
+    because the spawn-exporter unit tests
+    (``tests/libs/test_telemetry.py::test_spawn_span_exporter_encodes_and_spawns``
+    et al.) exercise the REAL builders — via the ``real_spawn_builders``
+    fixture above, since a direct module-level import would now bind the
+    no-op — and mock ``modal.Function`` to assert the real
+    ``_spawn_collector`` interaction.
     """
     from unittest.mock import patch
 
@@ -73,29 +118,76 @@ def _neuter_telemetry_network() -> Iterator[None]:
         def export(self, batch: Any) -> Any:  # noqa: ARG002
             return LogRecordExportResult.SUCCESS
 
+        def force_flush(self, timeout_millis: float = 30000) -> bool:  # noqa: ARG002
+            return True
+
+        def shutdown(self) -> None:
+            return None
+
+    # Plain classes are fine for the Modal-spawn side: BatchProcessors only
+    # duck-type export/force_flush/shutdown.
+    class _NoNetworkSpawnSpanExporter:
+        def export(self, spans: Any) -> Any:  # noqa: ARG002
+            return SpanExportResult.SUCCESS
+
         def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
             return True
 
         def shutdown(self) -> None:
             return None
 
-    patchers = [
-        patch(
-            "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
-            _NoNetworkSpanExporter,
-        ),
-        patch(
-            "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter",
-            _NoNetworkLogExporter,
-        ),
-    ]
-    for p in patchers:
+    class _NoNetworkSpawnLogExporter:
+        def export(self, batch: Any) -> Any:  # noqa: ARG002
+            return LogRecordExportResult.SUCCESS
+
+        def force_flush(self, timeout_millis: float = 30000) -> bool:  # noqa: ARG002
+            return True
+
+        def shutdown(self) -> None:
+            return None
+
+    def _build_noop_spawn_span_exporter(
+        _target: tuple[str, str],
+    ) -> _NoNetworkSpawnSpanExporter:
+        return _NoNetworkSpawnSpanExporter()
+
+    def _build_noop_spawn_log_exporter(
+        _target: tuple[str, str],
+    ) -> _NoNetworkSpawnLogExporter:
+        return _NoNetworkSpawnLogExporter()
+
+    import libs.telemetry as _telemetry
+
+    _REAL_SPAWN_BUILDERS["span"] = _telemetry._build_spawn_span_exporter  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    _REAL_SPAWN_BUILDERS["log"] = _telemetry._build_spawn_log_exporter  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    _TELEMETRY_PATCHERS.extend(
+        [
+            patch(
+                "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter",
+                _NoNetworkSpanExporter,
+            ),
+            patch(
+                "opentelemetry.exporter.otlp.proto.http._log_exporter.OTLPLogExporter",
+                _NoNetworkLogExporter,
+            ),
+            patch(
+                "libs.telemetry._build_spawn_span_exporter",
+                _build_noop_spawn_span_exporter,
+            ),
+            patch(
+                "libs.telemetry._build_spawn_log_exporter",
+                _build_noop_spawn_log_exporter,
+            ),
+        ],
+    )
+    for p in _TELEMETRY_PATCHERS:
         p.start()
-    try:
-        yield
-    finally:
-        for p in patchers:
-            p.stop()
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
+    while _TELEMETRY_PATCHERS:
+        _TELEMETRY_PATCHERS.pop().stop()
 
 
 # Attio API keys are 64 chars per the API's own validation
@@ -164,7 +256,7 @@ def social_mention_bootstrapped(
     attio_auth_probe: None,  # noqa: ARG001 — chains auth probe
 ) -> None:
     # social_mention is a custom Attio object that must be bootstrapped via
-    # scripts/attio-bootstrap-social_mentions.py --apply before any mention upsert
+    # scripts/attio-social_mentions-bootstrap.py --apply before any mention upsert
     # works. If a workspace was created without running bootstrap (e.g. a
     # fresh dev workspace), skip mention-writer integration tests with a
     # clear pointer rather than erroring deep inside _ensure_select_options.
@@ -180,7 +272,7 @@ def social_mention_bootstrapped(
         if exc.status_code == 404:
             pytest.skip(
                 "social_mention object not bootstrapped in this Attio workspace; "
-                "run `scripts/attio-bootstrap-social_mentions.py --apply` against the "
+                "run `scripts/attio-social_mentions-bootstrap.py --apply` against the "
                 "target workspace before running this test.",
             )
         raise

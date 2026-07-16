@@ -74,3 +74,12 @@ class MeetingCandidate(BaseModel):
     # calendar-synced meetings we want to attach to, over any api-token duplicates
     # a prior run may have minted (ai-4bz).
     created_by_system: bool = False
+    # Raw ``created_by_actor.type`` (``"system"`` | ``"api-token"`` |
+    # ``"workspace-member"`` | ``"app"``). Orphan detection (ai-4bz.9) keys
+    # specifically on ``"api-token"`` — the synthetic duplicates a prior backfill
+    # or the pre-fix webhook minted — which "not system" alone would not isolate.
+    created_by_type: str | None = None
+    # When Attio created the row (``Meeting.created_at``). Lets the orphan report
+    # attribute a duplicate to the run/webhook that produced it. ``None`` when the
+    # list query that built this candidate did not populate it.
+    created_at: datetime | None = None

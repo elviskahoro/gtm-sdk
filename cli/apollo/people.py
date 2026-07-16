@@ -36,7 +36,11 @@ def enrich(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    apollo_api_key_override: str | None = typer.Option(None, "--apollo-api-key"),
+    apollo_api_key_override: str | None = typer.Option(
+        None,
+        "--apollo-api-key",
+        help="Override the Apollo API key for this invocation",
+    ),
 ) -> None:
     """Enrich a person's data using Apollo."""
     if json_input:
@@ -121,7 +125,11 @@ def search(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    apollo_api_key_override: str | None = typer.Option(None, "--apollo-api-key"),
+    apollo_api_key_override: str | None = typer.Option(
+        None,
+        "--apollo-api-key",
+        help="Override the Apollo API key for this invocation",
+    ),
 ) -> None:
     """Search for people in Apollo's database."""
     if json_input:

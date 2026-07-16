@@ -61,3 +61,7 @@ jobs:
           junit-paths: junit.xml
           org-slug: sanhedrin
           token: ${{ secrets.TRUNK_API_TOKEN }}
+          # Avoid resolving `latest` before looking up the cached binary.
+          cli-version: 0.14.0
+          # Cache the analytics CLI to avoid downloading it on every test run.
+          use-cache: true

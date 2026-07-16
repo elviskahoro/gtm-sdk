@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "fireflies-backfill-attio-meetings.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "fireflies-attio_meetings-backfill.py"
 
 
 def _load_script_module():

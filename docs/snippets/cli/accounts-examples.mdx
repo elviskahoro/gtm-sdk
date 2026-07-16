@@ -1,0 +1,31 @@
+Research an objective, then preview a batch CRM load:
+
+```bash
+uv run gtm accounts research "Find competitors to Acme Corp"
+```
+
+```bash
+uv run gtm accounts find-people "VP of Engineering at Series B startups"
+```
+
+```bash
+# Preview (default): prints the planned writes, mutates nothing.
+uv run gtm accounts batch-add-people \
+  --records '[{"email": "jane@acme.dev", "first_name": "Jane", "last_name": "Doe"}]'
+```
+
+```json Output (preview)
+{
+  "mode": "preview",
+  "requested": 1,
+  "created": 0,
+  "skipped": 1,
+  "conflicts": 0,
+  "errors": 0,
+  "results": [{ "status": "would_create", "email": "jane@acme.dev" }],
+  "source": "elvis.gtm.batch_add_people",
+  "applied_at": null
+}
+```
+
+Add `--apply` to the same command to perform the writes.

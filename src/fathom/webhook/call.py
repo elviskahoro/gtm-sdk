@@ -1,7 +1,7 @@
 """Webhook ETL contract for Fathom recording ingestion.
 
 The same transform this class implements (``attio_get_operations``) is reused
-for *backfill* by ``scripts/fathom-backfill-attio-meetings.py``: that script
+for *backfill* by ``scripts/fathom-attio_meetings-backfill.py``: that script
 lists recordings from the Fathom REST API (``libs/fathom/client.py``), reshapes
 each into the ``Webhook`` payload model, and runs them through this exact path.
 So a recording that predates the webhook — or a meeting missing from Attio after

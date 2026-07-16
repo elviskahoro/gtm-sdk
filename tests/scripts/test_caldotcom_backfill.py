@@ -1,4 +1,4 @@
-"""Unit tests for ``scripts/caldotcom-backfill-bookings.py``.
+"""Unit tests for ``scripts/caldotcom-bookings-backfill.py``.
 
 The script filename is hyphenated, so it's loaded via ``importlib`` rather than
 imported. Tests cover the envelope mapper, the live-gate mirror, and the
@@ -20,7 +20,7 @@ import pytest
 from libs.caldotcom.models import BookingCreatedPayload, Webhook
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "caldotcom-backfill-bookings.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "caldotcom-bookings-backfill.py"
 SAMPLE = REPO_ROOT / "api" / "samples" / "caldotcom.booking.created.redacted.json"
 
 
