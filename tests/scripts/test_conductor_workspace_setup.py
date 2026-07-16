@@ -11,10 +11,12 @@ import os
 import stat
 import subprocess
 import textwrap
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SETUP_SCRIPT = REPO_ROOT / "scripts" / "conductor-workspace-setup.sh"
+CONDUCTOR_SETTINGS = REPO_ROOT / ".conductor" / "settings.toml"
 
 
 def _make_executable(path: Path) -> None:
@@ -179,3 +181,16 @@ def test_failed_flox_activation_uses_fallback_installers(tmp_path: Path) -> None
     assert "fallback-bd version" in log.read_text()
     assert "fallback-roborev version" in log.read_text()
     assert "config --global alias.roborev !roborev" in log.read_text()
+
+
+def test_conductor_shells_disable_zsh_compfix() -> None:
+    settings = tomllib.loads(CONDUCTOR_SETTINGS.read_text())
+
+    assert settings["environment_variables"]["ZSH_DISABLE_COMPFIX"] == "true"
+
+
+def test_workspace_setup_does_not_initialize_zsh_completion() -> None:
+    setup_script = SETUP_SCRIPT.read_text().lower()
+
+    assert "compinit" not in setup_script
+    assert "compaudit" not in setup_script

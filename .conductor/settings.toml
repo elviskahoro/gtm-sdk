@@ -22,6 +22,9 @@ bash scripts/conductor-workspace-setup.sh
 echo "=== setup finished $(date -u +%FT%TZ) ==="
 """
 
+[environment_variables]
+ZSH_DISABLE_COMPFIX = "true"
+
 [scripts.run.run]
 available_in = "local"
 command = "uv run elvis"
