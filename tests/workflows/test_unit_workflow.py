@@ -1,6 +1,6 @@
 """Static invariants for the Namespace-backed Unit-test workflow.
 
-These tests validate the workflow changes from issues #296 and #321:
+These tests validate the workflow changes from issues #296, #321, and #330:
 - Namespace-native checkout and caching actions
 - Fresh Dagger engines with host-seeded uv caches
 - Diagnostic output for cache behavior measurement
@@ -37,10 +37,15 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     ) in workflow
     assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
-    # One invocation = one spacectl mount scope. A second invocation for the
-    # metadata path never restored it across sequential main runs (#330).
+    # One invocation owns the native uv cache, project venv, and uv-managed
+    # toolchain. Correctness comes from inspecting the restored venv (#330),
+    # never from a separately persisted sidecar fingerprint.
     assert workflow.count("namespacelabs/nscloud-cache-action@") == 1
-    assert 'touch "$HOME/gtm-sdk-cache/placeholder"' in workflow
+    assert "gtm-sdk-cache" not in workflow
+    assert "placeholder" not in workflow
+    assert "cache_key_file" not in workflow
+    assert "fingerprint" not in workflow.lower()
+    assert "writeback scope" not in workflow.lower()
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
     # Toolchain + venv are siblings under one Namespace mount — never target
@@ -50,9 +55,7 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
     assert "~/.dagger-sdk/venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
-    # The fingerprint directory is its own mount path (never nested under
-    # ~/.dagger-sdk, #327) registered in the same invocation.
-    assert "~/gtm-sdk-cache" in cache_paths
+    assert "~/gtm-sdk-cache" not in cache_paths
     assert "~/.dagger-venv" not in cache_paths
     assert "local/share/uv/python" not in cache_paths
 
@@ -63,11 +66,13 @@ def test_unit_workflow_reports_mounted_cache_diagnostics() -> None:
     workflow = WORKFLOW.read_text()
 
     assert "Report mounted cache diagnostics" in workflow
-    assert 'findmnt -R "$HOME/gtm-sdk-cache"' in workflow
+    assert 'uv_cache_dir="$(uv cache dir)"' in workflow
+    assert 'findmnt -R "${uv_cache_dir}"' in workflow
     assert 'findmnt -R "$HOME/.dagger-sdk/venv"' in workflow
+    assert 'findmnt -R "$HOME/.dagger-sdk/uv-python"' in workflow
     assert 'ls -la "${NSC_CACHE_PATH}"' in workflow
-    assert 'echo "Fingerprint at mount time: $(cat "${cache_key_file}")"' in workflow
-    assert 'echo "Fingerprint at mount time: absent"' in workflow
+    assert "Fingerprint at mount time" not in workflow
+    assert "Mounted metadata directory contents" not in workflow
     # Diagnostics run after the mount and before the SDK install can mutate
     # the venv.
     assert workflow.index("Cache host Dagger and uv data") < workflow.index(
@@ -78,16 +83,59 @@ def test_unit_workflow_reports_mounted_cache_diagnostics() -> None:
     )
 
 
-def test_unit_workflow_logs_granular_cache_miss_reasons() -> None:
-    # "fingerprint dropped but venv survived" and "fork predates everything"
-    # need different fixes (#330); the warm step must say which happened.
+def test_unit_workflow_validates_the_restored_environment_before_syncing() -> None:
+    # Namespace may restore a stale generation, so only uv's read-only check of
+    # the actual environment can decide whether dependency sync is necessary.
     workflow = WORKFLOW.read_text()
+    warm_step = workflow.split("- name: Warm project uv cache", 1)[1].split(
+        "- name: Report Namespace cache state",
+        1,
+    )[0]
+    normalized = " ".join(warm_step.replace("\\\n", " ").split())
+    check_command = (
+        'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync '
+        "--all-extras --dev --locked --no-install-project --inexact --check "
+        '--python "${project_env}/bin/python"'
+    )
+    sync_command = (
+        'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync '
+        "--all-extras --dev --locked --no-install-project --inexact "
+        '--python "${project_env}/bin/python"'
+    )
 
-    assert 'echo "Host project uv cache miss reasons:${miss_reasons}"' in workflow
-    assert "interpreter-missing" in workflow
-    assert "fingerprint-missing" in workflow
-    assert "fingerprint-mismatch" in workflow
-    assert "pytest-import-failed" in workflow
+    assert "check_project_env()" in warm_step
+    assert check_command in normalized
+    assert sync_command in normalized
+    assert warm_step.count("check_project_env") == 3
+    assert warm_step.count("--check") == 1
+    assert 'if validation_output="$(check_project_env 2>&1)"; then' in warm_step
+    assert "printf '%s\\n' \"${validation_output}\"" in warm_step
+    assert 'echo "Host project uv cache: exact hit (${environment_key})"' in warm_step
+    assert (
+        'echo "Host project uv cache: miss or stale; syncing dependencies '
+        '(${environment_key})"'
+    ) in warm_step
+    # Failed-check output (uv's package delta) is printed before reconciliation,
+    # and the helper is called again afterward as a mandatory post-sync check.
+    exact_hit = normalized.index(
+        'echo "Host project uv cache: exact hit (${environment_key})"',
+    )
+    miss_branch = normalized.index("else", exact_hit)
+    delta_output = normalized.index(
+        'echo "Host project uv cache validation delta:"',
+        miss_branch,
+    )
+    delta_details = normalized.index(
+        "printf '%s\\n' \"${validation_output}\"",
+        delta_output,
+    )
+    dependency_sync = normalized.index(sync_command, miss_branch)
+    post_sync_check = normalized.rindex("check_project_env")
+    assert exact_hit < miss_branch < delta_output < delta_details < dependency_sync
+    assert post_sync_check > dependency_sync
+    assert "cache_key_file" not in warm_step
+    assert "miss_reasons" not in warm_step
+    assert "fingerprint" not in warm_step.lower()
 
 
 def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
@@ -183,19 +231,18 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
 
     assert "Warm project uv cache" in workflow
     assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"' in workflow
     assert 'uv_cache_dir="$(uv cache dir)"' in workflow
     assert "sha256sum pyproject.toml uv.lock" in workflow
+    assert "'python=3.13'" in workflow
+    assert '"arch=$(uname -m)"' in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert "--all-extras --dev --locked" in workflow
-    assert "--no-install-project" in workflow
+    assert "--no-install-project --inexact --check" in workflow
     assert "uv pip install --no-deps --reinstall" in workflow
     assert '--python "${project_env}/bin/python" .' in workflow
     assert "dagger-io==0.21.7" in workflow
     assert "anyio==4.13.0" in workflow
     assert 'if [ ! -x "${project_env}/bin/python" ]; then' in workflow
-    assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
-    assert 'echo "Host project uv cache stamp: ${cache_key_file}"' in workflow
     assert (
         'echo "Host project uv cache interpreter: ${project_env}/bin/python"'
         in workflow
@@ -203,6 +250,11 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     assert (
         'echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"' in workflow
     )
+    assert (
+        'echo "Host project uv cache environment key: ${environment_key}"' in workflow
+    )
+    assert "Host project uv cache stamp" not in workflow
+    assert "expected fingerprint" not in workflow
     assert "cache: uv" in workflow
     assert "~/.cache/uv" in workflow
 

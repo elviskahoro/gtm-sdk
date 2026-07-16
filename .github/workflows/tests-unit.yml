@@ -36,29 +36,25 @@ jobs:
           enable-cache: false
 
       # Ensure uv's cache directory exists before the Namespace cache action
-      # links its managed path. The metadata directory is its own mount path
-      # because uv's managed cache mode does not preserve arbitrary files.
+      # links its managed path.
       - name: Prepare host uv cache
         run: |
-          mkdir -p "$(uv cache dir)" "$HOME/gtm-sdk-cache"
-          touch "$HOME/gtm-sdk-cache/placeholder"
+          mkdir -p "$(uv cache dir)"
 
       # Namespace mounts these paths directly from the runner cache volume, so
       # setup reuses the host-side Dagger venv and uv-managed interpreter
       # without a GitHub-hosted cache upload/download phase. Keep the paths
-      # explicit: mounting the parent ~/.dagger-sdk intermittently dropped the
-      # project cache metadata while retaining the large venv contents (#327).
+      # explicit so the venv and its interpreter remain independently visible.
       #
       # Namespace cache-volume semantics (#330): every job receives a FORK of
       # a committed volume generation; a clean job exit commits the fork as
       # the new parent (last write wins), and Namespace explicitly serves a
       # STALE generation rather than delaying startup ("applications should
       # not assume that the cache contents match exactly the last committed
-      # version"). Long-lived paths (venv, uv artifacts) exist in old
-      # generations too, so they hit even on a stale fork, while a
-      # recently-added path can be reported missing on the same fork. All
-      # paths therefore live in ONE action invocation / spacectl mount scope:
-      # one mount response, one cache-hit output, no split writeback scopes.
+      # version"). A restored generation is therefore only a candidate cache
+      # hit. The read-only `uv sync --check` below validates the actual
+      # environment before the workflow decides whether dependency
+      # synchronization is necessary; no sidecar file is authoritative.
       - name: Cache host Dagger and uv data
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
@@ -68,38 +64,28 @@ jobs:
           # (~/.dagger-sdk/{venv,uv-python}). uv cannot copy the interpreter
           # into the venv (astral-sh/uv#17754), and pointing `uv venv` at the
           # mount root itself detaches the Namespace bind (issue #303) so
-          # contents never persist. ~/gtm-sdk-cache holds the project cache
-          # fingerprint; it is its own mount path (NOT nested under
-          # ~/.dagger-sdk, see #327) but registered in this same invocation.
+          # contents never persist.
           cache: uv
           path: |
             ~/.dagger-sdk/venv
             ~/.dagger-sdk/uv-python
-            ~/gtm-sdk-cache
 
       # Capture the mounted state BEFORE any step mutates it, so a stale or
       # unwritten fork is diagnosable from logs alone (#330): bind-mount
-      # presence, the fork's cache-dir inventory + mtimes (generation age),
-      # and whether the fingerprint survived the cache boundary.
+      # presence and the fork's cache-dir inventory + mtimes (generation age).
       - name: Report mounted cache diagnostics
         run: |
           set -uo pipefail
+          uv_cache_dir="$(uv cache dir)"
           echo "Namespace mount cache-hit output: ${{ steps.namespace_cache.outputs.cache-hit }}"
-          findmnt -R "$HOME/gtm-sdk-cache" || echo "findmnt: $HOME/gtm-sdk-cache is not a mount point"
+          findmnt -R "${uv_cache_dir}" || echo "findmnt: ${uv_cache_dir} is not a mount point"
           findmnt -R "$HOME/.dagger-sdk/venv" || echo "findmnt: $HOME/.dagger-sdk/venv is not a mount point"
+          findmnt -R "$HOME/.dagger-sdk/uv-python" || echo "findmnt: $HOME/.dagger-sdk/uv-python is not a mount point"
           if [ -n "${NSC_CACHE_PATH:-}" ]; then
             echo "Cache volume inventory (${NSC_CACHE_PATH}):"
             ls -la "${NSC_CACHE_PATH}" || true
           else
             echo "Cache volume inventory: NSC_CACHE_PATH is unset"
-          fi
-          echo "Mounted metadata directory contents:"
-          ls -la "$HOME/gtm-sdk-cache" || true
-          cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"
-          if [ -f "${cache_key_file}" ]; then
-            echo "Fingerprint at mount time: $(cat "${cache_key_file}")"
-          else
-            echo "Fingerprint at mount time: absent"
           fi
 
       # `version` is pinned: without it the action installs the latest CLI at
@@ -170,47 +156,45 @@ jobs:
       # Warm the project dependency cache on the host before starting Dagger.
       # The Namespace action persists ~/.cache/uv plus the explicit SDK paths
       # above, while the fresh Dagger engine only receives a snapshot of the
-      # host uv cache. A lockfile-derived stamp inside the persisted venv lets
-      # us reuse a valid project environment and rebuild it when dependencies,
-      # Python, or architecture change.
+      # host uv cache. Namespace may restore a stale generation, so inspect the
+      # installed environment directly instead of trusting sidecar metadata.
       - name: Warm project uv cache
         run: |
           set -euo pipefail
-          # Reuse the Namespace-persisted SDK venv for project dependencies;
-          # keep the cache fingerprint in a separately mounted metadata path.
+          # Reuse the Namespace-persisted SDK venv for project dependencies.
+          # The lock/Python/architecture hash is diagnostic only; uv's check of
+          # the restored environment is the correctness boundary.
           project_env="$HOME/.dagger-sdk/venv"
-          cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"
-          cache_key="$({
+          environment_key="$({
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"
           } | sha256sum | cut -d' ' -f1)"
-          # Report every failed precondition, not just the aggregate miss —
-          # "fingerprint dropped but venv survived" and "fork predates
-          # everything" need different fixes (#330).
-          miss_reasons=""
-          [ -x "${project_env}/bin/python" ] || miss_reasons="${miss_reasons} interpreter-missing"
-          if [ -f "${cache_key_file}" ]; then
-            [ "$(cat "${cache_key_file}")" = "${cache_key}" ] || miss_reasons="${miss_reasons} fingerprint-mismatch"
+
+          check_project_env() {
+            UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
+              --all-extras --dev --locked --no-install-project --inexact --check \
+              --python "${project_env}/bin/python"
+          }
+
+          validation_output=""
+          if validation_output="$(check_project_env 2>&1)"; then
+            printf '%s\n' "${validation_output}"
+            echo "Host project uv cache: exact hit (${environment_key})"
           else
-            miss_reasons="${miss_reasons} fingerprint-missing"
-          fi
-          if [ -x "${project_env}/bin/python" ] &&
-            ! "${project_env}/bin/python" -c 'import pytest' 2>/dev/null; then
-            miss_reasons="${miss_reasons} pytest-import-failed"
-          fi
-          if [ -z "${miss_reasons}" ]; then
-            echo "Host project uv cache: exact hit (${cache_key})"
-          else
-            echo "Host project uv cache: miss or stale; syncing dependencies (${cache_key})"
-            echo "Host project uv cache miss reasons:${miss_reasons}"
+            echo "Host project uv cache: miss or stale; syncing dependencies (${environment_key})"
+            # uv's failed check describes the installed-package delta that
+            # makes this restored generation stale (or why it was unreadable).
+            echo "Host project uv cache validation delta:"
+            printf '%s\n' "${validation_output}"
             if [ ! -x "${project_env}/bin/python" ]; then
               uv venv --python 3.13 "${project_env}"
             fi
             UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
-              --all-extras --dev --locked --no-install-project \
+              --all-extras --dev --locked --no-install-project --inexact \
               --python "${project_env}/bin/python"
-            printf '%s\n' "${cache_key}" >"${cache_key_file}"
-            echo "Host project uv cache: refreshed (${cache_key})"
+            # Never proceed with a partially reconciled environment.
+            check_project_env
+            echo "Host project uv cache: refreshed (${environment_key})"
           fi
           # Install only the local project package into the warmed environment.
           # A non-editable install keeps Dagger workers independent of the
@@ -220,21 +204,14 @@ jobs:
           uv pip install --no-deps --reinstall \
             --python "${project_env}/bin/python" \
             "dagger-io==0.21.7" "anyio==4.13.0"
-          echo "Host project uv cache stamp: ${cache_key_file}"
-          if [ -f "${cache_key_file}" ]; then
-            echo "Host project uv cache stamp value: $(cat "${cache_key_file}")"
-          else
-            echo "Host project uv cache stamp value: absent"
-          fi
           if [ -x "${project_env}/bin/python" ] &&
-            "${project_env}/bin/python" -c 'import sys; print(sys.executable)' \
-              >/tmp/gtm-sdk-cache-interpreter; then
+            resolved_interpreter="$("${project_env}/bin/python" -c 'import sys; print(sys.executable)')"; then
             echo "Host project uv cache interpreter: ${project_env}/bin/python"
-            echo "Host project uv cache resolved interpreter: $(cat /tmp/gtm-sdk-cache-interpreter)"
+            echo "Host project uv cache resolved interpreter: ${resolved_interpreter}"
           else
             echo "Host project uv cache interpreter: invalid or absent"
           fi
-          echo "Host project uv cache expected fingerprint: ${cache_key}"
+          echo "Host project uv cache environment key: ${environment_key}"
           if [ -d "${UV_PYTHON_INSTALL_DIR}" ] &&
             [ "$(find "${UV_PYTHON_INSTALL_DIR}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
             echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"
