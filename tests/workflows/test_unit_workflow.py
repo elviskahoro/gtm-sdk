@@ -131,6 +131,7 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     assert "sha256sum pyproject.toml uv.lock" in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert "--all-extras --dev --locked" in workflow
+    assert "--no-install-project" in workflow
     assert 'rm -rf "${project_env}"' in workflow
     assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
     assert "cache: uv" in workflow
@@ -188,7 +189,6 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     assert "-p pytest_asyncio.plugin" in source
     assert "-p anyio.pytest_plugin" in source
     assert '"PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"' in source
-    assert "--no-install-project" not in source
     for excluded in ('".git"', '".entire"', '".kilo"'):
         assert excluded in source
     assert "--junit-xml=junit.xml" in source

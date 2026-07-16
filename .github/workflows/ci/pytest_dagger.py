@@ -11,9 +11,9 @@ explicit xdist workers over both serial and eight workers: serial 13.16s, four
 workers 10.74s, eight workers 12.08s.
 
 The workflow warms a lockfile-fingerprinted project environment on the host
-before opening Dagger. The pipeline mounts that environment and its sibling
+before opening Dagger. The pipeline mounts that dependency-only environment and its sibling
 uv-managed Python toolchain at their original absolute paths, then runs
-`uv run --no-sync`; this avoids both network downloads and reinstalling the
+interpreter directly with `/src` on `PYTHONPATH`; this avoids both network downloads and reinstalling the
 188-package environment inside every fresh Dagger engine.
 
 The pipeline *fails* (non-zero exit) when pytest exits non-zero, while still
@@ -37,10 +37,6 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "\"$UV_PROJECT_ENVIRONMENT/bin/python\" -c "
-    "'import sys, scripts; print(\"Dagger scripts module:\", scripts, "
-    "getattr(scripts, \"__file__\", None), list(getattr(scripts, \"__path__\", []))); "
-    "print(\"Dagger sys.path:\", sys.path)' ; "
     '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
     "-n 4 --dist=loadfile "

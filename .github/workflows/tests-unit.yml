@@ -142,7 +142,7 @@ jobs:
             rm -rf "${project_env}"
             uv venv --python 3.13 "${project_env}"
             UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
-              --all-extras --dev --locked \
+              --all-extras --dev --locked --no-install-project \
               --python "${project_env}/bin/python"
             printf '%s\n' "${cache_key}" >"${cache_key_file}"
             echo "Host project uv cache: refreshed (${cache_key})"
