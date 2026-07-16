@@ -39,7 +39,7 @@ jobs:
       # directory first so its stamp is attached to the Namespace volume rather
       # than written to the runner filesystem after the cache setup.
       - name: Prepare host cache metadata
-        run: mkdir -p "$HOME/.dagger-sdk/cache-metadata"
+        run: mkdir -p "$HOME/gtm-sdk-cache"
 
       # Namespace mounts these paths directly from the runner cache volume, so
       # setup reuses the host-side Dagger venv and uv-managed interpreter
@@ -60,7 +60,7 @@ jobs:
           path: |
             ~/.dagger-sdk/venv
             ~/.dagger-sdk/uv-python
-            ~/.dagger-sdk/cache-metadata
+            ~/gtm-sdk-cache
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -139,7 +139,7 @@ jobs:
           # Reuse the Namespace-persisted SDK venv for project dependencies;
           # keep the cache fingerprint in a separately promoted metadata path.
           project_env="$HOME/.dagger-sdk/venv"
-          cache_key_file="$HOME/.dagger-sdk/cache-metadata/gtm-sdk-cache-key"
+          cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"
           mkdir -p "$(dirname "${cache_key_file}")"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
