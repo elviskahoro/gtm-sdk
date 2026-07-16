@@ -43,17 +43,9 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     # `uv venv` at the mount root (detaches the bind, issue #303).
     assert '"$HOME/.dagger-sdk/uv-python"' in workflow
     assert 'dagger_venv="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'mkdir -p "$HOME/gtm-sdk-cache"' in workflow
-    assert 'touch "$HOME/gtm-sdk-cache/gtm-sdk-cache-key"' in workflow
-    assert workflow.index(
-        'touch "$HOME/gtm-sdk-cache/gtm-sdk-cache-key"',
-    ) < workflow.index(
-        "namespacelabs/nscloud-cache-action@",
-    )
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
     assert "~/.dagger-sdk/venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
-    assert "~/gtm-sdk-cache/gtm-sdk-cache-key" in cache_paths
     assert "~/.dagger-venv" not in cache_paths
     assert "local/share/uv/python" not in cache_paths
 
@@ -151,8 +143,8 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
 
     assert "Warm project uv cache" in workflow
     assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'cache_key_file="$HOME/gtm-sdk-cache/gtm-sdk-cache-key"' in workflow
-    assert 'mkdir -p "$(dirname "${cache_key_file}")"' in workflow
+    assert 'cache_key_file="$(uv cache dir)/gtm-sdk-cache-key"' in workflow
+    assert 'uv_cache_dir="$(uv cache dir)"' in workflow
     assert "sha256sum pyproject.toml uv.lock" in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert "--all-extras --dev --locked" in workflow
