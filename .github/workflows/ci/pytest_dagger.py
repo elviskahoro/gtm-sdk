@@ -38,6 +38,10 @@ from dagger import dag
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
     "export PYTHONPATH=/src${PYTHONPATH:+:$PYTHONPATH}; "
+    "find /src/scripts -maxdepth 2 -type f -print; "
+    '"$UV_PROJECT_ENVIRONMENT/bin/python" -c '
+    "'import scripts; print(scripts.__file__, list(scripts.__path__)); "
+    "import scripts.lib.env; print(scripts.lib.env.__file__)'; "
     '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
     "-n 4 --dist=loadfile "
