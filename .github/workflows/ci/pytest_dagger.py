@@ -19,12 +19,6 @@ exporting the report. A previous `... || true` swallowed pytest's exit code so
 the job went green even on a failing suite (ai-eun); we instead capture pytest's
 exit code into `/src/pytest_rc` (the trailing `echo` keeps the `with_exec` green
 so the report stays exportable) and re-raise it after the export.
-
-Issue #310 forensics: `CI_EXIT_FORENSICS=1` arms a faulthandler watchdog in
-`tests/conftest.py::pytest_sessionfinish` that dumps all thread stacks if the
-interpreter takes >10s to exit after the pytest summary, and the `date` echo in
-PYTEST_CMD timestamps the moment the pytest process actually exited so the
-post-summary tail is measurable per run. Strip both once #310 closes.
 """
 
 from __future__ import annotations
@@ -42,8 +36,7 @@ from dagger import dag
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
     "uv run pytest --junit-xml=junit.xml -o junit_family=xunit1; "
-    'rc=$?; echo "pytest process exited rc=$rc at $(date -u +%H:%M:%S.%3N)"; '
-    "echo $rc > /src/pytest_rc"
+    "echo $? > /src/pytest_rc"
 )
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
@@ -108,9 +101,6 @@ def build_container() -> dagger.Container:
         # filesystems), so uv's default hardlink install always fails and
         # falls back to copying with a per-run warning; declare copy mode.
         .with_env_variable("UV_LINK_MODE", "copy")
-        # Arm the interpreter-exit stack-dump watchdog (issue #310, see
-        # tests/conftest.py::pytest_sessionfinish).
-        .with_env_variable("CI_EXIT_FORENSICS", "1")
         .with_mounted_cache("/root/.cache/uv", uv_cache)
         .with_directory("/src", source)
         .with_workdir("/src")

@@ -17,30 +17,6 @@ from attio.errors import SDKError  # noqa: E402
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
 
-def pytest_sessionfinish(
-    session: pytest.Session,  # noqa: ARG001
-    exitstatus: int,  # noqa: ARG001
-) -> None:
-    """Issue #310 forensics: if interpreter exit stalls, dump all thread stacks.
-
-    CI intermittently shows a ~28s gap between the pytest summary and the
-    interpreter exiting inside the credential-less Dagger container — some
-    atexit hook or non-daemon thread join blocking on a ~30s network timeout.
-    Gated on CI_EXIT_FORENSICS (set only by
-    ``.github/workflows/ci/pytest_dagger.py``) so local runs are unaffected.
-    faulthandler's watchdog is a raw C thread (not a Python thread), so it
-    survives interpreter finalization and fires even while atexit hooks /
-    thread joins are blocking. exit=False + repeat=True → a stack dump to
-    stderr every 10s for as long as shutdown is stuck; a normal ~2s exit
-    prints nothing.
-    """
-    if os.environ.get("CI_EXIT_FORENSICS") != "1":
-        return
-    import faulthandler
-
-    faulthandler.dump_traceback_later(10, repeat=True, exit=False, file=sys.stderr)
-
-
 _TELEMETRY_PATCHERS: list[Any] = []
 
 # The unpatched spawn-exporter builders, captured by pytest_configure before
