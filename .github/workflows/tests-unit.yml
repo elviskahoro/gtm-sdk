@@ -35,6 +35,12 @@ jobs:
           # setup-uv's own cache layer stays disabled to avoid double ownership.
           enable-cache: false
 
+      # The cache action links paths during this step. Create the metadata
+      # directory first so its stamp is attached to the Namespace volume rather
+      # than written to the runner filesystem after the cache setup.
+      - name: Prepare host cache metadata
+        run: mkdir -p "$HOME/.dagger-sdk/cache-metadata"
+
       # Namespace mounts these paths directly from the runner cache volume, so
       # setup reuses the host-side Dagger venv and uv-managed interpreter
       # without a GitHub-hosted cache upload/download phase. Keep the paths

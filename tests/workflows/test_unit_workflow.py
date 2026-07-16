@@ -43,6 +43,12 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     # `uv venv` at the mount root (detaches the bind, issue #303).
     assert '"$HOME/.dagger-sdk/uv-python"' in workflow
     assert 'dagger_venv="$HOME/.dagger-sdk/venv"' in workflow
+    assert 'mkdir -p "$HOME/.dagger-sdk/cache-metadata"' in workflow
+    assert workflow.index(
+        'mkdir -p "$HOME/.dagger-sdk/cache-metadata"',
+    ) < workflow.index(
+        "namespacelabs/nscloud-cache-action@",
+    )
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
     assert "~/.dagger-sdk/venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
