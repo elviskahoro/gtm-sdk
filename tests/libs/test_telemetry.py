@@ -683,6 +683,24 @@ def test_spawn_exporter_swallows_spawn_error(monkeypatch):
     assert exporter.export([]) == SpanExportResult.FAILURE
 
 
+def test_conftest_neuters_module_level_spawn_exporter_builders() -> None:
+    """The session fixture must keep the module-level builder attributes
+    patched to no-op factories: a real Modal-spawn exporter wired into a
+    BatchProcessor hangs interpreter exit ~6.5 min in credential-less CI
+    (issue #305). The direct imports at the top of this file intentionally
+    keep the REAL builders testable."""
+    import libs.telemetry as telemetry_module
+
+    assert (
+        telemetry_module._build_spawn_span_exporter  # trunk-ignore(pyright/reportPrivateUsage)
+        is not _build_spawn_span_exporter
+    )
+    assert (
+        telemetry_module._build_spawn_log_exporter  # trunk-ignore(pyright/reportPrivateUsage)
+        is not _build_spawn_log_exporter
+    )
+
+
 def test_init_tracer_uses_collector_when_configured(monkeypatch):
     """Collector path is taken (and takes precedence over a direct HyperDX key)
     when TELEMETRY_COLLECTOR_APP is set. The spawn itself happens later on the
