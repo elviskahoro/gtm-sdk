@@ -90,6 +90,7 @@ SOURCE_EXCLUDES = [
 def build_container() -> dagger.Container:
     """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
+    scripts = dag.host().directory("scripts")
     uv_cache = dag.cache_volume("uv-cache")
     host_uv_cache = dag.host().directory(str(HOST_UV_CACHE))
     # The host workflow warms these paths under the Namespace cache. Mount
@@ -134,6 +135,9 @@ def build_container() -> dagger.Container:
             read_only=True,
         )
         .with_directory("/src", source)
+        # Keep the small repo-local helper package explicit so it cannot be
+        # shadowed by an incomplete host-directory snapshot.
+        .with_directory("/src/scripts", scripts)
         .with_workdir("/src")
         # The editable project path recorded in the host venv points at the
         # runner checkout, not /src. Tests import the checked-out source
