@@ -43,7 +43,7 @@ dependencies = [
   "phonenumbers>=9.0.29",
   "resend>=2.30.0",
   "uuid7>=0.1.0",
-  "dagger-io>=0.21.0",
+  "dagger-io>=0.21.7",
   "pyyaml>=6.0.3",
   "types-pyyaml>=6.0.12.20260510",
   "pycountry>=24.0.0",
@@ -60,6 +60,9 @@ exclude = ["tests*"]
 
 [project.scripts]
 gtm = "cli.main:run"
+
+[tool.uv]
+required-version = ">=0.11.26,<0.12"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib -m 'not integration'"

@@ -29,6 +29,8 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Mapping
+from pathlib import Path
+from time import perf_counter
 
 import anyio
 import dagger
@@ -55,6 +57,7 @@ PYTEST_CMD = (
 )
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
+PYTEST_RC_HOST_PATH = "pytest_rc"
 
 # Distinct exit code the conftest preflight uses when a required Attio object is
 # missing ("infra not ready"), so a green-checkmark-masking 0-test run is RED but
@@ -72,6 +75,7 @@ SOURCE_EXCLUDES = [
     "out",
     "data",
     "worktrees",
+    "pytest_rc",
 ]
 
 
@@ -133,8 +137,11 @@ async def main() -> None:
         # killed/cancelled container, empty value, non-integer) fails closed at
         # rc=1 so the job goes red with a controlled message, not a traceback.
         try:
-            rc = int((await ctr.file(PYTEST_RC_PATH).contents()).strip())
-        except (dagger.DaggerError, ValueError) as exc:
+            started = perf_counter()
+            await ctr.file(PYTEST_RC_PATH).export(PYTEST_RC_HOST_PATH)
+            rc = int(Path(PYTEST_RC_HOST_PATH).read_text().strip())
+            print(f"Dagger transfer pytest_rc: {perf_counter() - started:.2f}s")
+        except (dagger.DaggerError, OSError, ValueError) as exc:
             sys.stderr.write(
                 f"warning: could not read pytest exit code from {PYTEST_RC_PATH} "
                 f"({exc}); failing closed at rc=1\n",
@@ -146,8 +153,12 @@ async def main() -> None:
         # When pytest already failed, a missing junit.xml is an expected side
         # effect of the crash — warn and keep the real rc rather than masking it.
         try:
+            started = perf_counter()
             await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)
-            print(f"exported junit report to {JUNIT_HOST_PATH}")
+            print(
+                f"Dagger transfer junit.xml: {perf_counter() - started:.2f}s; "
+                f"exported report to {JUNIT_HOST_PATH}",
+            )
         except dagger.DaggerError as exc:
             if rc == 0:
                 raise

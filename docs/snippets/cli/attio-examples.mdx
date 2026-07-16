@@ -9,8 +9,8 @@ uv run gtm attio people search --email-domain "acme.dev" --limit 10
 uv run gtm attio people search --sample
 ```
 
-Add or update a person — people mutations run a Modal deployment-parity preflight,
-governed by `--modal-sync check|deploy|skip`:
+Create a person. This writes immediately after the default Modal deployment-parity
+preflight; `--modal-sync` controls that preflight, not whether the write happens:
 
 ```bash
 uv run gtm attio people add "jane@acme.dev" \
@@ -19,8 +19,24 @@ uv run gtm attio people add "jane@acme.dev" \
   --company "acme.dev"
 ```
 
-Company mutations preview by default and write only with `--apply`:
+Update an existing person by email:
 
 ```bash
-uv run gtm attio companies add --domain "acme.dev" --name "Acme Corp" --apply
+uv run gtm attio people update --email "jane@acme.dev" \
+  --company "acme.dev" \
+  --first-name "Jane"
+```
+
+Create or update deterministically by email with `upsert`:
+
+```bash
+uv run gtm attio people upsert "jane@acme.dev" \
+  --first-name "Jane" \
+  --last-name "Doe"
+```
+
+Company creation also writes when invoked (it does not use `--apply`):
+
+```bash
+uv run gtm attio companies add --domain "acme.dev" --name "Acme Corp"
 ```
