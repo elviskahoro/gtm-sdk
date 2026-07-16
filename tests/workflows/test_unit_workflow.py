@@ -14,6 +14,13 @@ WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "tests-unit.yml
 PYTEST_DAGGER = (
     Path(__file__).parents[2] / ".github" / "workflows" / "ci" / "pytest_dagger.py"
 )
+PYTEST_INTEGRATION_DAGGER = (
+    Path(__file__).parents[2]
+    / ".github"
+    / "workflows"
+    / "ci"
+    / "pytest_integration_dagger.py"
+)
 
 
 def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
@@ -99,6 +106,16 @@ def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
     assert "UV_VENV_CLEAR" not in workflow
     assert 'find "$HOME/.dagger-venv" -mindepth 1 -delete' in workflow
     assert "import dagger, anyio" in workflow
+
+
+def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
+    for pipeline in (PYTEST_DAGGER, PYTEST_INTEGRATION_DAGGER):
+        source = pipeline.read_text()
+        assert ".contents()" not in source
+        assert "file(PYTEST_RC_PATH).export(PYTEST_RC_HOST_PATH)" in source
+        assert 'file("/src/junit.xml").export(JUNIT_HOST_PATH)' in source
+        assert '"pytest_rc",' in source
+        assert "sys.exit(rc)" in source
 
 
 # RUN #2: Cache validation - testing warm cache hits

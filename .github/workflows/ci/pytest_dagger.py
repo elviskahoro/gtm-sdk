@@ -23,6 +23,8 @@ so the report stays exportable) and re-raise it after the export.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+from time import perf_counter
 
 import anyio
 import dagger
@@ -37,6 +39,7 @@ PYTEST_CMD = (
 )
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
+PYTEST_RC_HOST_PATH = "pytest_rc"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
 # scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`. When
@@ -68,6 +71,7 @@ SOURCE_EXCLUDES = [
     # previous local run, it would feed back into the next run's /src snapshot
     # (fresh timestamps every run) and needlessly invalidate the exec cache.
     "junit.xml",
+    "pytest_rc",
 ]
 
 
@@ -116,8 +120,11 @@ async def main() -> None:
         # killed/cancelled container, empty value, non-integer) fails closed at
         # rc=1 so the job goes red with a controlled message, not a traceback.
         try:
-            rc = int((await ctr.file(PYTEST_RC_PATH).contents()).strip())
-        except (dagger.DaggerError, ValueError) as exc:
+            started = perf_counter()
+            await ctr.file(PYTEST_RC_PATH).export(PYTEST_RC_HOST_PATH)
+            rc = int(Path(PYTEST_RC_HOST_PATH).read_text().strip())
+            print(f"Dagger transfer pytest_rc: {perf_counter() - started:.2f}s")
+        except (dagger.DaggerError, OSError, ValueError) as exc:
             sys.stderr.write(
                 f"warning: could not read pytest exit code from {PYTEST_RC_PATH} "
                 f"({exc}); failing closed at rc=1\n",
@@ -129,8 +136,12 @@ async def main() -> None:
         # When pytest already failed, a missing junit.xml is an expected side
         # effect of the crash — warn and keep the real rc rather than masking it.
         try:
+            started = perf_counter()
             await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)
-            print(f"exported junit report to {JUNIT_HOST_PATH}")
+            print(
+                f"Dagger transfer junit.xml: {perf_counter() - started:.2f}s; "
+                f"exported report to {JUNIT_HOST_PATH}",
+            )
         except dagger.DaggerError as exc:
             if rc == 0:
                 raise
