@@ -35,10 +35,18 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
         "namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 "
         "# v1.6.0"
     ) in workflow
-    assert "~/.dagger-venv" in workflow
+    assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
+    # Toolchain + venv are siblings under one Namespace mount — never target
+    # `uv venv` at the mount root (detaches the bind, issue #303).
+    assert '"$HOME/.dagger-sdk/uv-python"' in workflow
+    assert 'dagger_venv="$HOME/.dagger-sdk/venv"' in workflow
+    cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
+    assert "~/.dagger-sdk" in cache_paths
+    assert "~/.dagger-venv" not in cache_paths
+    assert "local/share/uv/python" not in cache_paths
 
 
 def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
@@ -50,7 +58,8 @@ def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
         "namespacelabs/nscloud-cache-action@",
     )
     # setup-uv's own GitHub-cache layer stays off; the Namespace cache action
-    # is the sole owner of uv's cache dir and toolchains.
+    # is the sole owner of uv's cache dir. The managed CPython toolchain is a
+    # sibling of the SDK venv under ~/.dagger-sdk (also on that volume).
     assert "enable-cache: false" in workflow
 
 
@@ -140,16 +149,21 @@ def test_unit_workflow_checks_asynchronous_engine_shutdown() -> None:
 
 
 def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
-    # `uv venv --clear` deletes and recreates ~/.dagger-venv, detaching it
-    # from the nscloud-cache-action mount — the venv then never persists
-    # (observed cold in 5/5 runs, issue #303). The venv must be created into
-    # the existing directory, and a cache-restored venv must be validated by
-    # importing the SDK, not by an -x file test.
+    # `uv venv --clear` on the Namespace mount root deletes and recreates the
+    # directory, detaching the bind — the tree then never persists (cold in
+    # 5/5 runs, issue #303). Mount ~/.dagger-sdk; put the venv at a
+    # subdirectory so cold recreate can replace it; keep the toolchain as a
+    # sibling under the same mount. Validate restores by importing the SDK.
     workflow = WORKFLOW.read_text()
+    assert 'uv venv "$HOME/.dagger-sdk" --clear' not in workflow
     assert 'uv venv "$HOME/.dagger-venv" --clear' not in workflow
     assert "UV_VENV_CLEAR" not in workflow
-    assert 'find "$HOME/.dagger-venv" -mindepth 1 -delete' in workflow
+    assert 'rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"' in workflow
     assert "import dagger, anyio" in workflow
+    assert 'uv venv --python 3.13 "${dagger_venv}"' in workflow
+    assert "uv python install --reinstall 3.13" in workflow
+    assert "interpreter escaped ~/.dagger-sdk" in workflow
+    assert "uv Python toolchain is sibling under ~/.dagger-sdk" in workflow
 
 
 def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
