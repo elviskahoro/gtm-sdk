@@ -1,0 +1,62 @@
+---
+title: "Installation"
+description: "Install gtm-sdk standalone or as an editable dependency of another uv project, with Python 3.13 and uv as the only supported package manager."
+---
+
+## Requirements
+
+- Python `>=3.13,<3.14`
+- [`uv`](https://docs.astral.sh/uv/) — the only supported package manager. Bare `pip`
+  bypasses `uv.lock` and causes environment drift.
+
+## Standalone
+
+```bash
+git clone git@github.com:elviskahoro/gtm-sdk.git
+cd gtm-sdk
+uv sync
+```
+
+`uv sync` installs from the committed lock file, so every machine resolves the exact same
+dependency set.
+
+## As an editable dependency
+
+To consume the SDK from another uv project, clone it inside that project (or add it as a
+git submodule) and point a uv source at the path:
+
+```bash
+git clone git@github.com:elviskahoro/gtm-sdk.git gtm-sdk
+```
+
+```toml pyproject.toml
+[project]
+dependencies = ["gtm"]
+
+[tool.uv.sources]
+gtm = { path = "gtm-sdk", editable = true }
+```
+
+Then run `uv sync` in the parent project. The `cli`, `src`, and `libs` packages become
+importable, and edits inside `gtm-sdk/` are visible immediately — no reinstall, no pin to
+bump.
+
+## Optional extras
+
+The `marketplace` data product needs Polars, which is not installed by default:
+
+```bash
+uv sync --extra marketplace
+```
+
+## Verify
+
+```bash
+uv run gtm version
+```
+
+```text Output
+gtm v0.1.0
+```
+
+Continue with the [quickstart](/quickstart) to run your first commands.

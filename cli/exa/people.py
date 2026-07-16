@@ -21,13 +21,21 @@ def find_people(
         help="Person search query (required unless --json used)",
     ),
     num_results: int = typer.Option(5, "--num-results", help="Number of results"),
-    highlights: bool = typer.Option(True, "--highlights/--no-highlights"),
+    highlights: bool = typer.Option(
+        True,
+        "--highlights/--no-highlights",
+        help="Include highlight snippets in each result",
+    ),
     json_input: str | None = typer.Option(
         None,
         "--json",
         help="Full JSON payload (overrides flags)",
     ),
-    exa_api_key_override: str | None = typer.Option(None, "--exa-api-key"),
+    exa_api_key_override: str | None = typer.Option(
+        None,
+        "--exa-api-key",
+        help="Override the Exa API key for this invocation",
+    ),
 ) -> None:
     """Find people by query via Exa."""
     if json_input:

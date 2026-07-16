@@ -1,7 +1,7 @@
 """Shell out to `modal app list --json` and filter to webhook-relevant apps.
 
 Subprocess (not the Modal Python SDK) because that matches the existing
-shell-out pattern (see scripts/hookdeck-dump-connection-events.py) and because
+shell-out pattern (see scripts/hookdeck-connection_events-dump.py) and because
 no programmatic app-listing API is established in this repo yet.
 
 MODAL_TOKEN_ID / MODAL_TOKEN_SECRET must be set in the environment — inject via
