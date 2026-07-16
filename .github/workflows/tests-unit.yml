@@ -45,14 +45,15 @@ jobs:
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
         with:
-          # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. The SDK venv and
-          # its uv-managed CPython toolchain both live under ~/.dagger-venv
-          # (see Install step), so one host-path restore keeps bin/python's
-          # symlink target intact — uv cannot copy the interpreter into the
-          # venv (astral-sh/uv#17754).
+          # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. Keep the host SDK
+          # venv and its uv-managed CPython as siblings under one mount
+          # (~/.dagger-sdk/{venv,uv-python}). uv cannot copy the interpreter
+          # into the venv (astral-sh/uv#17754), and pointing `uv venv` at the
+          # mount root itself detaches the Namespace bind (issue #303) so
+          # contents never persist.
           cache: uv
           path: |
-            ~/.dagger-venv
+            ~/.dagger-sdk
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -72,42 +73,37 @@ jobs:
       # (which has dagger-io/anyio).
       - name: Install Dagger Python SDK
         run: |
-          # ~/.dagger-venv is mounted from the Namespace cache volume. Never
-          # delete/recreate the directory itself (uv venv --clear does) — that
-          # detaches the mount and the venv silently stops persisting (cold in
-          # 5/5 measured runs, issue #303). Clear contents only, and validate a
-          # restored venv by importing the SDK: a stale cache snapshot can hold
-          # a venv whose interpreter or packages are broken.
+          # ~/.dagger-sdk is the Namespace mount. Never delete/recreate that
+          # directory (uv venv --clear on the mount root does) — that detaches
+          # the bind and the tree silently stops persisting (cold in 5/5
+          # measured runs, issue #303). The venv lives at a subdirectory so
+          # cold recreate can replace it freely; the toolchain is a sibling
+          # so one mount restores bin/python's symlink target.
           #
-          # Nest UV_PYTHON_INSTALL_DIR under the cached venv tree so a single
-          # Namespace mount restores both the venv and the interpreter it
-          # symlinks to. Override setup-uv's default install dir only after
-          # the cache mount above — that path is not mounted yet during
-          # Install uv.
-          export UV_PYTHON_INSTALL_DIR="$HOME/.dagger-venv/uv-python"
-          if err="$("$HOME/.dagger-venv/bin/python" -c 'import dagger, anyio' 2>&1)"; then
+          # Override setup-uv's default install dir only after the cache mount
+          # above — that path is not mounted yet during Install uv.
+          export UV_PYTHON_INSTALL_DIR="$HOME/.dagger-sdk/uv-python"
+          dagger_venv="$HOME/.dagger-sdk/venv"
+          mkdir -p "$HOME/.dagger-sdk"
+          if err="$("${dagger_venv}/bin/python" -c 'import dagger, anyio' 2>&1)"; then
             echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
           else
             echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold (validation error: ${err})"
-            mkdir -p "$HOME/.dagger-venv"
-            find "$HOME/.dagger-venv" -mindepth 1 -delete
-            # Force the managed interpreter into the nested tree. Plain
+            rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"
+            # Force the managed interpreter into the sibling tree. Plain
             # `uv venv` may reuse a pre-existing install under setup-uv's
-            # default directory and symlink outside ~/.dagger-venv.
+            # default directory and symlink outside ~/.dagger-sdk.
             uv python install --reinstall 3.13
-            # --allow-existing: the interpreter lands in UV_PYTHON_INSTALL_DIR
-            # (a subdirectory) before bin/ is written, so the venv root is
-            # non-empty when creation finishes scaffolding.
-            uv venv --allow-existing --python 3.13 "$HOME/.dagger-venv"
-            target="$(readlink -f "$HOME/.dagger-venv/bin/python" 2>/dev/null || readlink "$HOME/.dagger-venv/bin/python")"
+            uv venv --python 3.13 "${dagger_venv}"
+            target="$(readlink -f "${dagger_venv}/bin/python" 2>/dev/null || readlink "${dagger_venv}/bin/python")"
             case "${target}" in
-              "$HOME/.dagger-venv"/*) ;;
+              "$HOME/.dagger-sdk"/*) ;;
               *)
-                echo "::error::interpreter escaped venv tree (${target}); refusing to cache a non-self-contained SDK venv"
+                echo "::error::interpreter escaped ~/.dagger-sdk (${target}); refusing to cache a non-self-contained SDK venv"
                 exit 1
                 ;;
             esac
-            uv pip install --python "$HOME/.dagger-venv/bin/python" dagger-io anyio
+            uv pip install --python "${dagger_venv}/bin/python" dagger-io anyio
           fi
           uv_cache_dir="$(uv cache dir)"
           if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
@@ -116,12 +112,12 @@ jobs:
             echo "Namespace host cache: uv cache is empty (${uv_cache_dir})"
           fi
           if [ -d "${UV_PYTHON_INSTALL_DIR}" ] && [ "$(find "${UV_PYTHON_INSTALL_DIR}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-            echo "Namespace host cache: uv Python toolchain is nested under venv (${UV_PYTHON_INSTALL_DIR})"
+            echo "Namespace host cache: uv Python toolchain is sibling under ~/.dagger-sdk (${UV_PYTHON_INSTALL_DIR})"
           else
             echo "Namespace host cache: uv Python toolchain is absent (${UV_PYTHON_INSTALL_DIR})"
           fi
           echo "UV_PYTHON_INSTALL_DIR=${UV_PYTHON_INSTALL_DIR}" >> "$GITHUB_ENV"
-          echo "$HOME/.dagger-venv/bin" >> "$GITHUB_PATH"
+          echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
       - name: Report Namespace cache state
         run: |
