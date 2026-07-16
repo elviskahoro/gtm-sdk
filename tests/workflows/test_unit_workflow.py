@@ -128,7 +128,7 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     workflow = WORKFLOW.read_text()
 
     assert "Warm project uv cache" in workflow
-    assert 'project_env="$HOME/.dagger-sdk/project-venv"' in workflow
+    assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
     assert 'cache_key_file="${project_env}/.gtm-sdk-cache-key"' in workflow
     assert "sha256sum pyproject.toml uv.lock" in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
@@ -136,6 +136,7 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
     assert "--no-install-project" in workflow
     assert "uv pip install --no-deps --reinstall" in workflow
     assert '--python "${project_env}/bin/python" .' in workflow
+    assert "dagger-io anyio" in workflow
     assert 'rm -rf "${project_env}"' in workflow
     assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
     assert "cache: uv" in workflow
@@ -167,7 +168,7 @@ def test_unit_dagger_pipeline_consumes_host_project_environment() -> None:
     # Dagger must not recreate a separate `/src/.venv` on every fresh engine.
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()
-    assert 'project_env="$HOME/.dagger-sdk/project-venv"' in workflow
+    assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert 'dag.cache_volume("venv")' not in dagger
     assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in dagger

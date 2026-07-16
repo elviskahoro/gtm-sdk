@@ -126,7 +126,9 @@ jobs:
       - name: Warm project uv cache
         run: |
           set -euo pipefail
-          project_env="$HOME/.dagger-sdk/project-venv"
+          # Reuse the Namespace-persisted SDK venv for project dependencies;
+          # sibling project-venv directories are not promoted by this profile.
+          project_env="$HOME/.dagger-sdk/venv"
           cache_key_file="${project_env}/.gtm-sdk-cache-key"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
@@ -152,6 +154,8 @@ jobs:
           # runner checkout path without recreating the dependency graph.
           uv pip install --no-deps --reinstall \
             --python "${project_env}/bin/python" .
+          uv pip install --no-deps --reinstall \
+            --python "${project_env}/bin/python" dagger-io anyio
 
       - name: Report Namespace cache state
         run: |
