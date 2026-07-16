@@ -16,7 +16,7 @@ dependencies = [
   "exa-py>=2.16.0",
   "fastapi[standard]",
   "flatsplode>=0.2.0",
-  "gcsfs>=2024.10.0",
+  "gcsfs>=2026.7.0",
   "gtm-apollo>=0.0.2",
   "gtm-linear>=0.0.2",
   "ibis-framework",
