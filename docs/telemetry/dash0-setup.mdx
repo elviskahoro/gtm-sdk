@@ -1,0 +1,159 @@
+---
+title: "Send gtm-sdk telemetry to Dash0 with the otel-collector"
+description: "Send OpenTelemetry traces and logs from the gtm-sdk otel-collector to Dash0 with regional endpoints, Infisical secret config, and Modal deploy."
+---
+
+This guide walks through setting up Dash0 as a telemetry provider for the `otel-collector` Modal app. The collector fans out every batch to all configured providers; the architecture itself is covered in [Telemetry overview](/telemetry/overview). This page covers only the Dash0-specific wiring: the collector registers an `otlphttp/dash0` exporter and sends the `Dash0-Dataset` header when `DASH0_DATASET` is set.
+
+## Endpoints
+
+Dash0 provides regional endpoints:
+
+- **US**: `https://otel-ingest.us.dash0.com`
+- **EU**: `https://otel-ingest.eu.dash0.com`
+
+Choose the one nearest your data location.
+
+## Setup
+
+<Steps>
+  <Step title="Add secrets to Infisical">
+    Add three secrets to your Infisical project (prod environment):
+
+    | Name | Value | Required |
+    | --- | --- | --- |
+    | `DASH0_AUTH_TOKEN` | Your Dash0 API token | Yes |
+    | `DASH0_OTLP_ENDPOINT` | Your regional endpoint: `https://otel-ingest.us.dash0.com` (US) or `https://otel-ingest.eu.dash0.com` (EU) | Yes |
+    | `DASH0_DATASET` | `default`, or your dataset name | No |
+
+    You can set them from the CLI. Run this from the repo root:
+
+    ```bash
+    # Source your Infisical credentials
+    set -a && source .env.local && set +a
+
+    # Set each secret
+    infisical secrets set \
+      DASH0_AUTH_TOKEN "<YOUR_DASH0_AUTH_TOKEN>" \
+      --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+
+    infisical secrets set \
+      DASH0_OTLP_ENDPOINT "https://otel-ingest.us.dash0.com" \
+      --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+
+    infisical secrets set \
+      DASH0_DATASET "default" \
+      --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+    ```
+  </Step>
+  <Step title="Deploy the collector">
+    Once the secrets are set, deploy the `otel-collector` app:
+
+    ```bash
+    set -a && source .env.local && set +a
+
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
+      --env=prod -- uv run modal deploy src/otel_collector.py
+    ```
+
+    The collector image build fetches the secrets and embeds them, so when the container starts, Dash0 is already configured.
+  </Step>
+  <Step title="Verify the configuration">
+    Check that Dash0 was included in the collector config:
+
+    ```bash
+    uv run python -c "
+    from src.otel_collector import build_collector_config
+    config = build_collector_config()
+    exporters = config.get('exporters', {})
+    print('Exporters:', list(exporters.keys()))
+    if 'otlphttp/dash0' in exporters:
+        print('Dash0 is configured')
+    else:
+        print('Dash0 is NOT configured')
+    "
+    ```
+
+    ```text Output
+    Exporters: ['otlphttp/dash0']
+    Dash0 is configured
+    ```
+  </Step>
+  <Step title="Test the telemetry flow">
+    Use the verification script to test end-to-end telemetry:
+
+    ```bash
+    # Set environment (usually injected via Infisical, but can override)
+    export DASH0_AUTH_TOKEN="<YOUR_DASH0_AUTH_TOKEN>"
+    export DASH0_OTLP_ENDPOINT="https://otel-ingest.us.dash0.com"
+    # Collector fan-out is the default (app name hard-coded in libs/telemetry.py);
+    # only set this to override the app name, or to "" to force the direct fallback.
+    export TELEMETRY_COLLECTOR_APP="otel-collector"
+
+    # Run tests
+    uv run pytest tests/src/test_dash0_telemetry_integration.py -v
+
+    # Or emit test telemetry (requires collector running on Modal)
+    uv run scripts/dash0-telemetry-verify.py
+    ```
+  </Step>
+</Steps>
+
+## How Dash0 fits into the collector
+
+Apps never talk to Dash0 directly. The app-side exporter in `libs/telemetry.py` serializes each batch to OTLP protobuf and spawns the collector Modal function fire-and-forget; a localhost otelcol sidecar in that container handles retry, queueing, and fan-out to every configured provider, Dash0 included. See [Telemetry overview](/telemetry/overview) for the full architecture, and `src/otel_collector.py` for the config builder.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Secrets not found">
+    Verify the secrets exist in Infisical:
+
+    ```bash
+    set -a && source .env.local && set +a
+    infisical secrets get DASH0_AUTH_TOKEN --env=prod \
+      --projectId "$INFISICAL_PROJECT_ID" \
+      --token "$INFISICAL_TOKEN"
+    ```
+  </Accordion>
+  <Accordion title="Collector not starting">
+    Check the Modal logs for the `otel-collector` app:
+
+    ```bash
+    set -a && source .env.local && set +a
+    infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
+      --env=prod -- uv run modal app logs otel-collector
+    ```
+
+    Look for errors like "exporters config: *conf.ExportersConfig.Validate()...", which indicate a config build error.
+  </Accordion>
+  <Accordion title="No telemetry in Dash0">
+    1. Verify the collector is running: `uv run modal serve src/otel_collector.py`
+    2. Check Modal logs for export errors
+    3. Verify the OTLP endpoint is reachable from the collector container
+    4. Check that the Bearer token is valid
+  </Accordion>
+  <Accordion title="Mixing Dash0 with other providers">
+    You can enable multiple providers simultaneously — the collector fans out to all configured exporters:
+
+    ```bash
+    # These don't conflict; all three will export
+    DASH0_AUTH_TOKEN=...
+    HYPERDX_API_KEY=...
+    LOGFIRE_WRITE_TOKEN=...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Reference
+
+- [Dash0 docs](https://dash0.com/docs)
+- [OpenTelemetry Collector OTLPHTTP exporter](https://github.com/open-telemetry/opentelemetry-collector/blob/main/exporter/otlphttpexporter/README.md)
+- `src/otel_collector.py` — collector app and config builder
+- `libs/telemetry.py` — app-side telemetry initialization

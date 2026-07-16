@@ -48,11 +48,13 @@ Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
   per-source GCS bucket.
 - `export_to_gcp_raw.py` — per-source app, writes the raw payload to a
   per-source GCS bucket (`WebhookModel.raw_get_bucket_name()`).
+- `export_to_slack.py` — per-source app, posts Slack Block Kit messages via
+  `src/slack/export.py`.
 - `registry.yaml` — **gitignored**. Generated locally; see below.
 
 ## Deploying
 
-Use `scripts/webhooks-redeploy.py` — never `modal deploy webhooks/<file>.py`
+Use `scripts/webhooks-handlers-redeploy.py` — never `modal deploy webhooks/<file>.py`
 directly. Handler files live in source control with a `WebhookModelToReplace`
 placeholder so the working tree stays source-agnostic; the script substitutes
 the placeholder, deploys via a Dagger-wrapped `modal deploy`, and restores
@@ -63,13 +65,13 @@ set -a && source .env.local && set +a   # once per shell
 export INFISICAL_ENV=dev                 # explicit; no default
 
 # Deploy one source to one handler.
-scripts/webhooks-redeploy.py export_to_attio   CaldotcomBookingWebhook
-scripts/webhooks-redeploy.py export_to_gcp_etl Rb2bVisitWebhook
+scripts/webhooks-handlers-redeploy.py export_to_attio   CaldotcomBookingWebhook
+scripts/webhooks-handlers-redeploy.py export_to_gcp_etl Rb2bVisitWebhook
 
 # Deploy every source imported by the handler (one Modal app per source).
-scripts/webhooks-redeploy.py export_to_attio   --all
-scripts/webhooks-redeploy.py export_to_gcp_etl --all
-scripts/webhooks-redeploy.py export_to_gcp_raw --all
+scripts/webhooks-handlers-redeploy.py export_to_attio   --all
+scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
+scripts/webhooks-handlers-redeploy.py export_to_gcp_raw --all
 ```
 
 The deploy itself runs inside a Dagger container (`uv sync --frozen && uv run
@@ -124,11 +126,11 @@ Modal + Hookdeck state; never edit by hand and never commit.
 
 ```shell
 # Regenerate the registry. Modal tokens come from Infisical; HOOKDECK_API_KEY
-# is sourced from the parent ai/gtm-sdk/.env.local because Infisical's value
-# for it is empty (and an empty Infisical value would overwrite the host env
-# var — surfacing as silently-null hookdeck_*_id fields in the registry).
+# is sourced from the repo-root .env.local because Infisical's value for it is
+# empty (and an empty Infisical value would overwrite the host env var —
+# surfacing as silently-null hookdeck_*_id fields in the registry).
 unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET  # avoid personal-shell tokens winning
-set -a && source /Users/elvis/Documents/ai/gtm-sdk/.env.local && set +a
+set -a && source .env.local && set +a
 infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
   --env=dev -- env HOOKDECK_API_KEY="$HOOKDECK_API_KEY" \
   uv run python -m cli.main webhook sync
@@ -151,7 +153,7 @@ App names are deterministic per handler family: `export_to_attio` uses
 Either way, redeploys are name-stable and the registry usually only needs
 a refresh:
 
-1. Redeploy via `scripts/webhooks-redeploy.py` (see [Deploying](#deploying)).
+1. Redeploy via `scripts/webhooks-handlers-redeploy.py` (see [Deploying](#deploying)).
 2. Run `gtm webhook sync` to refresh `generated_at`.
 
 If you change the wiring inside Hookdeck (rerouting a source to a different

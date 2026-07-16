@@ -21,7 +21,11 @@ def excerpts(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Extract focused excerpts from a URL matching an objective."""
     if json_input:
@@ -75,7 +79,11 @@ def full(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Extract full content from a URL."""
     if json_input:

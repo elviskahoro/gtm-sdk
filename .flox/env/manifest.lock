@@ -1,0 +1,560 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "bd": {
+        "flake": "github:gastownhall/beads/v1.1.0"
+      },
+      "dolt": {
+        "pkg-path": "dolt"
+      },
+      "gh": {
+        "pkg-path": "gh"
+      },
+      "infisical": {
+        "pkg-path": "infisical"
+      },
+      "roborev": {
+        "flake": "github:kenn-io/roborev/v0.62.1"
+      },
+      "uv": {
+        "pkg-path": "uv",
+        "version": "0.11.26"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "dolt",
+      "broken": false,
+      "derivation": "/nix/store/f3z563lw9c0r5zqx84vc4y80n0mlxkwr-dolt-2.1.9.drv",
+      "description": "Relational database with version control and CLI a-la Git",
+      "install_id": "dolt",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "dolt-2.1.9",
+      "pname": "dolt",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:19:04.392947Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.1.9",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/y70lmbm418xcfycjxinhi8y5whl1q3yn-dolt-2.1.9"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "dolt",
+      "broken": false,
+      "derivation": "/nix/store/c3z2fbh4yjzpw6swjqvny3dx80d0j3rw-dolt-2.1.9.drv",
+      "description": "Relational database with version control and CLI a-la Git",
+      "install_id": "dolt",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "dolt-2.1.9",
+      "pname": "dolt",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:52:31.867262Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.1.9",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/69ipxhdqhfn7v2z5xmigrps04g93f9qk-dolt-2.1.9"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "dolt",
+      "broken": false,
+      "derivation": "/nix/store/0gn8lhmfskfdkdca9mybfbsqhgblj917-dolt-2.1.9.drv",
+      "description": "Relational database with version control and CLI a-la Git",
+      "install_id": "dolt",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "dolt-2.1.9",
+      "pname": "dolt",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-14T15:09:28.104466Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.1.9",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/1h1ynwz5ngsqj9bcq59lbviddk94qr4x-dolt-2.1.9"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gh",
+      "broken": false,
+      "derivation": "/nix/store/0cv922n2aa9k3da8dfar3jf5h60ir26d-gh-2.96.0.drv",
+      "description": "GitHub CLI tool",
+      "install_id": "gh",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "gh-2.96.0",
+      "pname": "gh",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:19:04.970347Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.96.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/5m3slxi84h97r5hzmy4dhfksl9cc166a-gh-2.96.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gh",
+      "broken": false,
+      "derivation": "/nix/store/6557md8nzqrqcy69a0gwcjvnqm181dfx-gh-2.96.0.drv",
+      "description": "GitHub CLI tool",
+      "install_id": "gh",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "gh-2.96.0",
+      "pname": "gh",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:52:32.705096Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.96.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/85s40vacs1ajn0x7b3vszvlqwnflh0dq-gh-2.96.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gh",
+      "broken": false,
+      "derivation": "/nix/store/0wh6avi717rbm1kyxqli0fhx3gdfc80v-gh-2.96.0.drv",
+      "description": "GitHub CLI tool",
+      "install_id": "gh",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "gh-2.96.0",
+      "pname": "gh",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-14T15:09:29.073060Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.96.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/fz2h6h3cgw645ighi31zdjwbkdzmaav7-gh-2.96.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "infisical",
+      "broken": false,
+      "derivation": "/nix/store/2wk99li8hrlspwrhm4401bnmcnfjngl6-infisical-0.41.90.drv",
+      "description": "Official Infisical CLI",
+      "install_id": "infisical",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "infisical-0.41.90",
+      "pname": "infisical",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:19:20.820791Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.41.90",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/bjvcm0h1n0306iq6h2m18i0kdcxwflsg-infisical-0.41.90"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "infisical",
+      "broken": false,
+      "derivation": "/nix/store/1kl8ajw11i9pm91bl8r7icw1lk9xpafp-infisical-0.41.90.drv",
+      "description": "Official Infisical CLI",
+      "install_id": "infisical",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "infisical-0.41.90",
+      "pname": "infisical",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:52:52.584509Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.41.90",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/m4mjvavidr2kq56y88r08pyvd2g145gn-infisical-0.41.90"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "infisical",
+      "broken": false,
+      "derivation": "/nix/store/6fy5i4ahdmfwh9czncqg8yhcl4abb0q9-infisical-0.41.90.drv",
+      "description": "Official Infisical CLI",
+      "install_id": "infisical",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "infisical-0.41.90",
+      "pname": "infisical",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-14T15:09:50.635455Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.41.90",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/s2ihcvgkqikr5i6swqfry3ifc9qp81s6-infisical-0.41.90"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "uv",
+      "broken": false,
+      "derivation": "/nix/store/c3a2nkn6r77mljbz2idjb11yvffak6rl-uv-0.11.26.drv",
+      "description": "Extremely fast Python package installer and resolver, written in Rust",
+      "install_id": "uv",
+      "license": "[ Apache-2.0, MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "uv-0.11.26",
+      "pname": "uv",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:21:52.461387Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.11.26",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/q9yngkdm5ysr51bgc36pyq14k5g3x42n-uv-0.11.26"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "uv",
+      "broken": false,
+      "derivation": "/nix/store/d7jkhswv1jymbs7w9ialyzv718gdridl-uv-0.11.26.drv",
+      "description": "Extremely fast Python package installer and resolver, written in Rust",
+      "install_id": "uv",
+      "license": "[ Apache-2.0, MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "uv-0.11.26",
+      "pname": "uv",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-11T03:55:57.294571Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.11.26",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/hv7n7hqzxmxkvw6s8vg1gngr44b50mlm-uv-0.11.26"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "uv",
+      "broken": false,
+      "derivation": "/nix/store/c8y3hsmxd7zjs313bzk8hi0i7r37rpgz-uv-0.11.26.drv",
+      "description": "Extremely fast Python package installer and resolver, written in Rust",
+      "install_id": "uv",
+      "license": "[ Apache-2.0, MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "name": "uv-0.11.26",
+      "pname": "uv",
+      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "rev_count": 1031299,
+      "rev_date": "2026-07-08T14:55:02Z",
+      "scrape_date": "2026-07-14T15:13:03.808325Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.11.26",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/rnw9az7lsij3f8wgmikxjcs0w3ccqxq0-uv-0.11.26"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "install_id": "bd",
+      "locked-url": "github:gastownhall/beads/8e4e59d39f3459a43cf21a3236a13eca4dd874f7?narHash=sha256-%2BdFV//0N8ZDw9BHOJOoWZ%2BBvLmJKlnGtONHIYPRhfBE%3D",
+      "flake-description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
+      "locked-flake-attr-path": "packages.aarch64-darwin.default",
+      "derivation": "/nix/store/y9swlgkhi5yqmycr234nyhlngph4a02j-beads-1.1.0.drv",
+      "outputs": {
+        "out": "/nix/store/jklsqn4ph5c0h2b9n009m2yjnajjbz8a-beads-1.1.0"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-darwin",
+      "system": "aarch64-darwin",
+      "name": "beads-1.1.0",
+      "pname": "beads",
+      "version": "1.1.0",
+      "description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
+      "licenses": [
+        "MIT"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "bd",
+      "locked-url": "github:gastownhall/beads/8e4e59d39f3459a43cf21a3236a13eca4dd874f7?narHash=sha256-%2BdFV//0N8ZDw9BHOJOoWZ%2BBvLmJKlnGtONHIYPRhfBE%3D",
+      "flake-description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
+      "locked-flake-attr-path": "packages.aarch64-linux.default",
+      "derivation": "/nix/store/xz5gn41ypk4v0driyfbc480ijy4i70v5-beads-1.1.0.drv",
+      "outputs": {
+        "out": "/nix/store/6vgpavaqyjscvd36dfs97fsskn655bys-beads-1.1.0"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-linux",
+      "system": "aarch64-linux",
+      "name": "beads-1.1.0",
+      "pname": "beads",
+      "version": "1.1.0",
+      "description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
+      "licenses": [
+        "MIT"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "bd",
+      "locked-url": "github:gastownhall/beads/8e4e59d39f3459a43cf21a3236a13eca4dd874f7?narHash=sha256-%2BdFV//0N8ZDw9BHOJOoWZ%2BBvLmJKlnGtONHIYPRhfBE%3D",
+      "flake-description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
+      "locked-flake-attr-path": "packages.x86_64-linux.default",
+      "derivation": "/nix/store/akwk20if4js9fn8gmiw9jq72k4ljzavb-beads-1.1.0.drv",
+      "outputs": {
+        "out": "/nix/store/32ddzwvclnvwlhk6szsma7mna7z44sal-beads-1.1.0"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "x86_64-linux",
+      "system": "x86_64-linux",
+      "name": "beads-1.1.0",
+      "pname": "beads",
+      "version": "1.1.0",
+      "description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
+      "licenses": [
+        "MIT"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "roborev",
+      "locked-url": "github:kenn-io/roborev/addd7f2f56a85b0b3a5f3f322057083cf0347709?narHash=sha256-myLItITvQdGHSj6f8X4A65wjpbl01UPDkF6ReU8az08%3D",
+      "flake-description": "roborev - automatic code review daemon for git commits",
+      "locked-flake-attr-path": "packages.aarch64-darwin.default",
+      "derivation": "/nix/store/gmrnfikxw5fcvxz03lwc5nhvp42h3gwl-roborev-0.62.0.drv",
+      "outputs": {
+        "out": "/nix/store/fflycx46gzsf216mlrnjiaclpz0dhg2i-roborev-0.62.0"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-darwin",
+      "system": "aarch64-darwin",
+      "name": "roborev-0.62.0",
+      "pname": "roborev",
+      "version": "0.62.0",
+      "description": "Automatic code review daemon for git commits",
+      "licenses": [
+        "MIT"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "roborev",
+      "locked-url": "github:kenn-io/roborev/addd7f2f56a85b0b3a5f3f322057083cf0347709?narHash=sha256-myLItITvQdGHSj6f8X4A65wjpbl01UPDkF6ReU8az08%3D",
+      "flake-description": "roborev - automatic code review daemon for git commits",
+      "locked-flake-attr-path": "packages.aarch64-linux.default",
+      "derivation": "/nix/store/q89qinr7xcg2wpgsgxsk3r7yzvvslqmq-roborev-0.62.0.drv",
+      "outputs": {
+        "out": "/nix/store/3mzxy5nmvwgma1dfl93h286rkfzzrzq1-roborev-0.62.0"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-linux",
+      "system": "aarch64-linux",
+      "name": "roborev-0.62.0",
+      "pname": "roborev",
+      "version": "0.62.0",
+      "description": "Automatic code review daemon for git commits",
+      "licenses": [
+        "MIT"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "roborev",
+      "locked-url": "github:kenn-io/roborev/addd7f2f56a85b0b3a5f3f322057083cf0347709?narHash=sha256-myLItITvQdGHSj6f8X4A65wjpbl01UPDkF6ReU8az08%3D",
+      "flake-description": "roborev - automatic code review daemon for git commits",
+      "locked-flake-attr-path": "packages.x86_64-linux.default",
+      "derivation": "/nix/store/wsxrjsxj89c3lav2xfn75f7h0xfigxf0-roborev-0.62.0.drv",
+      "outputs": {
+        "out": "/nix/store/d7ay5vjan23livsc961rar979pcrqzsy-roborev-0.62.0"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "x86_64-linux",
+      "system": "x86_64-linux",
+      "name": "roborev-0.62.0",
+      "pname": "roborev",
+      "version": "0.62.0",
+      "description": "Automatic code review daemon for git commits",
+      "licenses": [
+        "MIT"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    }
+  ]
+}

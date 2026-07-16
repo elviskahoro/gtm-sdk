@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual trigger for cache/perf measurement runs (issues #303/#305) —
+  # avoids the `# RUN #N` marker-commit pattern.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -12,83 +15,181 @@ permissions:
 jobs:
   pytest:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-test
     steps:
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           fetch-depth: 0
 
+      # Must run BEFORE the Namespace cache step: `cache: uv` planning shells
+      # out to `uv cache dir` (via spacectl), so a missing uv binary fails the
+      # whole job before any test runs (run 29462473211). Needs the checkout
+      # first — the uv version is resolved from pyproject.toml. Pinned by SHA
+      # per repo convention; the official action avoids the `curl | sh`
+      # install pattern (semgrep gha-curl-pipe-shell).
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          # The Namespace cache step below owns uv's cache dir and toolchains;
+          # setup-uv's own cache layer stays disabled to avoid double ownership.
+          enable-cache: false
+
+      # Namespace mounts these paths directly from the runner cache volume, so
+      # setup reuses the host-side Dagger SDK and uv artifacts without a
+      # GitHub-hosted cache upload/download phase. The Dagger pipeline owns its
+      # separate in-container cache volumes below.
+      - name: Cache host Dagger and uv data
+        id: namespace_cache
+        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
+        with:
+          # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. Keep the host SDK
+          # venv and its uv-managed CPython as siblings under one mount
+          # (~/.dagger-sdk/{venv,uv-python}). uv cannot copy the interpreter
+          # into the venv (astral-sh/uv#17754), and pointing `uv venv` at the
+          # mount root itself detaches the Namespace bind (issue #303) so
+          # contents never persist.
+          cache: uv
+          path: |
+            ~/.dagger-sdk
+
+      # `version` is pinned: without it the action installs the latest CLI at
+      # run time, so upstream Dagger releases silently change the engine
+      # version — churning the version-keyed engine state cached below and
+      # forcing cold runs with no diff in this repo. Bump it deliberately, in
+      # a commit (the engine cache pays one cold run per bump).
       - name: Setup Dagger
         uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
+        with:
+          version: 0.21.7
 
+      # The Namespace runner image is Debian/PEP 668 externally-managed and its
+      # system Python (/usr) is not writable without root, so neither bare `pip`
+      # nor `uv pip install --system` works. Create a root-free uv venv, install
+      # the host-side deps there, and prepend the venv's bin to $GITHUB_PATH so
+      # the later `dagger run python ...` step resolves `python` to this venv
+      # (which has dagger-io/anyio).
       - name: Install Dagger Python SDK
-        run: pip install dagger-io anyio
+        run: |
+          # ~/.dagger-sdk is the Namespace mount. Never delete/recreate that
+          # directory (uv venv --clear on the mount root does) — that detaches
+          # the bind and the tree silently stops persisting (cold in 5/5
+          # measured runs, issue #303). The venv lives at a subdirectory so
+          # cold recreate can replace it freely; the toolchain is a sibling
+          # so one mount restores bin/python's symlink target.
+          #
+          # Override setup-uv's default install dir only after the cache mount
+          # above — that path is not mounted yet during Install uv.
+          export UV_PYTHON_INSTALL_DIR="$HOME/.dagger-sdk/uv-python"
+          dagger_venv="$HOME/.dagger-sdk/venv"
+          mkdir -p "$HOME/.dagger-sdk"
+          if err="$("${dagger_venv}/bin/python" -c 'import dagger, anyio' 2>&1)"; then
+            echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
+          else
+            echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold (validation error: ${err})"
+            rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"
+            # Force the managed interpreter into the sibling tree. Plain
+            # `uv venv` may reuse a pre-existing install under setup-uv's
+            # default directory and symlink outside ~/.dagger-sdk.
+            uv python install --reinstall 3.13
+            uv venv --python 3.13 "${dagger_venv}"
+            target="$(readlink -f "${dagger_venv}/bin/python" 2>/dev/null || readlink "${dagger_venv}/bin/python")"
+            case "${target}" in
+              "$HOME/.dagger-sdk"/*) ;;
+              *)
+                echo "::error::interpreter escaped ~/.dagger-sdk (${target}); refusing to cache a non-self-contained SDK venv"
+                exit 1
+                ;;
+            esac
+            uv pip install --python "${dagger_venv}/bin/python" dagger-io anyio
+          fi
+          uv_cache_dir="$(uv cache dir)"
+          if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+            echo "Namespace host cache: uv cache contains artifacts (${uv_cache_dir})"
+          else
+            echo "Namespace host cache: uv cache is empty (${uv_cache_dir})"
+          fi
+          if [ -d "${UV_PYTHON_INSTALL_DIR}" ] && [ "$(find "${UV_PYTHON_INSTALL_DIR}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+            echo "Namespace host cache: uv Python toolchain is sibling under ~/.dagger-sdk (${UV_PYTHON_INSTALL_DIR})"
+          else
+            echo "Namespace host cache: uv Python toolchain is absent (${UV_PYTHON_INSTALL_DIR})"
+          fi
+          echo "UV_PYTHON_INSTALL_DIR=${UV_PYTHON_INSTALL_DIR}" >> "$GITHUB_ENV"
+          echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
-      # `dagger run` pulls registry.dagger.io/engine:v<cli-version> on first use.
-      # That registry intermittently brownouts (dagger/dagger#7548): a single blob
-      # stalls and `docker pull` retries it internally for minutes (the "Retrying
-      # in 5/10/15 seconds" per-layer loop) before failing, killing the job before
-      # any test runs — observed as repeated failures on one branch while a
-      # concurrent run pulled fine (ai-4bz). Two-layer mitigation: (1) cache the
-      # engine image tarball keyed on the engine version so most runs never touch
-      # the registry; (2) on a cache miss, retry the pull with a per-attempt
-      # `timeout` so a hung blob cedes to a fresh attempt instead of wedging. The
-      # tag tracks the CLI version installed by dagger-for-github, so nothing is
-      # hardcoded.
+      # Warm the project dependency cache on the host before starting Dagger.
+      # The Namespace action persists both ~/.cache/uv and ~/.dagger-sdk after
+      # the job, while the fresh Dagger engine only receives a snapshot of the
+      # host uv cache. A lockfile-derived stamp lets us reuse a valid project
+      # environment and rebuild it when dependencies, Python, or architecture
+      # change.
+      - name: Warm project uv cache
+        run: |
+          set -euo pipefail
+          project_env="$HOME/.dagger-sdk/project-venv"
+          cache_key_file="${project_env}/.gtm-sdk-cache-key"
+          cache_key="$({
+            sha256sum pyproject.toml uv.lock
+            printf '%s\n' 'python=3.13' "arch=$(uname -m)"
+          } | sha256sum | cut -d' ' -f1)"
+          if [ -x "${project_env}/bin/python" ] &&
+            [ -f "${cache_key_file}" ] &&
+            [ "$(cat "${cache_key_file}")" = "${cache_key}" ] &&
+            "${project_env}/bin/python" -c 'import pytest' 2>/dev/null; then
+            echo "Host project uv cache: exact hit (${cache_key})"
+          else
+            echo "Host project uv cache: miss or stale; syncing dependencies (${cache_key})"
+            rm -rf "${project_env}"
+            uv venv --python 3.13 "${project_env}"
+            UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
+              --all-extras --dev --locked \
+              --python "${project_env}/bin/python"
+            printf '%s\n' "${cache_key}" >"${cache_key_file}"
+            echo "Host project uv cache: refreshed (${cache_key})"
+          fi
+
+      - name: Report Namespace cache state
+        run: |
+          echo "Namespace cache exact hit: ${{ steps.namespace_cache.outputs.cache-hit }}"
+          if [ -n "${NSC_CACHE_PATH:-}" ]; then
+            echo "Namespace cache volume: attached (${NSC_CACHE_PATH})"
+          else
+            echo "Namespace cache volume: absent"
+          fi
+
       - name: Resolve Dagger engine version
         id: dagger_engine
         run: |
           set -uo pipefail
           version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
           if [ -z "${version}" ]; then
-            echo "::warning::could not determine Dagger engine version; skipping pre-pull"
+            echo "::warning::could not determine Dagger engine version; skipping engine caching"
           fi
           echo "version=${version}" >>"${GITHUB_OUTPUT}"
 
-      - name: Cache Dagger engine image
-        if: steps.dagger_engine.outputs.version != ''
-        id: dagger_engine_cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: /tmp/dagger-engine.tar
-          key: dagger-engine-${{ runner.os }}-${{ steps.dagger_engine.outputs.version }}
-
-      # Cache hit -> docker load (zero registry calls). Miss -> retry pull with a
-      # per-attempt timeout, then docker save so the next run on this engine
-      # version is registry-free. `dagger run` then finds the image cached locally
-      # and skips its own pull.
-      - name: Load or pre-pull Dagger engine image (resilient to registry flakiness)
+      # `dagger run` needs registry.dagger.io/engine:v<cli-version>, and that
+      # registry intermittently brownouts (dagger/dagger#7548): a single blob
+      # stalls and `docker pull` retries it internally for minutes (the
+      # "Retrying in 5/10/15 seconds" per-layer loop) before failing, killing
+      # the job before any test runs (ai-4bz). Two-layer mitigation: (1) the
+      # runner profile's container-image cache serves the pull locally after
+      # the first run (replaces the old tarball cache dance); (2) on
+      # a cold miss, retry the pull with a per-attempt `timeout` so a hung blob
+      # cedes to a fresh attempt instead of wedging.
+      - name: Ensure Dagger engine image (resilient to registry flakiness)
         if: steps.dagger_engine.outputs.version != ''
         env:
           ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
-          CACHE_HIT: ${{ steps.dagger_engine_cache.outputs.cache-hit }}
         run: |
           set -uo pipefail
           image="registry.dagger.io/engine:${ENGINE_VERSION}"
-          tarball="/tmp/dagger-engine.tar"
-          if [ "${CACHE_HIT}" = "true" ] && [ -f "${tarball}" ]; then
-            echo "Loading ${image} from cache (${tarball})"
-            if docker load -i "${tarball}"; then
-              echo "Loaded ${image} from cache; skipping registry pull"
-              exit 0
-            fi
-            echo "::warning::cached engine tarball failed to load; falling back to registry pull"
+          if docker image inspect "${image}" >/dev/null 2>&1; then
+            echo "Dagger engine image cache: local hit (${image})"
+            exit 0
           fi
-          echo "Pulling ${image} from registry"
           for attempt in $(seq 1 6); do
             if timeout 150 docker pull "${image}"; then
-              echo "Pulled ${image} on attempt ${attempt}"
-              # Fail closed on the cache, not the job: the engine is already in the
-              # local daemon so this run proceeds regardless. A partial/failed save
-              # must NOT be persisted by actions/cache or every later run loads a
-              # broken tarball — delete it so the cache step finds nothing to store.
-              if docker save "${image}" -o "${tarball}"; then
-                echo "Saved ${image} to ${tarball} for future runs"
-              else
-                echo "::warning::docker save failed; removing partial tarball so a bad cache is not persisted"
-                rm -f "${tarball}"
-              fi
+              echo "Dagger engine image cache: registry pull succeeded on attempt ${attempt} (${image})"
               exit 0
             fi
             echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
@@ -97,10 +198,15 @@ jobs:
           echo "::error::failed to pull ${image} after 6 attempts"
           exit 1
 
+      # Use a fresh auto-provisioned engine for every job. The Namespace
+      # profile's local Docker cache retains the outer engine image, while the
+      # host uv and SDK caches above remain independently persistent. Dagger's
+      # inner BuildKit layers and cache volumes intentionally do not persist.
+
       # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
-      # inside the container) — the host-side Dagger engine reads it to ship
-      # traces to Dagger Cloud. The value is stored in Infisical and synced into
-      # repo `secrets.*` by Infisical's GitHub App integration (same path as
+      # inside the container) — the CLI reads it to ship traces to Dagger
+      # Cloud. The value is stored in Infisical and synced into repo
+      # `secrets.*` by Infisical's GitHub App integration (same path as
       # TRUNK_API_TOKEN / MODAL_TOKEN_*). See https://docs.dagger.io/reference/configuration/cloud/
       - name: Run pytest in Dagger
         env:
@@ -120,3 +226,7 @@ jobs:
           junit-paths: junit.xml
           org-slug: sanhedrin
           token: ${{ secrets.TRUNK_API_TOKEN }}
+          # Avoid resolving `latest` before looking up the cached binary.
+          cli-version: 0.14.0
+          # Cache the analytics CLI to avoid downloading it on every test run.
+          use-cache: true

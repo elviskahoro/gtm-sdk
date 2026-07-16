@@ -38,7 +38,11 @@ def add(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Add a note to a person or company in Attio."""
     if json_input:
@@ -105,7 +109,11 @@ def update(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    attio_api_key_override: str | None = typer.Option(None, "--attio-api-key"),
+    attio_api_key_override: str | None = typer.Option(
+        None,
+        "--attio-api-key",
+        help="Override the Attio API key for this invocation",
+    ),
 ) -> None:
     """Update an existing note in Attio (replaces via delete + create)."""
     if json_input:

@@ -19,7 +19,11 @@ def find_people_command(
         "--json",
         help="JSON payload (overrides flags)",
     ),
-    parallel_api_key_override: str | None = typer.Option(None, "--parallel-api-key"),
+    parallel_api_key_override: str | None = typer.Option(
+        None,
+        "--parallel-api-key",
+        help="Override the Parallel API key for this invocation",
+    ),
 ) -> None:
     """Run non-mutating people discovery."""
     if json_input:

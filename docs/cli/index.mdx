@@ -1,0 +1,54 @@
+---
+title: "gtm CLI overview and command groups"
+description: "Overview of the gtm command line: invocation via uv, command groups for Attio, Apollo, Exa, Parallel, and more, plus shared JSON output conventions."
+---
+
+The `gtm` CLI is the front door to the SDK: ten command groups covering account
+research, CRM sync, web search, enrichment, meeting exports, and webhook operations.
+
+## Invocation
+
+The package installs a `gtm` entrypoint; both forms are equivalent:
+
+```bash
+uv run gtm <group> <command> [OPTIONS]
+uv run python -m cli.main <group> <command> [OPTIONS]
+```
+
+Two root-level commands exist outside the groups: `gtm hello` (smoke test) and
+`gtm version` (prints `gtm v<VERSION>`).
+
+## Command groups
+
+| Group | Covers |
+| --- | --- |
+| [`gtm accounts`](/cli/accounts) | GTM workflows: research, enrichment, people discovery, batch CRM loads |
+| [`gtm apollo`](/cli/apollo) | Apollo people and organization enrichment and search |
+| [`gtm attio`](/cli/attio) | Attio CRM: people, companies, notes, enrichment backfills |
+| [`gtm enrichment`](/cli/enrichment) | LinkedIn enrichment via Harvest |
+| [`gtm exa`](/cli/exa) | Exa web search, company and people discovery |
+| [`gtm gmail`](/cli/gmail) | Gmail URL and token decoding |
+| [`gtm granola`](/cli/granola) | Local-first Granola meeting exports |
+| [`gtm parallel`](/cli/parallel) | Parallel web search, content extraction, entity discovery |
+| [`gtm sanity`](/cli/sanity) | Sanity CMS content downloads |
+| [`gtm webhook`](/cli/webhook) | Webhook registry: Modal endpoints + Hookdeck wiring |
+
+## Shared conventions
+
+Every command follows the [CLI contract](/concepts/cli-contract):
+
+- Success data is **JSON on stdout**; errors and logs go to stderr.
+- Mutations **preview by default** — `--apply` (or `--modal-sync` on Attio people
+  commands) is required to write.
+- Provider-backed commands **execute on your deployed Modal app**; local-only
+  commands (`version`, `gmail url decode`, `granola export`, `sanity blog download`,
+  `webhook list`) need no deployment.
+- Every command accepts `--json` with a full payload that overrides individual flags.
+- Keys resolve per [Secrets and API keys](/secrets), with per-invocation
+  `--<service>-api-key` overrides.
+
+<Note>
+  The per-group reference pages are generated from the CLI's own `--help` text by
+  `scripts/docs-cli_reference-generate.py`, and CI fails if they drift from the code —
+  what you read here is what the binary ships.
+</Note>

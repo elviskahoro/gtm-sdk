@@ -1,0 +1,23 @@
+Search the web, extract content, or run an entity-discovery job:
+
+```bash
+uv run gtm parallel search query "best CRM for startups" --mode agentic --max 15
+```
+
+```bash
+uv run gtm parallel extract excerpts "https://acme.dev/pricing" \
+  "Extract pricing tiers and features"
+```
+
+FindAll runs are asynchronous — create, poll, then fetch results:
+
+```bash
+uv run gtm parallel findall create \
+  "Find YC-backed AI startups founded in 2024" \
+  "company" \
+  '[{"field": "funding", "operator": "contains", "value": "YC"}]' \
+  --limit 50
+
+uv run gtm parallel findall status <FINDALL_ID>
+uv run gtm parallel findall result <FINDALL_ID>
+```
