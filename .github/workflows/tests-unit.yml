@@ -280,6 +280,19 @@ jobs:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
         run: dagger run python .github/workflows/ci/pytest_dagger.py
 
+      # Temporary forensics for issue #305: dump engine-side evidence of what
+      # owns the post-pytest result-read stall (GC? snapshot hashing?).
+      # Remove once #305 is closed.
+      - name: Dump Dagger engine diagnostics (issue #305)
+        if: always() && steps.dagger_engine_start.outputs.engine_name != ''
+        env:
+          ENGINE_NAME: ${{ steps.dagger_engine_start.outputs.engine_name }}
+        run: |
+          echo "=== engine log tail (timestamps show GC/prune/session activity) ==="
+          docker logs --timestamps "${ENGINE_NAME}" 2>&1 | tail -200 || true
+          echo "=== engine state size ==="
+          sudo du -sh "${NSC_CACHE_PATH}/dagger-engine/"* 2>/dev/null || true
+
       # If this step errors "Unauthorized access, your Trunk organization URL
       # slug or token may be incorrect", it is almost always a dead/revoked
       # TRUNK_API_TOKEN, NOT the org-slug: the analytics CLI mislabels a 404 on
