@@ -48,6 +48,8 @@ images to Modal is reproducible across operators. Modal tokens flow into the
 container as `dagger.set_secret(...)` values; the `infisical` CLI stays on the
 host. Set `DAGGER_DRY_RUN=1` to skip Dagger and invoke `infisical run -- uv run modal deploy` directly on the host — used by `tests/scripts/test_deploy_webhook.py` so CI doesn't need a Dagger engine or real Modal credentials.
 
+**Dagger does not work on Conductor cloud sandboxes, period** — its engine only ships as a privileged container on BuildKit/runc, and every `withExec` needs a nested runc container whose creation fails at the kernel level in those sandboxes (issue #284; do not reinvestigate). `DAGGER_DRY_RUN=1` is the documented path there. Local Mac Dagger deploys are unaffected.
+
 Each source is a separate Modal app, so deploying one source does not redeploy the others — bump them individually after shared-code changes (e.g. `libs/dlt/`) or stale containers will keep importing removed symbols. Do not commit the substituted form; an `atexit`/signal-driven cleanup restores the placeholder even if `modal deploy` fails or the script is interrupted (Ctrl-C, SIGTERM).
 
 The contract every concrete `src/<source>/webhook/*.py` `Webhook` class must satisfy lives at `libs/webhook/protocol.py` as `WebhookModelProtocol` (a `typing.Protocol`), and `tests/libs/webhook/test_protocol_conformance.py` enforces it across all five sources. Each handler's `TYPE_CHECKING` block aliases `WebhookModelTypeCheckShim` (a concrete `BaseModel` stand-in defined alongside the Protocol) as `WebhookModelToReplace` so pyright sees the full surface — Pydantic methods (`model_rebuild`/`model_validate`) and the contract methods — in the unsubstituted source tree. New sources: extend `protocol.py` only if you add a contract method; otherwise just implement the existing surface on the new `Webhook` class and add a parametrize entry to the conformance test.
@@ -71,6 +73,10 @@ The pitfalls below explain why `scripts/webhooks-handlers-redeploy.py` is shaped
 
 `gtm webhook sync` regenerates `webhooks/registry.yaml` (gitignored) by joining `modal app list` with the Hookdeck API. Run it after any deploy or Hookdeck wiring change. Use `gtm webhook list` to inspect the cached registry. The file is gitignored because it contains personal Modal URLs and Hookdeck IDs that don't belong in OSS — see `webhooks/README.md`.
 
+## Workspace setup (Conductor)
+
+`.conductor/settings.toml`'s `setup` is a thin shim: it sets up `~/.conductor-setup.log` and runs `scripts/conductor-workspace-setup.sh`, where all provisioning lives. On Linux cloud sandboxes, `dolt`/`uv`/`infisical`/`gh` and flake-pinned `bd`/`roborev` come from the committed Flox environment (`.flox/env/manifest.toml` + `manifest.lock` pin versions; `flox activate --mode run` puts them on PATH) — edit the manifest via `flox install`/`flox edit`, never by hand-syncing versions. macOS workspaces without Flox fall back to the original curl installers unchanged. The sandboxes have no running systemd and no `/dev/fd`; the script creates the `/dev/fd` symlink and starts `nix-daemon` by hand — don't "simplify" those steps away.
+
 ## Telemetry
 
 OTEL via `libs/telemetry.py`, two modes. **Collector fan-out is the default** — the collector app name is hard-coded (`DEFAULT_COLLECTOR_APP = "otel-collector"` in `libs/telemetry.py`), so no env wiring is needed; override the app with `TELEMETRY_COLLECTOR_APP=<name>` (optional `TELEMETRY_COLLECTOR_FUNCTION`). A custom OTEL exporter serializes each batch and fire-and-forget `.spawn()`s the collector Modal function (`src/otel_collector.py`) over Modal RPC (no public endpoint). That function feeds the bytes to a real OpenTelemetry Collector running as a **localhost sidecar** in the same always-warm (`min_containers=1`) container, which fans out to **all** configured providers (Dash0 + HyperDX + Logfire + Grafana) with batching/retry/queue. Provider creds live on the collector only; deploy it standalone with `modal deploy src/otel_collector.py`. **Direct single-sink fallback** — opt out with `TELEMETRY_COLLECTOR_APP=""`: one OTLP sink via `HYPERDX_API_KEY` / `HYPERDX_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT`. **This fallback has no Logfire exporter** — Logfire is reachable only through the collector, so an app in direct mode silently sends nothing to Logfire (the bug that made "no logs in Logfire": producers were never in collector mode). Neither configured → no-op; don't add fallback logging "just in case."
@@ -86,6 +92,20 @@ infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" --e
 ```
 
 Conductor workspaces get `.env.local` copied in at provisioning; the parent `ai/` repo's `.env*` files are not copied. Never fall back to 1Password unless the user explicitly asks.
+
+### Roborev Codex authentication
+
+`git roborev review --wait` (see "Session Completion") is configured in
+`.roborev.toml` to invoke the standalone `codex` CLI. Make sure the Codex CLI
+is installed and authenticated in the environment where Roborev runs. Roborev
+does not require `ANTHROPIC_API_KEY`; Claude Code credentials are unrelated to
+this review path.
+
+### `gh` CLI auth for commenting on / closing GitHub issues (not an Infisical secret)
+
+`gh` (GitHub CLI, provisioned via the Flox environment) reads `GH_TOKEN` (or `GITHUB_TOKEN`) straight from the environment — no `gh auth login` needed, and no interactive browser flow works in a headless sandbox anyway. This is a personal PAT (classic PAT with `repo` scope, or a fine-grained PAT scoped to this repo with **Issues: Read and write**), not a shared team secret, so it does not go through Infisical/`secrets_bootstrap.py`:
+
+- **Conductor**: set `GH_TOKEN` under `[environment_variables]` in your own `.conductor/settings.local.toml` (excluded from git via `.git/info/exclude` — never commit it). Conductor injects `[environment_variables]` directly into the agent's shell, so `gh` picks it up on every invocation without a manual `source` step.
 
 ## Script Entrypoints
 

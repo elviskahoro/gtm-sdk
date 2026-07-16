@@ -1,6 +1,6 @@
 ---
 title: "CLI contract"
-description: "The I/O conventions every gtm command follows: JSON on stdout, errors on stderr, preview-by-default mutations, remote execution on Modal, and the --json override."
+description: "The I/O conventions every gtm command follows: JSON on stdout, errors on stderr, preview-by-default mutations, Modal remote execution, and --json overrides."
 ---
 
 Every `gtm` command follows the same contract. Learn it once and every command group —
@@ -25,10 +25,11 @@ Runtime errors print to stderr prefixed with `Error:` and exit `1`. Usage errors
 | `1` | Runtime error — message on stderr, stdout empty. |
 | `2` | Usage error — bad flags or arguments. |
 
-## Mutations preview by default
+## Mutation safety is command-specific
 
-Commands that write to external systems are gated. Running them without the gating flag
-prints the planned mutation and exits without writing:
+Commands that write to external systems expose the safety control appropriate to their
+workflow. Commands with preview/apply behavior print the planned mutation and write
+nothing until `--apply` is supplied:
 
 ```bash
 # Preview: prints what would be written to Attio, writes nothing.
@@ -41,20 +42,25 @@ uv run gtm accounts batch-add-people \
   --apply
 ```
 
-Two gating mechanisms exist:
+The people mutation commands are different: `attio people add`, `update`, and `upsert`
+write when invoked. Their `--modal-sync check|deploy|skip` option controls only the
+Modal deployment-parity preflight before the write; it is not a preview/apply switch.
+
+The preview/apply controls are:
 
 - **`--apply`** — on `accounts batch-add-people`, `accounts batch-add-companies`,
-  `attio companies` mutations, and `attio enrichment backfill-domains`. Default is a
-  preview that performs no writes.
+  `attio companies create-attribute-type`, and `attio enrichment backfill-domains`.
+  Default is a preview that performs no writes.
 - **`--modal-sync check|deploy|skip`** — on `attio people` mutations (`add`, `update`,
   `upsert`). This governs the Modal deployment-parity preflight before the mutation runs:
   `check` (default) verifies the deployed app matches your local code, `deploy` refreshes
   it first, and `skip` bypasses the preflight. These commands also accept
-  `--no-connectivity-probe` to skip the Modal reachability check.
+  `--no-connectivity-probe` to skip the Modal reachability check; neither option prevents
+  the Attio write.
 
 <Tip>
-  Examples on this site show the preview form. Add the gating flag only once the preview
-  output matches what you intend to write.
+  Review the command’s mutation behavior before running it. In particular, people
+  mutations write immediately; use `upsert` when the intended behavior is create-or-update.
 </Tip>
 
 ## Remote execution on Modal

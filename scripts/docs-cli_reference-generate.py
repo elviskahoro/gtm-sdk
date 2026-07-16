@@ -52,6 +52,14 @@ BANNER = (
 HAND_WRITTEN = {"index.mdx"}
 
 
+def _frontmatter_scalar(value: str) -> str:
+    """Render a YAML scalar that always occupies exactly one physical line."""
+    # Help text is user-authored and may contain line wrapping or quotes. YAML's
+    # JSON-compatible double-quoted scalar handles punctuation safely; collapsing
+    # whitespace keeps the generated frontmatter single-line by construction.
+    return json.dumps(" ".join(value.split()), ensure_ascii=False)
+
+
 def _mdx_escape(text: str) -> str:
     """Escape characters MDX would interpret as JSX/expressions in prose."""
     return (
@@ -168,8 +176,8 @@ def _subapp_page(name: str, group: click.Group) -> str:
 
     parts: list[str] = [
         "---",
-        f'title: "gtm {name}"',
-        f'description: "{description}"',
+        f"title: {_frontmatter_scalar(f'gtm {name}')}",
+        f"description: {_frontmatter_scalar(description)}",
         "---",
         "",
         BANNER,
@@ -181,8 +189,8 @@ def _subapp_page(name: str, group: click.Group) -> str:
     parts.extend(
         [
             "Every command follows the [CLI contract](/concepts/cli-contract):"
-            " JSON on stdout, errors on stderr, mutations gated behind an"
-            " explicit flag. Keys resolve as described in"
+            " JSON on stdout, errors on stderr, and command-specific mutation"
+            " safety controls. Keys resolve as described in"
             " [Secrets and API keys](/secrets).",
             "",
         ],

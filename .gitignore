@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+# pytest report exported to the repo root by .github/workflows/ci/pytest_dagger.py
+junit.xml
+pytest_rc
 
 # OS
 .DS_Store
@@ -20,6 +23,11 @@ tmp/
 data/
 out/
 worktrees/
+
+# Kilo Agent Manager generated state — the setup-script/run-script under
+# .kilo/ are committed; managed worktrees and UI state are not.
+.kilo/worktrees/
+.kilo/agent-manager.json
 
 # Real webhook payloads — keep raw evt_*.json samples out of version control.
 # Use redacted/synthetic fixtures (sample-*.json) for documentation instead.
@@ -55,3 +63,12 @@ webhooks/registry.yaml
 scripts/lib/__pycache__/
 scripts/lib/**/*.pyc
 
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/
+
+# Gas Town (added by gt)
+.runtime/
+.logs/
+state.json
+CLAUDE.md
+CLAUDE.local.md

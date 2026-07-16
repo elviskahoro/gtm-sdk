@@ -1,0 +1,9 @@
+# actionlint config. See https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# actionlint only knows GitHub-hosted runner labels out of the box and errors
+# (actionlint/runner-label) on any other `runs-on:` value. Declare our custom
+# Namespace (namespace.so) runner profiles here so `runs-on: namespace-*` passes
+# lint. Add new profiles to this list as they are introduced.
+self-hosted-runner:
+  labels:
+    - namespace-profile-test
