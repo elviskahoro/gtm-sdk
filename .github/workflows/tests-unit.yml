@@ -39,7 +39,9 @@ jobs:
       # links its managed path. The metadata directory is mounted separately
       # because uv's managed cache mode does not preserve arbitrary files.
       - name: Prepare host uv cache
-        run: mkdir -p "$(uv cache dir)" "$HOME/gtm-sdk-cache"
+        run: |
+          mkdir -p "$(uv cache dir)" "$HOME/gtm-sdk-cache"
+          touch "$HOME/gtm-sdk-cache/placeholder"
 
       # Namespace mounts these paths directly from the runner cache volume, so
       # setup reuses the host-side Dagger venv and uv-managed interpreter

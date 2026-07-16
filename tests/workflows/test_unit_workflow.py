@@ -39,6 +39,7 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     assert "cache: uv" in workflow
     assert workflow.count("namespacelabs/nscloud-cache-action@") == 2
     assert "path: |\n            ~/gtm-sdk-cache" in workflow
+    assert 'touch "$HOME/gtm-sdk-cache/placeholder"' in workflow
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
     # Toolchain + venv are siblings under one Namespace mount — never target
