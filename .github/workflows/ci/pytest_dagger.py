@@ -6,8 +6,9 @@ Invoked the same way locally and in CI:
 
 The pipeline runs pytest inside a python:3.13 container and exports `junit.xml`
 to the host so a follow-up step (e.g. trunk-io/analytics-uploader) can upload
-it. Keep this serial on the two-vCPU Namespace profile: three warm CI runs with
-two xdist workers regressed median pytest time from 26.06s to 30.21s.
+it. On the ARM64 8x16 Namespace runner, local measurements favored four
+explicit xdist workers over both serial and eight workers: serial 13.16s, four
+workers 10.74s, eight workers 12.08s.
 
 Dependencies install with `uv sync --locked`: the run fails loudly if
 `pyproject.toml` drifts from `uv.lock` instead of silently re-locking inside
@@ -35,7 +36,10 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "uv run pytest --junit-xml=junit.xml -o junit_family=xunit1; "
+    "uv run --no-sync pytest "
+    "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
+    "-n 4 --dist=loadfile "
+    "--junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"
 )
 JUNIT_HOST_PATH = "junit.xml"
@@ -43,13 +47,11 @@ PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
-# scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`. When
-# Dagger copies the host source into /src from a git worktree, the worktree's
-# `.git` is a gitlink file pointing at a path on the host that does not exist
-# in the container, so every git invocation fails with "fatal: not a git
-# repository". Initializing a throwaway repo at /src — with everything staged
-# and committed — gives the script and its tests a valid HEAD to diff against
-# without leaking the host's git state.
+# scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`.
+# The host `.git` metadata stays excluded from the Dagger source snapshot, so we
+# initialize a throwaway repo at /src — with everything staged and committed —
+# to give the script and its tests a valid HEAD to diff against without leaking
+# the host's git state.
 GIT_INIT_CMD = (
     "git init -q && "
     "git -c user.email=ci@example.com -c user.name=ci "
@@ -60,6 +62,9 @@ GIT_INIT_CMD = (
 
 
 SOURCE_EXCLUDES = [
+    ".git",
+    ".entire",
+    ".kilo",
     ".venv",
     "tmp",
     ".pytest_cache",
@@ -105,8 +110,19 @@ def build_container() -> dagger.Container:
         .with_directory("/src", source)
         .with_workdir("/src")
         .with_mounted_cache("/src/.venv", venv_cache)
-        .with_exec(["bash", "-c", f"rm -rf .git && {GIT_INIT_CMD}"])
-        .with_exec(["uv", "sync", "--all-extras", "--dev", "--locked"])
+        .with_exec(["bash", "-c", GIT_INIT_CMD])
+        # Script tests import the repo-local `scripts` package during
+        # collection, so this must install the editable project.
+        .with_exec(
+            [
+                "uv",
+                "sync",
+                "--all-extras",
+                "--dev",
+                "--locked",
+            ],
+        )
+        .with_env_variable("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
         .with_exec(["bash", "-c", PYTEST_CMD])
     )
 

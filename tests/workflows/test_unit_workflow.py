@@ -159,6 +159,7 @@ def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
     assert 'uv venv "$HOME/.dagger-venv" --clear' not in workflow
     assert "UV_VENV_CLEAR" not in workflow
     assert 'rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"' in workflow
+    assert "validation error: ${err}" in workflow
     assert "import dagger, anyio" in workflow
     assert 'uv venv --python 3.13 "${dagger_venv}"' in workflow
     assert "uv python install --reinstall 3.13" in workflow
@@ -176,11 +177,22 @@ def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
         assert "sys.exit(rc)" in source
 
 
-def test_unit_dagger_pipeline_uses_measured_two_cpu_configuration() -> None:
+def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     source = PYTEST_DAGGER.read_text()
 
-    assert "uv run pytest --junit-xml=junit.xml" in source
-    assert "-n auto" not in source
-    assert "--dist=loadfile" not in source
+    assert "uv run --no-sync pytest" in source
+    assert "-n 4 --dist=loadfile" in source
+    assert "-p xdist.plugin" in source
+    assert "-p pytest_asyncio.plugin" in source
+    assert "-p anyio.pytest_plugin" in source
+    assert '"PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"' in source
+    assert "--no-install-project" not in source
+    assert '"--all-extras",' in source
+    assert '"--locked",' in source
+    for excluded in ('".git"', '".entire"', '".kilo"'):
+        assert excluded in source
+    assert "--junit-xml=junit.xml" in source
+    assert "echo $? > /src/pytest_rc" in source
+    assert 'await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)' in source
     assert "Dagger pipeline evaluation + pytest_rc export:" in source
     assert "Dagger transfer pytest_rc:" not in source
