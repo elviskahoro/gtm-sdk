@@ -86,3 +86,5 @@ def test_unit_workflow_preserves_dagger_caches_and_fallbacks() -> None:
 # RUN #3: Final cache validation - all warm caches should be populated
 
 # RUN #6: Warm cache - Dagger SDK venv should be restored
+
+# RUN #7: Post-#302 sequential cache validation (issue #303)
