@@ -3,6 +3,10 @@
 # `review_guidelines` is embedded into every review prompt. Use it to encode
 # deliberate house decisions so the reviewer stops re-flagging them as findings.
 
+# Use the Codex CLI for review jobs. Roborev invokes the installed `codex`
+# executable and uses its configured Codex/OpenAI authentication.
+agent = "codex"
+
 review_guidelines = """
 - The anti-AI-co-author git hooks (scripts/git-hooks/prepare-commit-msg and
   commit-msg) are intentionally a DENYLIST of known AI/agent identities (Claude,

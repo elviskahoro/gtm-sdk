@@ -1,0 +1,42 @@
+---
+title: "Using these docs with AI tools"
+description: "Machine-readable endpoints for this site — llms.txt, Markdown page variants, and the MCP server — plus the contract an agent needs to drive the gtm CLI."
+---
+
+This site is built to be consumed by AI agents as well as people. Everything below is
+served automatically from the hosted docs — nothing to install.
+
+## Machine-readable endpoints
+
+| Endpoint | What it returns |
+| --- | --- |
+| [`/llms.txt`](https://elviskahoro.mintlify.app/llms.txt) | An index of every page with its one-line description. Start here to pick pages worth fetching. |
+| [`/llms-full.txt`](https://elviskahoro.mintlify.app/llms-full.txt) | The entire site as one Markdown document (capped at 100k characters). |
+| Any page + `.md` | Append `.md` to any page URL for clean Markdown without site chrome — for example [`/quickstart.md`](https://elviskahoro.mintlify.app/quickstart.md). |
+| `/mcp` | A hosted [MCP](https://modelcontextprotocol.io/) server exposing search and docs-query tools over this site. Point your MCP client at `https://elviskahoro.mintlify.app/mcp`. |
+
+The contextual menu on every page (the button next to the page title) offers the same
+things interactively: copy the page as Markdown, open it in ChatGPT, Claude, or
+Perplexity, or connect the MCP server to Cursor and VS Code.
+
+## Driving the `gtm` CLI from an agent
+
+The four facts an agent needs before running commands:
+
+1. **Success data is JSON on stdout; errors and logs go to stderr.** Parse stdout only.
+2. **Mutating commands preview by default.** Nothing writes until you add the explicit
+   flag (`--apply` on batch and company commands; `--modal-sync` governs Attio people
+   mutations). Copy-pasting an example never mutates state.
+3. **Provider-backed commands execute on a deployed Modal app**, not locally. They need
+   Modal credentials plus provider keys — see [Secrets and API keys](/secrets).
+4. **Exit codes**: `0` success, `1` runtime error (message on stderr, prefixed
+   `Error:`), `2` usage error.
+
+The full contract, including the `--json` payload override every command accepts, is on
+the [CLI contract](/concepts/cli-contract) page.
+
+## Fetching source directly
+
+The repo is public: [github.com/elviskahoro/gtm-sdk](https://github.com/elviskahoro/gtm-sdk). Docs pages reference code
+as repo-relative paths (for example `src/secrets_bootstrap.py`) — resolve them against
+the repo root or the GitHub UI.

@@ -1,0 +1,97 @@
+---
+title: "CLI contract"
+description: "The I/O conventions every gtm command follows: JSON on stdout, errors on stderr, preview-by-default mutations, Modal remote execution, and --json overrides."
+---
+
+Every `gtm` command follows the same contract. Learn it once and every command group —
+`accounts`, `apollo`, `attio`, `exa`, `parallel`, and the rest — behaves predictably,
+whether a person or an agent is driving.
+
+## JSON on stdout, everything else on stderr
+
+Success output is JSON printed to stdout. Progress, warnings, and errors go to stderr.
+That makes every command safe to pipe:
+
+```bash
+uv run gtm attio people search --email-domain "acme.com" | jq '.[].email'
+```
+
+Runtime errors print to stderr prefixed with `Error:` and exit `1`. Usage errors exit `2`
+(and emit a `cli.usage_error` telemetry event with the raw arguments).
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Success — stdout holds the JSON result. |
+| `1` | Runtime error — message on stderr, stdout empty. |
+| `2` | Usage error — bad flags or arguments. |
+
+## Mutation safety is command-specific
+
+Commands that write to external systems expose the safety control appropriate to their
+workflow. Commands with preview/apply behavior print the planned mutation and write
+nothing until `--apply` is supplied:
+
+```bash
+# Preview: prints what would be written to Attio, writes nothing.
+uv run gtm accounts batch-add-people \
+  --records '[{"email": "jane@acme.dev", "first_name": "Jane", "last_name": "Doe"}]'
+
+# Execute: same command plus --apply.
+uv run gtm accounts batch-add-people \
+  --records '[{"email": "jane@acme.dev", "first_name": "Jane", "last_name": "Doe"}]' \
+  --apply
+```
+
+The people mutation commands are different: `attio people add`, `update`, and `upsert`
+write when invoked. Their `--modal-sync check|deploy|skip` option controls only the
+Modal deployment-parity preflight before the write; it is not a preview/apply switch.
+
+The preview/apply controls are:
+
+- **`--apply`** — on `accounts batch-add-people`, `accounts batch-add-companies`,
+  `attio companies create-attribute-type`, and `attio enrichment backfill-domains`.
+  Default is a preview that performs no writes.
+- **`--modal-sync check|deploy|skip`** — on `attio people` mutations (`add`, `update`,
+  `upsert`). This governs the Modal deployment-parity preflight before the mutation runs:
+  `check` (default) verifies the deployed app matches your local code, `deploy` refreshes
+  it first, and `skip` bypasses the preflight. These commands also accept
+  `--no-connectivity-probe` to skip the Modal reachability check; neither option prevents
+  the Attio write.
+
+<Tip>
+  Review the command’s mutation behavior before running it. In particular, people
+  mutations write immediately; use `upsert` when the intended behavior is create-or-update.
+</Tip>
+
+## Remote execution on Modal
+
+Provider-backed commands do not call provider APIs from your machine. The CLI validates
+your input, then invokes a function on your deployed Modal app by name
+(`modal.Function.from_name(MODAL_APP, ...)`) and prints the JSON it returns. The app name
+comes from the `MODAL_APP` environment variable, defaulting to `gtm-sdk`.
+
+This means keyed commands need a deployed app (`uv run modal deploy deploy.py`) and Modal
+credentials — see the [quickstart](/quickstart) and
+[Secrets and API keys](/secrets). Local-only commands (`version`, `hello`,
+`gmail url decode`, `granola export`, `sanity blog download`, `webhook list`) work with
+no deployment at all.
+
+## The `--json` override
+
+Every command that builds a request from flags also accepts `--json` with a complete
+payload, which overrides the flags. Useful when an agent already holds a structured
+request:
+
+```bash
+uv run gtm exa search --json '{"query": "developer-first CRM tools", "num_results": 5}'
+```
+
+Payloads are validated against the same Pydantic models the SDK uses; validation
+failures print the model error to stderr and exit `1`.
+
+## API-key override flags
+
+Commands that call a provider accept a per-invocation key override
+(`--exa-api-key`, `--attio-api-key`, `--apollo-api-key`, `--parallel-api-key`, …). The
+value is forwarded to the deployed function and applied only for that call — the
+resolution order is documented in [Secrets and API keys](/secrets).

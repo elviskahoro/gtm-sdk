@@ -1,0 +1,42 @@
+Search people by any combination of criteria (name, email, domain, phone, company):
+
+```bash
+uv run gtm attio people search --email-domain "acme.dev" --limit 10
+```
+
+```bash
+# Browse recent records without a filter.
+uv run gtm attio people search --sample
+```
+
+Create a person. This writes immediately after the default Modal deployment-parity
+preflight; `--modal-sync` controls that preflight, not whether the write happens:
+
+```bash
+uv run gtm attio people add "jane@acme.dev" \
+  --first-name "Jane" \
+  --last-name "Doe" \
+  --company "acme.dev"
+```
+
+Update an existing person by email:
+
+```bash
+uv run gtm attio people update --email "jane@acme.dev" \
+  --company "acme.dev" \
+  --first-name "Jane"
+```
+
+Create or update deterministically by email with `upsert`:
+
+```bash
+uv run gtm attio people upsert "jane@acme.dev" \
+  --first-name "Jane" \
+  --last-name "Doe"
+```
+
+Company creation also writes when invoked (it does not use `--apply`):
+
+```bash
+uv run gtm attio companies add --domain "acme.dev" --name "Acme Corp"
+```
