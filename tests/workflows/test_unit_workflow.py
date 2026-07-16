@@ -78,14 +78,32 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "trunk-io/analytics-uploader@" in workflow
     assert "junit-paths: junit.xml" in workflow
     assert '"uv-cache"' in dagger
-    assert '"venv"' in dagger
+    assert "dag.host().directory(str(HOST_PROJECT_ENV))" in dagger
+    assert "dag.host().directory(str(HOST_UV_PYTHON))" in dagger
     assert 'dag.host().directory(str(Path.home() / ".cache" / "uv"))' in dagger
     assert "Dagger uv cache: seeding from Namespace host cache" in dagger
     assert (
         '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
         in dagger
     )
-    assert '.with_mounted_cache("/src/.venv", venv_cache)' in dagger
+    assert (
+        ".with_mounted_directory(\n"
+        "            str(HOST_PROJECT_ENV),\n"
+        "            host_project_env,\n"
+        "            read_only=True,\n"
+        "        )" in dagger
+    )
+    assert (
+        ".with_mounted_directory(\n"
+        "            str(HOST_UV_PYTHON),\n"
+        "            host_uv_python,\n"
+        "            read_only=True,\n"
+        "        )" in dagger
+    )
+    assert (
+        '.with_env_variable("UV_PROJECT_ENVIRONMENT", str(HOST_PROJECT_ENV))' in dagger
+    )
+    assert '.with_env_variable("PYTHONPATH", "/src")' in dagger
     assert "--junit-xml=junit.xml" in dagger
     assert "echo $? > /src/pytest_rc" in dagger
     assert "sys.exit(rc)" in dagger
@@ -131,23 +149,17 @@ def test_unit_workflow_uses_a_fresh_dagger_engine() -> None:
     assert "docker stop" not in workflow
 
 
-def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
-    # `uv venv --clear` on the Namespace mount root deletes and recreates the
-    # directory, detaching the bind — the tree then never persists (cold in
-    # 5/5 runs, issue #303). Mount ~/.dagger-sdk; put the venv at a
-    # subdirectory so cold recreate can replace it; keep the toolchain as a
-    # sibling under the same mount. Validate restores by importing the SDK.
+def test_unit_dagger_pipeline_consumes_host_project_environment() -> None:
+    # The host project venv is mounted at its original absolute path so its
+    # interpreter symlink resolves through the sibling uv toolchain mount.
+    # Dagger must not recreate a separate `/src/.venv` on every fresh engine.
     workflow = WORKFLOW.read_text()
-    assert 'uv venv "$HOME/.dagger-sdk" --clear' not in workflow
-    assert 'uv venv "$HOME/.dagger-venv" --clear' not in workflow
-    assert "UV_VENV_CLEAR" not in workflow
-    assert 'rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"' in workflow
-    assert "validation error: ${err}" in workflow
-    assert "import dagger, anyio" in workflow
-    assert 'uv venv --python 3.13 "${dagger_venv}"' in workflow
-    assert "uv python install --reinstall 3.13" in workflow
-    assert "interpreter escaped ~/.dagger-sdk" in workflow
-    assert "uv Python toolchain is sibling under ~/.dagger-sdk" in workflow
+    dagger = PYTEST_DAGGER.read_text()
+    assert 'project_env="$HOME/.dagger-sdk/project-venv"' in workflow
+    assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
+    assert 'dag.cache_volume("venv")' not in dagger
+    assert '"uv run --no-sync pytest "' in dagger
+    assert '"/src/.venv"' not in dagger
 
 
 def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
@@ -170,8 +182,6 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     assert "-p anyio.pytest_plugin" in source
     assert '"PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"' in source
     assert "--no-install-project" not in source
-    assert '"--all-extras",' in source
-    assert '"--locked",' in source
     for excluded in ('".git"', '".entire"', '".kilo"'):
         assert excluded in source
     assert "--junit-xml=junit.xml" in source
