@@ -338,6 +338,8 @@ jobs:
           junit-paths: junit.xml
           org-slug: sanhedrin
           token: ${{ secrets.TRUNK_API_TOKEN }}
+          # Cache the analytics CLI to avoid downloading it on every test run.
+          use-cache: true
 
       # buildkitd needs well past Docker's 10s default grace to close its
       # databases and sync the persistent volume. Always join the detached
