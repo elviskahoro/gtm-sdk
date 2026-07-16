@@ -88,6 +88,18 @@ def test_unit_workflow_supports_manual_dispatch() -> None:
     assert "workflow_dispatch:" in workflow
 
 
+def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
+    # `uv venv --clear` deletes and recreates ~/.dagger-venv, detaching it
+    # from the nscloud-cache-action mount — the venv then never persists
+    # (observed cold in 5/5 runs, issue #303). The venv must be created into
+    # the existing directory, and a cache-restored venv must be validated by
+    # importing the SDK, not by an -x file test.
+    workflow = WORKFLOW.read_text()
+    assert "--clear" not in workflow
+    assert 'find "$HOME/.dagger-venv" -mindepth 1 -delete' in workflow
+    assert "import dagger, anyio" in workflow
+
+
 # RUN #2: Cache validation - testing warm cache hits
 
 # RUN #3: Final cache validation - all warm caches should be populated
