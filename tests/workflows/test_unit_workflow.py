@@ -165,7 +165,7 @@ def test_unit_dagger_pipeline_consumes_host_project_environment() -> None:
     assert 'project_env="$HOME/.dagger-sdk/project-venv"' in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert 'dag.cache_volume("venv")' not in dagger
-    assert '"uv run --no-sync pytest "' in dagger
+    assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in dagger
     assert '"/src/.venv"' not in dagger
 
 
@@ -182,7 +182,7 @@ def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
 def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     source = PYTEST_DAGGER.read_text()
 
-    assert "uv run --no-sync pytest" in source
+    assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in source
     assert "-n 4 --dist=loadfile" in source
     assert "-p xdist.plugin" in source
     assert "-p pytest_asyncio.plugin" in source
