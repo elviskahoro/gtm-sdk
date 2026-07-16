@@ -36,9 +36,10 @@ jobs:
           enable-cache: false
 
       # Namespace mounts these paths directly from the runner cache volume, so
-      # setup reuses the host-side Dagger SDK and uv artifacts without a
-      # GitHub-hosted cache upload/download phase. The Dagger pipeline owns its
-      # separate in-container cache volumes below.
+      # setup reuses the host-side Dagger venv and uv-managed interpreter
+      # without a GitHub-hosted cache upload/download phase. Keep the paths
+      # explicit: mounting the parent ~/.dagger-sdk intermittently dropped the
+      # project cache metadata while retaining the large venv contents (#327).
       - name: Cache host Dagger and uv data
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
@@ -51,7 +52,8 @@ jobs:
           # contents never persist.
           cache: uv
           path: |
-            ~/.dagger-sdk
+            ~/.dagger-sdk/venv
+            ~/.dagger-sdk/uv-python
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -118,18 +120,18 @@ jobs:
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
       # Warm the project dependency cache on the host before starting Dagger.
-      # The Namespace action persists both ~/.cache/uv and ~/.dagger-sdk after
-      # the job, while the fresh Dagger engine only receives a snapshot of the
-      # host uv cache. A lockfile-derived stamp lets us reuse a valid project
-      # environment and rebuild it when dependencies, Python, or architecture
-      # change.
+      # The Namespace action persists ~/.cache/uv plus the explicit SDK paths
+      # above, while the fresh Dagger engine only receives a snapshot of the
+      # host uv cache. A lockfile-derived stamp inside the persisted venv lets
+      # us reuse a valid project environment and rebuild it when dependencies,
+      # Python, or architecture change.
       - name: Warm project uv cache
         run: |
           set -euo pipefail
           # Reuse the Namespace-persisted SDK venv for project dependencies;
           # sibling project-venv directories are not promoted by this profile.
           project_env="$HOME/.dagger-sdk/venv"
-          cache_key_file="$HOME/.dagger-sdk/.gtm-sdk-cache-key"
+          cache_key_file="${project_env}/gtm-sdk-cache-key"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"
@@ -158,6 +160,29 @@ jobs:
           uv pip install --no-deps --reinstall \
             --python "${project_env}/bin/python" \
             "dagger-io==0.21.7" "anyio==4.13.0"
+          echo "Host project uv cache stamp: ${cache_key_file}"
+          if [ -f "${cache_key_file}" ]; then
+            echo "Host project uv cache stamp value: $(cat "${cache_key_file}")"
+          else
+            echo "Host project uv cache stamp value: absent"
+          fi
+          if [ -x "${project_env}/bin/python" ] &&
+            "${project_env}/bin/python" -c 'import sys; print(sys.executable)' \
+              >/tmp/gtm-sdk-cache-interpreter; then
+            echo "Host project uv cache interpreter: ${project_env}/bin/python"
+            echo "Host project uv cache resolved interpreter: $(cat /tmp/gtm-sdk-cache-interpreter)"
+          else
+            echo "Host project uv cache interpreter: invalid or absent"
+          fi
+          echo "Host project uv cache expected fingerprint: ${cache_key}"
+          if [ -d "${UV_PYTHON_INSTALL_DIR}" ] &&
+            [ "$(find "${UV_PYTHON_INSTALL_DIR}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+            echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"
+            echo "Host project uv cache toolchain state: present"
+          else
+            echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"
+            echo "Host project uv cache toolchain state: absent"
+          fi
 
       - name: Report Namespace cache state
         run: |
