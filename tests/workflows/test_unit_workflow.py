@@ -69,6 +69,15 @@ def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
     assert "enable-cache: false" in workflow
 
 
+def test_unit_workflow_initializes_empty_namespace_mounts_without_deleting_them() -> (
+    None
+):
+    workflow = WORKFLOW.read_text()
+
+    assert 'uv venv --clear --python 3.13 "${dagger_venv}"' in workflow
+    assert 'rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"' not in workflow
+
+
 def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()

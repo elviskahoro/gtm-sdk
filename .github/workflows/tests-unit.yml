@@ -96,12 +96,13 @@ jobs:
             echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
           else
             echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold (validation error: ${err})"
-            rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"
             # Force the managed interpreter into the sibling tree. Plain
             # `uv venv` may reuse a pre-existing install under setup-uv's
             # default directory and symlink outside ~/.dagger-sdk.
             uv python install --reinstall 3.13
-            uv venv --python 3.13 "${dagger_venv}"
+            # The Namespace action bind-mounts these directories. Clear the
+            # venv contents without attempting to remove its mount point.
+            uv venv --clear --python 3.13 "${dagger_venv}"
             target="$(readlink -f "${dagger_venv}/bin/python" 2>/dev/null || readlink "${dagger_venv}/bin/python")"
             case "${target}" in
               "$HOME/.dagger-sdk"/*) ;;
