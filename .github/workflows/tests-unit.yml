@@ -71,7 +71,7 @@ jobs:
       - name: Install Dagger Python SDK
         run: |
           # ~/.dagger-venv is mounted from the Namespace cache volume. Never
-          # delete/recreate the directory itself (uv venv's clear flag does) —
+          # delete/recreate the directory itself (uv venv --clear does) — that
           # detaches the mount and the venv silently stops persisting (cold in
           # 5/5 measured runs, issue #303). Clear contents only, and validate a
           # restored venv by importing the SDK: a stale cache snapshot can hold

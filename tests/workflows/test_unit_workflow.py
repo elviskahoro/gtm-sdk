@@ -95,7 +95,8 @@ def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
     # the existing directory, and a cache-restored venv must be validated by
     # importing the SDK, not by an -x file test.
     workflow = WORKFLOW.read_text()
-    assert "--clear" not in workflow
+    assert 'uv venv "$HOME/.dagger-venv" --clear' not in workflow
+    assert "UV_VENV_CLEAR" not in workflow
     assert 'find "$HOME/.dagger-venv" -mindepth 1 -delete' in workflow
     assert "import dagger, anyio" in workflow
 
