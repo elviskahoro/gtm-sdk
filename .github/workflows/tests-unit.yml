@@ -119,6 +119,37 @@ jobs:
           echo "UV_PYTHON_INSTALL_DIR=${UV_PYTHON_INSTALL_DIR}" >> "$GITHUB_ENV"
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
+      # Warm the project dependency cache on the host before starting Dagger.
+      # The Namespace action persists both ~/.cache/uv and ~/.dagger-sdk after
+      # the job, while the fresh Dagger engine only receives a snapshot of the
+      # host uv cache. A lockfile-derived stamp lets us reuse a valid project
+      # environment and rebuild it when dependencies, Python, or architecture
+      # change.
+      - name: Warm project uv cache
+        run: |
+          set -euo pipefail
+          project_env="$HOME/.dagger-sdk/project-venv"
+          cache_key_file="${project_env}/.gtm-sdk-cache-key"
+          cache_key="$({
+            sha256sum pyproject.toml uv.lock
+            printf '%s\n' 'python=3.13' "arch=$(uname -m)"
+          } | sha256sum | cut -d' ' -f1)"
+          if [ -x "${project_env}/bin/python" ] &&
+            [ -f "${cache_key_file}" ] &&
+            [ "$(cat "${cache_key_file}")" = "${cache_key}" ] &&
+            "${project_env}/bin/python" -c 'import pytest' 2>/dev/null; then
+            echo "Host project uv cache: exact hit (${cache_key})"
+          else
+            echo "Host project uv cache: miss or stale; syncing dependencies (${cache_key})"
+            rm -rf "${project_env}"
+            uv venv --python 3.13 "${project_env}"
+            UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
+              --all-extras --dev --locked \
+              --python "${project_env}/bin/python"
+            printf '%s\n' "${cache_key}" >"${cache_key_file}"
+            echo "Host project uv cache: refreshed (${cache_key})"
+          fi
+
       - name: Report Namespace cache state
         run: |
           echo "Namespace cache exact hit: ${{ steps.namespace_cache.outputs.cache-hit }}"

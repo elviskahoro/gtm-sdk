@@ -99,6 +99,20 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "cache-to" not in workflow
 
 
+def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
+    workflow = WORKFLOW.read_text()
+
+    assert "Warm project uv cache" in workflow
+    assert 'project_env="$HOME/.dagger-sdk/project-venv"' in workflow
+    assert 'cache_key_file="${project_env}/.gtm-sdk-cache-key"' in workflow
+    assert "sha256sum pyproject.toml uv.lock" in workflow
+    assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
+    assert "--all-extras --dev --locked" in workflow
+    assert 'rm -rf "${project_env}"' in workflow
+    assert 'printf \'%s\\n\' "${cache_key}" >"${cache_key_file}"' in workflow
+    assert "path: |\n            ~/.dagger-sdk" in workflow
+
+
 def test_unit_workflow_supports_manual_dispatch() -> None:
     # Measurement work (issues #303/#305) needs sequential runs on demand;
     # marker commits pollute history and roborev/PR flows.
