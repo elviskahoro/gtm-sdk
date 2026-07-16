@@ -37,8 +37,9 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     ) in workflow
     assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
-    assert workflow.count("namespacelabs/nscloud-cache-action@") == 2
-    assert "path: |\n            ~/gtm-sdk-cache" in workflow
+    # One invocation = one spacectl mount scope. A second invocation for the
+    # metadata path never restored it across sequential main runs (#330).
+    assert workflow.count("namespacelabs/nscloud-cache-action@") == 1
     assert 'touch "$HOME/gtm-sdk-cache/placeholder"' in workflow
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
@@ -49,8 +50,44 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
     assert "~/.dagger-sdk/venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
+    # The fingerprint directory is its own mount path (never nested under
+    # ~/.dagger-sdk, #327) registered in the same invocation.
+    assert "~/gtm-sdk-cache" in cache_paths
     assert "~/.dagger-venv" not in cache_paths
     assert "local/share/uv/python" not in cache_paths
+
+
+def test_unit_workflow_reports_mounted_cache_diagnostics() -> None:
+    # A stale volume fork must be diagnosable from logs alone (#330): capture
+    # mount state before any step mutates it.
+    workflow = WORKFLOW.read_text()
+
+    assert "Report mounted cache diagnostics" in workflow
+    assert 'findmnt -R "$HOME/gtm-sdk-cache"' in workflow
+    assert 'findmnt -R "$HOME/.dagger-sdk/venv"' in workflow
+    assert 'ls -la "${NSC_CACHE_PATH}"' in workflow
+    assert 'echo "Fingerprint at mount time: $(cat "${cache_key_file}")"' in workflow
+    assert 'echo "Fingerprint at mount time: absent"' in workflow
+    # Diagnostics run after the mount and before the SDK install can mutate
+    # the venv.
+    assert workflow.index("Cache host Dagger and uv data") < workflow.index(
+        "Report mounted cache diagnostics",
+    )
+    assert workflow.index("Report mounted cache diagnostics") < workflow.index(
+        "Install Dagger Python SDK",
+    )
+
+
+def test_unit_workflow_logs_granular_cache_miss_reasons() -> None:
+    # "fingerprint dropped but venv survived" and "fork predates everything"
+    # need different fixes (#330); the warm step must say which happened.
+    workflow = WORKFLOW.read_text()
+
+    assert 'echo "Host project uv cache miss reasons:${miss_reasons}"' in workflow
+    assert "interpreter-missing" in workflow
+    assert "fingerprint-missing" in workflow
+    assert "fingerprint-mismatch" in workflow
+    assert "pytest-import-failed" in workflow
 
 
 def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
