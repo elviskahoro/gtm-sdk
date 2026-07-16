@@ -129,7 +129,7 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
 
     assert "Warm project uv cache" in workflow
     assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'cache_key_file="${project_env}/.gtm-sdk-cache-key"' in workflow
+    assert 'cache_key_file="$HOME/.dagger-sdk/.gtm-sdk-cache-key"' in workflow
     assert "sha256sum pyproject.toml uv.lock" in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert "--all-extras --dev --locked" in workflow

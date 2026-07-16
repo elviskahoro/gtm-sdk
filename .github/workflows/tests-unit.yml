@@ -129,7 +129,7 @@ jobs:
           # Reuse the Namespace-persisted SDK venv for project dependencies;
           # sibling project-venv directories are not promoted by this profile.
           project_env="$HOME/.dagger-sdk/venv"
-          cache_key_file="${project_env}/.gtm-sdk-cache-key"
+          cache_key_file="$HOME/.dagger-sdk/.gtm-sdk-cache-key"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"
