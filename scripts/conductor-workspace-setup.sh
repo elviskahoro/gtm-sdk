@@ -107,8 +107,7 @@ provision_flox_tools() {
   # fresh sandbox; no-op when already realized) and put its bin dir on PATH
   # for the rest of this script.
   # --mode run everywhere: flox refuses to activate an env in dev mode while
-  # another shell (e.g. one whose ~/.bashrc ran the line appended below) holds
-  # a run-mode activation of the same env.
+  # another shell (e.g. an agent's) holds a run-mode activation of the same env.
   if ! flox activate --dir "${REPO_ROOT}" --mode run -- true; then
     FLOX_FAILURE_STAGE="activation or materialization"
     return 1
@@ -135,12 +134,6 @@ gh --version
 bd version
 roborev version
 EOF
-
-  # Later interactive Conductor shells get the verified environment via ~/.bashrc.
-  FLOX_ACTIVATE_LINE="eval \"\$(flox activate --dir '${REPO_ROOT}' --mode run 2>/dev/null)\" || true"
-  if ! grep -qF "${FLOX_ACTIVATE_LINE}" "${HOME}/.bashrc" 2>/dev/null; then
-    printf '\n# gtm-sdk conductor setup: flox env on PATH for interactive shells\n%s\n' "${FLOX_ACTIVATE_LINE}" >>"${HOME}/.bashrc"
-  fi
 }
 
 # shellcheck disable=SC2310 # A failed Flox probe deliberately selects fallback provisioning.
