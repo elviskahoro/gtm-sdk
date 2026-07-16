@@ -82,6 +82,7 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "dag.host().directory(str(HOST_UV_PYTHON))" in dagger
     assert "dag.host().directory(str(HOST_UV_CACHE))" in dagger
     assert 'dag.host().directory("scripts")' in dagger
+    assert 'with_directory("/opt/gtm-sdk/scripts", scripts)' in dagger
     assert "Dagger uv cache: seeding from Namespace host cache" in dagger
     assert (
         '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
@@ -187,7 +188,7 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     source = PYTEST_DAGGER.read_text()
 
     assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in source
-    assert "sitecustomize.py" in source
+    assert "/opt/gtm-sdk" in source
     assert "-n 4 --dist=loadfile" in source
     assert "-p xdist.plugin" in source
     assert "-p pytest_asyncio.plugin" in source

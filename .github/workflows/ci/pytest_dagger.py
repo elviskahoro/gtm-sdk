@@ -37,9 +37,9 @@ from dagger import dag
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "printf '%s\\n' 'import sys; sys.path.insert(0, \"/src\")' "
+    "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\")' "
     ">/tmp/sitecustomize.py; "
-    "export PYTHONPATH=/tmp:/src${PYTHONPATH:+:$PYTHONPATH}; "
+    "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
     '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
     "-n 4 --dist=loadfile "
@@ -137,9 +137,9 @@ def build_container() -> dagger.Container:
             read_only=True,
         )
         .with_directory("/src", source)
-        # Keep the small repo-local helper package explicit so it cannot be
-        # shadowed by an incomplete host-directory snapshot.
-        .with_directory("/src/scripts", scripts)
+        # Keep the small repo-local helper package under a separate import
+        # root so an incomplete `/src` snapshot cannot shadow `scripts.lib`.
+        .with_directory("/opt/gtm-sdk/scripts", scripts)
         .with_workdir("/src")
         # The editable project path recorded in the host venv points at the
         # runner checkout, not /src. Tests import the checked-out source
