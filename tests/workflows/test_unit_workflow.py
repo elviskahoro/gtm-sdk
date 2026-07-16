@@ -95,6 +95,50 @@ def test_unit_workflow_supports_manual_dispatch() -> None:
     assert "workflow_dispatch:" in workflow
 
 
+def test_unit_workflow_overlaps_graceful_engine_stop_with_results_upload() -> None:
+    workflow = WORKFLOW.read_text()
+
+    run_tests = workflow.index("- name: Run pytest in Dagger")
+    start_stop = workflow.index("- name: Start graceful Dagger engine shutdown")
+    upload_results = workflow.index("- name: Upload Test Results to Trunk.io")
+    await_stop = workflow.index("- name: Await graceful Dagger engine shutdown")
+
+    assert run_tests < start_stop < upload_results < await_stop
+    assert "nohup bash -c " in workflow
+    assert 'docker stop -t 300 "${ENGINE_NAME}"' in workflow
+    assert (
+        "if: always() && steps.dagger_engine_start.outputs.engine_name != ''"
+        in workflow
+    )
+
+
+def test_unit_workflow_checks_asynchronous_engine_shutdown() -> None:
+    workflow = WORKFLOW.read_text()
+    shutdown_workflow = workflow[
+        workflow.index("- name: Start graceful Dagger engine shutdown") :
+    ]
+
+    assert (
+        "DAGGER_STOP_STATUS_FILE: ${{ runner.temp }}/dagger-engine-stop.status"
+        in workflow
+    )
+    assert "DAGGER_STOP_LOG_FILE: ${{ runner.temp }}/dagger-engine-stop.log" in workflow
+    assert (
+        "DAGGER_STOP_STARTED_FILE: ${{ runner.temp }}/dagger-engine-stop.started"
+        in workflow
+    )
+    assert "for _ in $(seq 1 310)" in workflow
+    assert "shutdown process exited before writing status" in workflow
+    assert "timed out waiting for graceful engine shutdown" in workflow
+    assert "graceful engine shutdown failed with exit code" in workflow
+    assert "docker inspect -f '{{.State.Running}}'" in workflow
+    assert "docker inspect -f '{{.State.ExitCode}}'" in workflow
+    assert "engine exited non-gracefully with status" in workflow
+    assert 'docker logs --timestamps "${ENGINE_NAME}"' in workflow
+    assert "docker kill" not in shutdown_workflow
+    assert 'docker rm -f "${ENGINE_NAME}"' not in shutdown_workflow
+
+
 def test_unit_workflow_dagger_venv_survives_cache_mount() -> None:
     # `uv venv --clear` deletes and recreates ~/.dagger-venv, detaching it
     # from the nscloud-cache-action mount — the venv then never persists
