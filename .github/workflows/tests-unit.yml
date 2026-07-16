@@ -54,6 +54,7 @@ jobs:
           path: |
             ~/.dagger-sdk/venv
             ~/.dagger-sdk/uv-python
+            ~/.dagger-sdk/cache-metadata
 
       # `version` is pinned: without it the action installs the latest CLI at
       # run time, so upstream Dagger releases silently change the engine
@@ -129,9 +130,10 @@ jobs:
         run: |
           set -euo pipefail
           # Reuse the Namespace-persisted SDK venv for project dependencies;
-          # sibling project-venv directories are not promoted by this profile.
+          # keep the cache fingerprint in a separately promoted metadata path.
           project_env="$HOME/.dagger-sdk/venv"
-          cache_key_file="${project_env}/gtm-sdk-cache-key"
+          cache_key_file="$HOME/.dagger-sdk/cache-metadata/gtm-sdk-cache-key"
+          mkdir -p "$(dirname "${cache_key_file}")"
           cache_key="$({
             sha256sum pyproject.toml uv.lock
             printf '%s\n' 'python=3.13' "arch=$(uname -m)"

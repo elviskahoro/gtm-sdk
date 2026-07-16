@@ -46,6 +46,7 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
     assert "~/.dagger-sdk/venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
+    assert "~/.dagger-sdk/cache-metadata" in cache_paths
     assert "~/.dagger-venv" not in cache_paths
     assert "local/share/uv/python" not in cache_paths
 
@@ -134,7 +135,11 @@ def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
 
     assert "Warm project uv cache" in workflow
     assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'cache_key_file="${project_env}/gtm-sdk-cache-key"' in workflow
+    assert (
+        'cache_key_file="$HOME/.dagger-sdk/cache-metadata/gtm-sdk-cache-key"'
+        in workflow
+    )
+    assert 'mkdir -p "$(dirname "${cache_key_file}")"' in workflow
     assert "sha256sum pyproject.toml uv.lock" in workflow
     assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
     assert "--all-extras --dev --locked" in workflow
