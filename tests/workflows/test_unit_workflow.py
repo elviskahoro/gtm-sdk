@@ -2,18 +2,37 @@
 
 These tests validate the workflow changes from issues #296, #321, and #330:
 - Namespace-native checkout and caching actions
-- Fresh Dagger engines with host-seeded uv caches
+- Fresh local Dagger engines with immutable dependency images
 - Diagnostic output for cache behavior measurement
 - No regression from previous setup
 """
 
+import runpy
+import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 
 WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "tests-unit.yml"
 PYTEST_DAGGER = (
     Path(__file__).parents[2] / ".github" / "workflows" / "ci" / "pytest_dagger.py"
 )
+PYTEST_DEPENDENCY_DOCKERFILE = (
+    Path(__file__).parents[2]
+    / ".github"
+    / "workflows"
+    / "ci"
+    / "pytest-deps.Dockerfile"
+)
+PYTEST_DEPENDENCY_DOCKERIGNORE = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
+    f"{PYTEST_DEPENDENCY_DOCKERFILE.name}.dockerignore",
+)
+PYTEST_DEPENDENCY_KEY = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
+    "pytest_dependency_key.py",
+)
+PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
+UV_LOCK = Path(__file__).parents[2] / "uv.lock"
 PYTEST_INTEGRATION_DAGGER = (
     Path(__file__).parents[2]
     / ".github"
@@ -37,9 +56,8 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     ) in workflow
     assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
-    # One invocation owns the native uv cache, project venv, and uv-managed
-    # toolchain. Correctness comes from inspecting the restored venv (#330),
-    # never from a separately persisted sidecar fingerprint.
+    # One invocation owns the native uv cache, controller venv, and uv-managed
+    # toolchain. Project dependencies live in the immutable OCI image.
     assert workflow.count("namespacelabs/nscloud-cache-action@") == 1
     assert "gtm-sdk-cache" not in workflow
     assert "placeholder" not in workflow
@@ -48,13 +66,13 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     assert "writeback scope" not in workflow.lower()
     assert "UV_PYTHON_INSTALL_DIR" in workflow
     assert "steps.namespace_cache.outputs.cache-hit" in workflow
-    # Toolchain + venv are siblings under one Namespace mount — never target
-    # `uv venv` at the mount root (detaches the bind, issue #303).
+    # Toolchain + controller venv are siblings under one Namespace mount.
     assert '"$HOME/.dagger-sdk/uv-python"' in workflow
-    assert 'dagger_venv="$HOME/.dagger-sdk/venv"' in workflow
+    assert 'dagger_venv="$HOME/.dagger-sdk/controller-venv"' in workflow
     cache_paths = workflow.split("path: |", 1)[1].split("- name:", 1)[0]
-    assert "~/.dagger-sdk/venv" in cache_paths
+    assert "~/.dagger-sdk/controller-venv" in cache_paths
     assert "~/.dagger-sdk/uv-python" in cache_paths
+    assert "~/.dagger-sdk/venv" not in cache_paths
     assert "~/gtm-sdk-cache" not in cache_paths
     assert "~/.dagger-venv" not in cache_paths
     assert "local/share/uv/python" not in cache_paths
@@ -68,7 +86,7 @@ def test_unit_workflow_reports_mounted_cache_diagnostics() -> None:
     assert "Report mounted cache diagnostics" in workflow
     assert 'uv_cache_dir="$(uv cache dir)"' in workflow
     assert 'findmnt -R "${uv_cache_dir}"' in workflow
-    assert 'findmnt -R "$HOME/.dagger-sdk/venv"' in workflow
+    assert 'findmnt -R "$HOME/.dagger-sdk/controller-venv"' in workflow
     assert 'findmnt -R "$HOME/.dagger-sdk/uv-python"' in workflow
     assert 'ls -la "${NSC_CACHE_PATH}"' in workflow
     assert "Fingerprint at mount time" not in workflow
@@ -83,59 +101,122 @@ def test_unit_workflow_reports_mounted_cache_diagnostics() -> None:
     )
 
 
-def test_unit_workflow_validates_the_restored_environment_before_syncing() -> None:
-    # Namespace may restore a stale generation, so only uv's read-only check of
-    # the actual environment can decide whether dependency sync is necessary.
+def test_unit_workflow_resolves_an_immutable_dependency_image() -> None:
     workflow = WORKFLOW.read_text()
-    warm_step = workflow.split("- name: Warm project uv cache", 1)[1].split(
-        "- name: Report Namespace cache state",
-        1,
-    )[0]
-    normalized = " ".join(warm_step.replace("\\\n", " ").split())
-    check_command = (
-        'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync '
-        "--all-extras --dev --locked --no-install-project --inexact --check "
-        '--python "${project_env}/bin/python"'
-    )
-    sync_command = (
-        'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync '
-        "--all-extras --dev --locked --no-install-project --inexact "
-        '--python "${project_env}/bin/python"'
+
+    assert "NSC_CONTAINER_REGISTRY" in workflow
+    assert "pytest_dependency_key.py" in workflow
+    assert "sha256sum pyproject.toml uv.lock" not in workflow
+    assert ".github/workflows/ci/pytest-deps.Dockerfile" in workflow
+    assert 'arch="$(uname -m)"' in workflow
+    assert "docker manifest inspect --verbose" in workflow
+    assert 'reference="${image_tag}@${digest}"' in workflow
+    assert '[[ "${digest}" == sha256:* ]]' in workflow
+    assert "PYTEST_DEPENDENCY_IMAGE" in workflow
+    assert ":latest" not in workflow
+    assert "manifest unknown|no such manifest|name unknown" in workflow
+    assert "manifest unknown|no such manifest|not found" not in workflow
+
+
+def test_dependency_image_key_ignores_unrelated_project_metadata(
+    tmp_path: Path,
+) -> None:
+    namespace = runpy.run_path(str(PYTEST_DEPENDENCY_KEY))
+    dependency_image_key = cast(
+        Callable[..., str],
+        namespace["dependency_image_key"],
     )
 
-    assert "check_project_env()" in warm_step
-    assert check_command in normalized
-    assert sync_command in normalized
-    assert warm_step.count("check_project_env") == 3
-    assert warm_step.count("--check") == 1
-    assert 'if validation_output="$(check_project_env 2>&1)"; then' in warm_step
-    assert "printf '%s\\n' \"${validation_output}\"" in warm_step
-    assert 'echo "Host project uv cache: exact hit (${environment_key})"' in warm_step
+    def calculate(pyproject: Path, architecture: str = "arm64") -> str:
+        return dependency_image_key(
+            pyproject=pyproject,
+            uv_lock=UV_LOCK,
+            dockerfile=PYTEST_DEPENDENCY_DOCKERFILE,
+            dockerignore=PYTEST_DEPENDENCY_DOCKERIGNORE,
+            python_version="3.13",
+            architecture=architecture,
+        )
+
+    original = PYPROJECT.read_text()
+    unrelated = tmp_path / "unrelated.toml"
+    unrelated.write_text(
+        original.replace('gtm = "cli.main:run"', 'gtm = "cli.main:alternate"'),
+    )
+    dependency_change = tmp_path / "dependency.toml"
+    dependency_change.write_text(
+        original.replace('"attio>=0.22.8"', '"attio>=0.22.9"'),
+    )
+
+    baseline = calculate(PYPROJECT)
+    assert len(baseline) == 64
+    int(baseline, 16)
+    assert calculate(unrelated) == baseline
+    assert calculate(dependency_change) != baseline
+    assert calculate(PYPROJECT, architecture="amd64") != baseline
+
+
+def test_unit_workflow_only_publishes_dependency_images_from_trusted_main() -> None:
+    workflow = WORKFLOW.read_text()
+    normalized = " ".join(workflow.split())
+
     assert (
-        'echo "Host project uv cache: miss or stale; syncing dependencies '
-        '(${environment_key})"'
-    ) in warm_step
-    # Failed-check output (uv's package delta) is printed before reconciliation,
-    # and the helper is called again afterward as a mandatory post-sync check.
-    exact_hit = normalized.index(
-        'echo "Host project uv cache: exact hit (${environment_key})"',
+        "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8" in workflow
     )
-    miss_branch = normalized.index("else", exact_hit)
-    delta_output = normalized.index(
-        'echo "Host project uv cache validation delta:"',
-        miss_branch,
+    assert "# v6.19.2" in workflow
+    assert "github.ref == 'refs/heads/main'" in normalized
+    assert "github.event_name != 'pull_request'" in normalized
+    assert "steps.pytest_dependency_image.outputs.hit != 'true'" in normalized
+    assert "platforms: linux/arm64" in workflow
+    assert "push: true" in workflow
+    assert "steps.build_pytest_dependency_image.outputs.digest" in workflow
+    assert "cache-from" not in workflow
+    assert "cache-to" not in workflow
+    assert "docker/setup-qemu-action" not in workflow
+    assert "docker/setup-buildx-action" not in workflow
+
+
+def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> None:
+    workflow = WORKFLOW.read_text()
+    resolve_step = workflow.split("- name: Resolve pytest dependency image", 1)[
+        1
+    ].split("- name: Build and publish pytest dependency image", 1)[0]
+    run_step = workflow.split("- name: Run pytest in Dagger", 1)[1].split(
+        "- name: Upload Test Results to Trunk.io",
+        1,
+    )[0]
+
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     )
-    delta_details = normalized.index(
-        "printf '%s\\n' \"${validation_output}\"",
-        delta_output,
+    assert "nsc auth generate-dev-token --output_to" in workflow
+    assert 'echo "::add-mask::${registry_token}"' in workflow
+    assert "NAMESPACE_REGISTRY_TOKEN" in workflow
+    assert "Fork pull request: dependency image disabled" in workflow
+    assert 'git show "${BASE_SHA}:.github/workflows/ci/pytest_dagger.py"' in workflow
+    assert (
+        'git show "${BASE_SHA}:.github/workflows/ci/pytest-deps.Dockerfile"' in workflow
     )
-    dependency_sync = normalized.index(sync_command, miss_branch)
-    post_sync_check = normalized.rindex("check_project_env")
-    assert exact_hit < miss_branch < delta_output < delta_details < dependency_sync
-    assert post_sync_check > dependency_sync
-    assert "cache_key_file" not in warm_step
-    assert "miss_reasons" not in warm_step
-    assert "fingerprint" not in warm_step.lower()
+    assert "PYTEST_DEPENDENCY_DOCKERFILE" in workflow
+    assert 'dagger run python "${pipeline}"' in workflow
+    assert "github.event.pull_request.base.sha" in workflow
+    assert "SAME_REPOSITORY_PR" in workflow
+    assert "trusted CI assets are unavailable for a fork pull request" in workflow
+    assert "bootstrapping trusted CI assets from this same-repository PR" in workflow
+    assert 'if [ "${PULL_REQUEST_RUN}" = "true" ]; then' in workflow
+    assert (
+        'git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_key.py"'
+        in resolve_step
+    )
+    assert resolve_step.index('if [ "${TRUSTED_REGISTRY_PULL}" != "true" ]') < (
+        resolve_step.index('image_key="$(python "${key_script}"')
+    )
+    assert (
+        run_step.index("git show")
+        < run_step.index(
+            "nsc auth generate-dev-token",
+        )
+        < run_step.index('dagger run python "${pipeline}"')
+    )
 
 
 def test_unit_workflow_installs_uv_before_namespace_uv_cache() -> None:
@@ -155,11 +236,13 @@ def test_unit_workflow_initializes_empty_namespace_mounts_without_deleting_them(
 ):
     workflow = WORKFLOW.read_text()
 
-    assert 'uv venv --clear --python 3.13 "${dagger_venv}"' in workflow
+    assert 'find "${dagger_venv}" -mindepth 1 -delete' in workflow
+    assert 'uv venv --python 3.13 "${dagger_venv}"' in workflow
+    assert 'uv venv --clear --python 3.13 "${dagger_venv}"' not in workflow
     assert 'rm -rf "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"' not in workflow
 
 
-def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
+def test_unit_workflow_uses_dependency_image_and_local_fallbacks() -> None:
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()
 
@@ -171,92 +254,64 @@ def test_unit_workflow_seeds_dagger_uv_cache_and_uses_fallbacks() -> None:
     assert "docker stop" not in workflow
     assert "timeout 150 docker pull" in workflow
     assert "for attempt in $(seq 1 6)" in workflow
-    assert "DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}" in workflow
-    assert "dagger --cloud run python .github/workflows/ci/pytest_dagger.py" in workflow
-    assert (
-        "DAGGER_NO_NAG=1 dagger run python .github/workflows/ci/pytest_dagger.py"
-        in workflow
-    )
+    assert 'DAGGER_NO_NAG=1 dagger run python "${pipeline}"' in workflow
+    assert "DAGGER_CLOUD_COMPUTE_TOKEN" not in workflow
+    assert "dagger --cloud" not in workflow
     assert "trunk-io/analytics-uploader@" in workflow
     assert "junit-paths: junit.xml" in workflow
-    assert '"uv-cache"' in dagger
-    assert "dag.host().directory(str(HOST_PROJECT_ENV))" in dagger
-    assert "dag.host().directory(str(HOST_UV_PYTHON))" in dagger
-    assert "dag.host().directory(str(HOST_UV_CACHE))" in dagger
+    assert "PYTEST_DEPENDENCY_IMAGE" in dagger
+    assert "PYTEST_DEPENDENCY_DOCKERFILE" in dagger
+    assert "NAMESPACE_REGISTRY_TOKEN" in dagger
+    assert 'if "@sha256:" not in dependency_image' in dagger
+    assert "dag.set_secret(" in dagger
+    assert '.with_registry_auth(registry_host, "token", registry_secret)' in dagger
+    assert ".from_(dependency_image)" in dagger
+    assert dagger.index("with_registry_auth") < dagger.index(".from_(dependency_image)")
+    assert ".docker_build(" in dagger
+    assert "pytest-deps.Dockerfile" in dagger
+    assert "Pytest dependency image: unavailable; building cold" in dagger
+    assert "dag.host().file(dockerfile_override)" in dagger
+    assert '.with_file("pyproject.toml", source.file("pyproject.toml"))' in dagger
+    assert '.with_file("uv.lock", source.file("uv.lock"))' in dagger
+    assert "publish(" not in dagger
+    for forbidden in (
+        "HOST_PROJECT_ENV",
+        "HOST_UV_PYTHON",
+        "HOST_UV_CACHE",
+        'dag.cache_volume("uv-cache")',
+        "Dagger uv cache: seeding",
+        "curl -LsSf https://astral.sh/uv/install.sh",
+    ):
+        assert forbidden not in dagger
     assert 'dag.host().directory("scripts")' in dagger
-    assert 'with_directory("/opt/gtm-sdk/scripts", scripts)' in dagger
-    assert "Dagger uv cache: seeding from Namespace host cache" in dagger
-    assert (
-        '.with_mounted_cache(\n            "/root/.cache/uv",\n            uv_cache,\n            source=host_uv_cache,\n        )'
-        in dagger
-    )
-    assert (
-        ".with_mounted_directory(\n"
-        "            str(HOST_PROJECT_ENV),\n"
-        "            host_project_env,\n"
-        "            read_only=True,\n"
-        "        )" in dagger
-    )
-    assert (
-        ".with_mounted_directory(\n"
-        "            str(HOST_UV_PYTHON),\n"
-        "            host_uv_python,\n"
-        "            read_only=True,\n"
-        "        )" in dagger
-    )
-    assert (
-        '.with_env_variable("UV_PROJECT_ENVIRONMENT", str(HOST_PROJECT_ENV))' in dagger
-    )
+    assert 'with_directory("/src", source, owner="runner")' in dagger
+    assert 'with_directory("/opt/gtm-sdk/scripts", scripts, owner="runner")' in dagger
     assert '.with_env_variable("PYTHONPATH", "/src")' in dagger
-    assert (
-        ".with_mounted_directory(\n"
-        "            str(HOST_UV_CACHE),\n"
-        "            host_uv_cache,\n"
-        "            read_only=True,\n"
-        "        )" in dagger
-    )
+    assert '.with_env_variable("PYTHONDONTWRITEBYTECODE", "1")' in dagger
     assert "--junit-xml=junit.xml" in dagger
     assert "echo $? > /src/pytest_rc" in dagger
     assert "sys.exit(rc)" in dagger
     assert 'await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)' in dagger
     assert "actions/cache" not in workflow
-    assert "buildx" not in workflow.lower()
     assert "qemu" not in workflow.lower()
     assert "cache-from" not in workflow
     assert "cache-to" not in workflow
 
 
-def test_unit_workflow_warms_project_uv_cache_on_host() -> None:
+def test_unit_workflow_no_longer_builds_the_project_environment_on_host() -> None:
     workflow = WORKFLOW.read_text()
 
-    assert "Warm project uv cache" in workflow
-    assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'uv_cache_dir="$(uv cache dir)"' in workflow
-    assert "sha256sum pyproject.toml uv.lock" in workflow
-    assert "'python=3.13'" in workflow
-    assert '"arch=$(uname -m)"' in workflow
-    assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
-    assert "--all-extras --dev --locked" in workflow
-    assert "--no-install-project --inexact --check" in workflow
-    assert "uv pip install --no-deps --reinstall" in workflow
-    assert '--python "${project_env}/bin/python" .' in workflow
+    assert "Warm project uv cache" not in workflow
+    assert "Host project uv cache" not in workflow
+    assert 'project_env="$HOME/.dagger-sdk/venv"' not in workflow
+    assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' not in workflow
+    assert '--python "${project_env}/bin/python" .' not in workflow
+    assert "Install Dagger Python SDK" in workflow
     assert "dagger-io==0.21.7" in workflow
     assert "anyio==4.13.0" in workflow
-    assert 'if [ ! -x "${project_env}/bin/python" ]; then' in workflow
-    assert (
-        'echo "Host project uv cache interpreter: ${project_env}/bin/python"'
-        in workflow
-    )
-    assert (
-        'echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"' in workflow
-    )
-    assert (
-        'echo "Host project uv cache environment key: ${environment_key}"' in workflow
-    )
-    assert "Host project uv cache stamp" not in workflow
-    assert "expected fingerprint" not in workflow
+    assert 'version("dagger-io") == "0.21.7"' in workflow
+    assert 'version("anyio") == "4.13.0"' in workflow
     assert "cache: uv" in workflow
-    assert "~/.cache/uv" in workflow
 
 
 def test_unit_workflow_supports_manual_dispatch() -> None:
@@ -276,26 +331,72 @@ def test_unit_workflow_uses_a_fresh_dagger_engine() -> None:
     assert "_EXPERIMENTAL_DAGGER_RUNNER_HOST" not in workflow
     assert ":/var/lib/dagger" not in workflow
     assert "docker stop" not in workflow
+    assert "DAGGER_CLOUD_COMPUTE_TOKEN" not in workflow
+    assert "dagger --cloud" not in workflow
 
 
-def test_unit_dagger_pipeline_consumes_host_project_environment() -> None:
-    # The host project venv is mounted at its original absolute path so its
-    # interpreter symlink resolves through the sibling uv toolchain mount.
-    # Dagger must not recreate a separate `/src/.venv` on every fresh engine.
+def test_unit_dagger_pipeline_validates_the_immutable_environment() -> None:
     workflow = WORKFLOW.read_text()
     dagger = PYTEST_DAGGER.read_text()
-    assert 'project_env="$HOME/.dagger-sdk/venv"' in workflow
-    assert 'UV_PROJECT_ENVIRONMENT="${project_env}" uv sync' in workflow
+
+    normalized = " ".join(dagger.replace("\\\n", " ").split())
+    check_command = (
+        "uv sync --all-extras --dev --locked --no-install-project --inexact "
+        "--check --python /opt/venv/bin/python"
+    )
+    assert check_command in normalized
+    assert (
+        "uv pip install --no-deps --reinstall --no-build-isolation --offline " in dagger
+    )
+    assert '"--python /opt/venv/bin/python ."' in dagger
+    check_exec = normalized.index(
+        '.with_exec(["bash", "-c", DEPENDENCY_CHECK_CMD])',
+    )
+    install_exec = normalized.index(
+        '.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])',
+    )
+    pytest_exec = normalized.index('.with_exec(["bash", "-c", PYTEST_CMD])')
+    assert check_exec < install_exec < pytest_exec
+    assert "Warm project uv cache" not in workflow
     assert 'dag.cache_volume("venv")' not in dagger
-    assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in dagger
+    assert '"/opt/venv/bin/python" -m pytest ' in dagger
     assert '"/src/.venv"' not in dagger
 
 
-def test_unit_dagger_pipeline_mounts_the_namespace_project_venv() -> None:
-    dagger = PYTEST_DAGGER.read_text()
+def test_unit_dependency_image_contains_only_locked_dependencies() -> None:
+    dockerfile = PYTEST_DEPENDENCY_DOCKERFILE.read_text()
+    dockerignore = PYTEST_DEPENDENCY_DOCKERIGNORE.read_text()
+    pyproject = tomllib.loads(PYPROJECT.read_text())
+    lock = tomllib.loads(UV_LOCK.read_text())
 
-    assert 'HOST_PROJECT_ENV = HOST_DAGGER_SDK / "venv"' in dagger
-    assert '".dagger-sdk" / "project-venv"' not in dagger
+    assert dockerfile.count("@sha256:") >= 2
+    assert "python:3.13-slim-bookworm@sha256:" in dockerfile
+    assert "ghcr.io/astral-sh/uv:0.11.26@sha256:" in dockerfile
+    assert "apt-get install -y --no-install-recommends git" in dockerfile
+    assert "UV_PROJECT_ENVIRONMENT=/opt/venv" in dockerfile
+    assert "PYTHONDONTWRITEBYTECODE=1" in dockerfile
+    assert "useradd" in dockerfile
+    assert "USER runner" in dockerfile
+    assert "HEALTHCHECK NONE" in dockerfile
+    assert "COPY pyproject.toml uv.lock ./" in dockerfile
+    assert (
+        "COPY --chown=runner:runner --from=dependency-builder /opt/venv /opt/venv"
+        in dockerfile
+    )
+    assert "--all-extras" in dockerfile
+    assert "--dev" in dockerfile
+    assert "--locked" in dockerfile
+    assert "--no-install-project" in dockerfile
+    assert "--compile-bytecode" in dockerfile
+    assert "COPY . " not in dockerfile
+    assert "ADD . " not in dockerfile
+    assert "/src" not in dockerfile
+    assert dockerignore.splitlines() == ["**", "!pyproject.toml", "!uv.lock"]
+    assert "setuptools>=83.0.0" in pyproject["dependency-groups"]["dev"]
+    locked_setuptools = next(
+        package for package in lock["package"] if package["name"] == "setuptools"
+    )
+    assert locked_setuptools["version"] == "83.0.0"
 
 
 def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
@@ -311,7 +412,7 @@ def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:
 def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     source = PYTEST_DAGGER.read_text()
 
-    assert '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest ' in source
+    assert '"/opt/venv/bin/python" -m pytest ' in source
     assert "/opt/gtm-sdk" in source
     assert "-n 4 --dist=loadfile" in source
     assert "-p xdist.plugin" in source

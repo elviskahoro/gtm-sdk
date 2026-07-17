@@ -42,32 +42,26 @@ jobs:
           mkdir -p "$(uv cache dir)"
 
       # Namespace mounts these paths directly from the runner cache volume, so
-      # setup reuses the host-side Dagger venv and uv-managed interpreter
+      # setup reuses the host-side Dagger controller venv and interpreter
       # without a GitHub-hosted cache upload/download phase. Keep the paths
       # explicit so the venv and its interpreter remain independently visible.
       #
-      # Namespace cache-volume semantics (#330): every job receives a FORK of
-      # a committed volume generation; a clean job exit commits the fork as
-      # the new parent (last write wins), and Namespace explicitly serves a
-      # STALE generation rather than delaying startup ("applications should
-      # not assume that the cache contents match exactly the last committed
-      # version"). A restored generation is therefore only a candidate cache
-      # hit. The read-only `uv sync --check` below validates the actual
-      # environment before the workflow decides whether dependency
-      # synchronization is necessary; no sidecar file is authoritative.
+      # Namespace may serve a stale cache-volume generation (#330), so the SDK
+      # setup below validates the installed versions directly. Project
+      # dependencies are immutable OCI inputs and never enter this mount.
       - name: Cache host Dagger and uv data
         id: namespace_cache
         uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
         with:
           # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. Keep the host SDK
-          # venv and its uv-managed CPython as siblings under one mount
-          # (~/.dagger-sdk/{venv,uv-python}). uv cannot copy the interpreter
+          # controller venv and its uv-managed CPython as sibling paths
+          # (~/.dagger-sdk/{controller-venv,uv-python}). uv cannot copy the interpreter
           # into the venv (astral-sh/uv#17754), and pointing `uv venv` at the
           # mount root itself detaches the Namespace bind (issue #303) so
           # contents never persist.
           cache: uv
           path: |
-            ~/.dagger-sdk/venv
+            ~/.dagger-sdk/controller-venv
             ~/.dagger-sdk/uv-python
 
       # Capture the mounted state BEFORE any step mutates it, so a stale or
@@ -79,7 +73,7 @@ jobs:
           uv_cache_dir="$(uv cache dir)"
           echo "Namespace mount cache-hit output: ${{ steps.namespace_cache.outputs.cache-hit }}"
           findmnt -R "${uv_cache_dir}" || echo "findmnt: ${uv_cache_dir} is not a mount point"
-          findmnt -R "$HOME/.dagger-sdk/venv" || echo "findmnt: $HOME/.dagger-sdk/venv is not a mount point"
+          findmnt -R "$HOME/.dagger-sdk/controller-venv" || echo "findmnt: $HOME/.dagger-sdk/controller-venv is not a mount point"
           findmnt -R "$HOME/.dagger-sdk/uv-python" || echo "findmnt: $HOME/.dagger-sdk/uv-python is not a mount point"
           if [ -n "${NSC_CACHE_PATH:-}" ]; then
             echo "Cache volume inventory (${NSC_CACHE_PATH}):"
@@ -106,29 +100,26 @@ jobs:
       # (which has dagger-io/anyio).
       - name: Install Dagger Python SDK
         run: |
-          # ~/.dagger-sdk is the Namespace mount. Never delete/recreate that
-          # directory (uv venv --clear on the mount root does) — that detaches
-          # the bind and the tree silently stops persisting (cold in 5/5
-          # measured runs, issue #303). The venv lives at a subdirectory so
-          # cold recreate can replace it freely; the toolchain is a sibling
-          # so one mount restores bin/python's symlink target.
-          #
-          # Override setup-uv's default install dir only after the cache mount
-          # above — that path is not mounted yet during Install uv.
+          set -euo pipefail
           export UV_PYTHON_INSTALL_DIR="$HOME/.dagger-sdk/uv-python"
-          dagger_venv="$HOME/.dagger-sdk/venv"
-          mkdir -p "$HOME/.dagger-sdk"
-          if err="$("${dagger_venv}/bin/python" -c 'import dagger, anyio' 2>&1)"; then
+          dagger_venv="$HOME/.dagger-sdk/controller-venv"
+          mkdir -p "${dagger_venv}" "${UV_PYTHON_INSTALL_DIR}"
+          if err="$("${dagger_venv}/bin/python" - <<'PY' 2>&1
+          from importlib.metadata import version
+
+          import anyio
+          import dagger
+
+          assert version("dagger-io") == "0.21.7"
+          assert version("anyio") == "4.13.0"
+          PY
+          )"; then
             echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
           else
             echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold (validation error: ${err})"
-            # Force the managed interpreter into the sibling tree. Plain
-            # `uv venv` may reuse a pre-existing install under setup-uv's
-            # default directory and symlink outside ~/.dagger-sdk.
             uv python install --reinstall 3.13
-            # The Namespace action bind-mounts these directories. Clear the
-            # venv contents without attempting to remove its mount point.
-            uv venv --clear --python 3.13 "${dagger_venv}"
+            find "${dagger_venv}" -mindepth 1 -delete
+            uv venv --python 3.13 "${dagger_venv}"
             target="$(readlink -f "${dagger_venv}/bin/python" 2>/dev/null || readlink "${dagger_venv}/bin/python")"
             case "${target}" in
               "$HOME/.dagger-sdk"/*) ;;
@@ -137,7 +128,8 @@ jobs:
                 exit 1
                 ;;
             esac
-            uv pip install --python "${dagger_venv}/bin/python" dagger-io anyio
+            uv pip install --python "${dagger_venv}/bin/python" \
+              "dagger-io==0.21.7" "anyio==4.13.0"
           fi
           uv_cache_dir="$(uv cache dir)"
           if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
@@ -153,73 +145,134 @@ jobs:
           echo "UV_PYTHON_INSTALL_DIR=${UV_PYTHON_INSTALL_DIR}" >> "$GITHUB_ENV"
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
-      # Warm the project dependency cache on the host before starting Dagger.
-      # The Namespace action persists ~/.cache/uv plus the explicit SDK paths
-      # above, while the fresh Dagger engine only receives a snapshot of the
-      # host uv cache. Namespace may restore a stale generation, so inspect the
-      # installed environment directly instead of trusting sidecar metadata.
-      - name: Warm project uv cache
+      - name: Resolve pytest dependency image
+        id: pytest_dependency_image
+        env:
+          TRUSTED_REGISTRY_PULL: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
+          SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          # Reuse the Namespace-persisted SDK venv for project dependencies.
-          # The lock/Python/architecture hash is diagnostic only; uv's check of
-          # the restored environment is the correctness boundary.
-          project_env="$HOME/.dagger-sdk/venv"
-          environment_key="$({
-            sha256sum pyproject.toml uv.lock
-            printf '%s\n' 'python=3.13' "arch=$(uname -m)"
-          } | sha256sum | cut -d' ' -f1)"
+          dockerfile=".github/workflows/ci/pytest-deps.Dockerfile"
+          dockerignore="${dockerfile}.dockerignore"
+          key_script=".github/workflows/ci/pytest_dependency_key.py"
+          arch="$(uname -m)"
 
-          check_project_env() {
-            UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
-              --all-extras --dev --locked --no-install-project --inexact --check \
-              --python "${project_env}/bin/python"
-          }
+          if [ "${TRUSTED_REGISTRY_PULL}" != "true" ]; then
+            echo "Fork pull request: dependency image disabled; using cold Dagger build"
+            echo "key=" >> "${GITHUB_OUTPUT}"
+            echo "tag=" >> "${GITHUB_OUTPUT}"
+            echo "hit=false" >> "${GITHUB_OUTPUT}"
+            echo "reference=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
 
-          validation_output=""
-          if validation_output="$(check_project_env 2>&1)"; then
-            printf '%s\n' "${validation_output}"
-            echo "Host project uv cache: exact hit (${environment_key})"
-          else
-            echo "Host project uv cache: miss or stale; syncing dependencies (${environment_key})"
-            # uv's failed check describes the installed-package delta that
-            # makes this restored generation stale (or why it was unreadable).
-            echo "Host project uv cache validation delta:"
-            printf '%s\n' "${validation_output}"
-            if [ ! -x "${project_env}/bin/python" ]; then
-              uv venv --python 3.13 "${project_env}"
+          # Checkout contains the PR merge commit. Never execute a PR-owned key
+          # helper on the registry-authenticated runner host.
+          if [ "${PULL_REQUEST_RUN}" = "true" ]; then
+            trusted_key_script="${RUNNER_TEMP}/pytest_dependency_key.py"
+            if git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_key.py" > "${trusted_key_script}"; then
+              key_script="${trusted_key_script}"
+            elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
+              echo "::warning::bootstrapping trusted CI assets from this same-repository PR"
+              rm -f "${trusted_key_script}"
+            else
+              echo "::error::trusted CI assets are unavailable for a fork pull request"
+              exit 1
             fi
-            UV_PROJECT_ENVIRONMENT="${project_env}" uv sync \
-              --all-extras --dev --locked --no-install-project --inexact \
-              --python "${project_env}/bin/python"
-            # Never proceed with a partially reconciled environment.
-            check_project_env
-            echo "Host project uv cache: refreshed (${environment_key})"
           fi
-          # Install only the local project package into the warmed environment.
-          # A non-editable install keeps Dagger workers independent of the
-          # runner checkout path without recreating the dependency graph.
-          uv pip install --no-deps --reinstall \
-            --python "${project_env}/bin/python" .
-          uv pip install --no-deps --reinstall \
-            --python "${project_env}/bin/python" \
-            "dagger-io==0.21.7" "anyio==4.13.0"
-          if [ -x "${project_env}/bin/python" ] &&
-            resolved_interpreter="$("${project_env}/bin/python" -c 'import sys; print(sys.executable)')"; then
-            echo "Host project uv cache interpreter: ${project_env}/bin/python"
-            echo "Host project uv cache resolved interpreter: ${resolved_interpreter}"
+          image_key="$(python "${key_script}" \
+            --architecture "${arch}" \
+            --python-version 3.13 \
+            --pyproject pyproject.toml \
+            --uv-lock uv.lock \
+            --dockerfile "${dockerfile}" \
+            --dockerignore "${dockerignore}")"
+          image_tag="${NSC_CONTAINER_REGISTRY}/gtm-sdk-pytest-deps:${image_key}"
+          echo "key=${image_key}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${image_tag}" >> "${GITHUB_OUTPUT}"
+
+          manifest_error="$(mktemp)"
+          trap 'rm -f "${manifest_error}"' EXIT
+          if manifest="$(docker manifest inspect --verbose "${image_tag}" 2>"${manifest_error}")"; then
+            digest="$(printf '%s' "${manifest}" | MANIFEST_ARCH="${arch}" python -c '
+          import json
+          import os
+          import sys
+
+          requested = os.environ["MANIFEST_ARCH"]
+          architecture = {"aarch64": "arm64", "arm64": "arm64"}.get(
+              requested,
+              requested,
+          )
+          payload = json.load(sys.stdin)
+          manifests = payload if isinstance(payload, list) else [payload]
+          matches = [
+              manifest
+              for manifest in manifests
+              if manifest.get("Descriptor", {})
+              .get("platform", {})
+              .get("architecture")
+              == architecture
+          ]
+          if len(matches) != 1:
+              raise SystemExit(
+                  f"expected one {architecture} manifest, found {len(matches)}",
+              )
+          print(matches[0]["Descriptor"]["digest"])
+          ')"
+            if [[ "${digest}" == sha256:* ]]; then
+              reference="${image_tag}@${digest}"
+              echo "Pytest dependency image: exact hit (${reference})"
+              echo "hit=true" >> "${GITHUB_OUTPUT}"
+              echo "reference=${reference}" >> "${GITHUB_OUTPUT}"
+            else
+              echo "::error::registry returned an invalid dependency image digest"
+              exit 1
+            fi
+          elif grep -Eqi 'manifest unknown|no such manifest|name unknown' "${manifest_error}"; then
+            echo "Pytest dependency image: miss (${image_key})"
+            echo "hit=false" >> "${GITHUB_OUTPUT}"
+            echo "reference=" >> "${GITHUB_OUTPUT}"
           else
-            echo "Host project uv cache interpreter: invalid or absent"
+            cat "${manifest_error}" >&2
+            echo "::error::could not inspect pytest dependency image"
+            exit 1
           fi
-          echo "Host project uv cache environment key: ${environment_key}"
-          if [ -d "${UV_PYTHON_INSTALL_DIR}" ] &&
-            [ "$(find "${UV_PYTHON_INSTALL_DIR}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-            echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"
-            echo "Host project uv cache toolchain state: present"
+
+      - name: Build and publish pytest dependency image
+        id: build_pytest_dependency_image
+        if: >-
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request' &&
+          steps.pytest_dependency_image.outputs.hit != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: .github/workflows/ci/pytest-deps.Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.pytest_dependency_image.outputs.tag }}
+
+      - name: Select pytest dependency image
+        id: selected_pytest_dependency_image
+        env:
+          EXISTING_REFERENCE: ${{ steps.pytest_dependency_image.outputs.reference }}
+          IMAGE_TAG: ${{ steps.pytest_dependency_image.outputs.tag }}
+          PUBLISHED_DIGEST: ${{ steps.build_pytest_dependency_image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ -n "${EXISTING_REFERENCE}" ]; then
+            reference="${EXISTING_REFERENCE}"
+          elif [[ "${PUBLISHED_DIGEST}" == sha256:* ]]; then
+            reference="${IMAGE_TAG}@${PUBLISHED_DIGEST}"
+            echo "Pytest dependency image: published (${reference})"
           else
-            echo "Host project uv cache toolchain: ${UV_PYTHON_INSTALL_DIR}"
-            echo "Host project uv cache toolchain state: absent"
+            reference=""
+            echo "Pytest dependency image: unavailable; Dagger will build cold"
           fi
+          echo "reference=${reference}" >> "${GITHUB_OUTPUT}"
 
       - name: Report Namespace cache state
         run: |
@@ -271,29 +324,50 @@ jobs:
           echo "::error::failed to pull ${image} after 6 attempts"
           exit 1
 
-      # Use a fresh auto-provisioned engine for every job. The Namespace
-      # profile's local Docker cache retains the outer engine image, while the
-      # host uv and SDK caches above remain independently persistent. Dagger's
-      # inner BuildKit layers and cache volumes intentionally do not persist.
-
-      # DAGGER_CLOUD_TOKEN must live on the runner's process environment (not
-      # inside the container) — the CLI reads it to ship traces to Dagger
-      # Cloud. The value is stored in Infisical and synced into repo
-      # `secrets.*` by Infisical's GitHub App integration (same path as
-      # TRUNK_API_TOKEN / MODAL_TOKEN_*). Cloud tracing is optional: forked PRs
-      # and manually dispatched runs may not receive repository secrets, so use
-      # a fresh local engine when the token is unavailable.
+      # Use a fresh local engine for every job. The Namespace registry retains
+      # immutable dependency inputs; mutable engine state is never persisted.
+      # Pull requests execute the controller and dependency Dockerfile from the
+      # base SHA so checked-out PR source only runs inside Dagger. Forks also
+      # build cold and never receive a workspace token; repository runner policy
+      # remains the outer trust boundary for workflow definitions.
       - name: Run pytest in Dagger
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}
+          PYTEST_DEPENDENCY_IMAGE: ${{ steps.selected_pytest_dependency_image.outputs.reference }}
+          PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
+          SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ -n "${DAGGER_CLOUD_TOKEN:-}" ]; then
-            echo "Dagger Cloud: enabled"
-            dagger --cloud run python .github/workflows/ci/pytest_dagger.py
-          else
-            echo "Dagger Cloud: disabled (DAGGER_CLOUD_COMPUTE_TOKEN is unavailable)"
-            DAGGER_NO_NAG=1 dagger run python .github/workflows/ci/pytest_dagger.py
+          set -euo pipefail
+          pipeline=".github/workflows/ci/pytest_dagger.py"
+          if [ "${PULL_REQUEST_RUN}" = "true" ]; then
+            trusted_pipeline="${RUNNER_TEMP}/pytest_dagger.py"
+            trusted_dockerfile="${RUNNER_TEMP}/pytest-deps.Dockerfile"
+            if git show "${BASE_SHA}:.github/workflows/ci/pytest_dagger.py" > "${trusted_pipeline}" &&
+              git show "${BASE_SHA}:.github/workflows/ci/pytest-deps.Dockerfile" > "${trusted_dockerfile}"; then
+              pipeline="${trusted_pipeline}"
+              export PYTEST_DEPENDENCY_DOCKERFILE="${trusted_dockerfile}"
+              echo "Pull request controller: trusted base SHA (${BASE_SHA})"
+            elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
+              echo "::warning::bootstrapping trusted CI assets from this same-repository PR"
+              rm -f "${trusted_pipeline}" "${trusted_dockerfile}"
+            else
+              echo "::error::trusted CI assets are unavailable for a fork pull request"
+              exit 1
+            fi
           fi
+          if [ -n "${PYTEST_DEPENDENCY_IMAGE}" ]; then
+            registry_token_file="$(mktemp)"
+            trap 'rm -f "${registry_token_file}"' EXIT
+            nsc auth generate-dev-token --output_to "${registry_token_file}"
+            registry_token="$(<"${registry_token_file}")"
+            if [ -z "${registry_token}" ]; then
+              echo "::error::Namespace generated an empty registry token"
+              exit 1
+            fi
+            echo "::add-mask::${registry_token}"
+            export NAMESPACE_REGISTRY_TOKEN="${registry_token}"
+          fi
+          DAGGER_NO_NAG=1 dagger run python "${pipeline}"
 
       # If this step errors "Unauthorized access, your Trunk organization URL
       # slug or token may be incorrect", it is almost always a dead/revoked
