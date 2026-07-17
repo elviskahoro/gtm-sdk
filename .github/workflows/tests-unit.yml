@@ -362,12 +362,9 @@ jobs:
             fi
           fi
           if [ -n "${PYTEST_DEPENDENCY_IMAGE}" ]; then
-            registry_token_file="$(mktemp)"
-            trap 'rm -f "${registry_token_file}"' EXIT
-            nsc auth generate-dev-token --output_to "${registry_token_file}"
-            registry_token="$(<"${registry_token_file}")"
+            registry_token="$(python -c 'import json, os; from pathlib import Path; token = json.loads(Path(os.environ["NSC_TOKEN_FILE"]).read_text()); print(token.get("bearer_token", ""))')"
             if [ -z "${registry_token}" ]; then
-              echo "::error::Namespace generated an empty registry token"
+              echo "::error::Namespace runner workload token has no bearer token"
               exit 1
             fi
             echo "::add-mask::${registry_token}"
