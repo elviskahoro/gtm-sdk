@@ -114,7 +114,7 @@ def test_unit_workflow_resolves_an_immutable_dependency_image() -> None:
     assert '[[ "${digest}" == sha256:* ]]' in workflow
     assert "PYTEST_DEPENDENCY_IMAGE" in workflow
     assert ":latest" not in workflow
-    assert "manifest unknown|no such manifest|name unknown" in workflow
+    assert "manifest unknown|no such manifest|name[ _]unknown" in workflow
     assert "manifest unknown|no such manifest|not found" not in workflow
 
 
