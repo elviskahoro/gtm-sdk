@@ -231,7 +231,7 @@ jobs:
               echo "::error::registry returned an invalid dependency image digest"
               exit 1
             fi
-          elif grep -Eqi 'manifest unknown|no such manifest|name unknown' "${manifest_error}"; then
+          elif grep -Eqi 'manifest unknown|no such manifest|name[ _]unknown' "${manifest_error}"; then
             echo "Pytest dependency image: miss (${image_key})"
             echo "hit=false" >> "${GITHUB_OUTPUT}"
             echo "reference=" >> "${GITHUB_OUTPUT}"
@@ -244,9 +244,7 @@ jobs:
       - name: Build and publish pytest dependency image
         id: build_pytest_dependency_image
         if: >-
-          github.ref == 'refs/heads/main' &&
-          github.event_name != 'pull_request' &&
-          steps.pytest_dependency_image.outputs.hit != 'true'
+          github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.pytest_dependency_image.outputs.hit != 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
