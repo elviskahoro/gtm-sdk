@@ -184,7 +184,7 @@ lint:
       paths:
         - "*.ipynb"
 
-    # Mintlify MDX mixes JSX components with fenced code blocks, which
+    # Documentation MDX mixes JSX components with fenced code blocks, which
     # markdownlint misreads as inconsistent code-block styles (MD046).
     - linters: [markdownlint, markdownlint-cli2]
       paths:

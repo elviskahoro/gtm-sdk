@@ -6,7 +6,7 @@ Go-To-Market SDK + CLI for account research, enrichment, CRM sync, and outreach.
 - Python: `>=3.13,<3.14`
 - Package manager: **`uv` only** (never bare `pip`)
 - License: MIT
-- Docs: <https://elviskahoro.mintlify.app> (source in [`docs/`](docs/))
+- Docs: [`docs/`](docs/)
 
 ## Layout
 

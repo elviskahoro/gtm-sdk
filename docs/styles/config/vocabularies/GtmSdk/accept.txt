@@ -6,7 +6,6 @@ Grafana
 Hookdeck
 Infisical
 Logfire
-Mintlify
 Octolens
 Polars
 Pydantic
