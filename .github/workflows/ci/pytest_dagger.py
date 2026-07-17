@@ -4,17 +4,15 @@ Invoked the same way locally and in CI:
 
     dagger run python .github/workflows/ci/pytest_dagger.py
 
-The pipeline runs pytest inside a python:3.13 container and exports `junit.xml`
-to the host so a follow-up step (e.g. trunk-io/analytics-uploader) can upload
-it. On the ARM64 8x16 Namespace runner, local measurements favored four
-explicit xdist workers over both serial and eight workers: serial 13.16s, four
-workers 10.74s, eight workers 12.08s.
+The pipeline runs pytest from an immutable, lockfile-derived dependency image
+and exports `junit.xml` to the host so a follow-up step (e.g.
+trunk-io/analytics-uploader) can upload it. On the ARM64 8x16 Namespace runner,
+local measurements favored four explicit xdist workers over both serial and
+eight workers: serial 13.16s, four workers 10.74s, eight workers 12.08s.
 
-The workflow warms a lockfile-fingerprinted project environment on the host
-before opening Dagger. The pipeline mounts that dependency-only environment and its sibling
-uv-managed Python toolchain at their original absolute paths, then runs
-interpreter directly with `/src` on `PYTHONPATH`; this avoids both network downloads and reinstalling the
-188-package environment inside every fresh Dagger engine.
+Trusted main runs publish the image outside this pipeline. Pulling by digest
+keeps dependency selection immutable; when no image is available, Dagger builds
+the same dependency-only Dockerfile locally without publishing it.
 
 The pipeline *fails* (non-zero exit) when pytest exits non-zero, while still
 exporting the report. A previous `... || true` swallowed pytest's exit code so
@@ -25,6 +23,7 @@ so the report stays exportable) and re-raise it after the export.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from time import perf_counter
@@ -40,19 +39,21 @@ PYTEST_CMD = (
     "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\"); import scripts.lib' "
     ">/tmp/sitecustomize.py; "
     "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
-    '"$UV_PROJECT_ENVIRONMENT/bin/python" -m pytest '
+    '"/opt/venv/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"
 )
+DEPENDENCY_CHECK_CMD = "uv sync --all-extras --dev --locked --no-install-project --inexact --check --python /opt/venv/bin/python"
+PROJECT_INSTALL_CMD = (
+    "uv pip install --no-deps --reinstall --no-build-isolation --offline "
+    "--python /opt/venv/bin/python ."
+)
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
-HOST_DAGGER_SDK = Path.home() / ".dagger-sdk"
-HOST_PROJECT_ENV = HOST_DAGGER_SDK / "venv"
-HOST_UV_PYTHON = HOST_DAGGER_SDK / "uv-python"
-HOST_UV_CACHE = Path.home() / ".cache" / "uv"
+DEPENDENCY_DOCKERFILE_PATH = ".github/workflows/ci/pytest-deps.Dockerfile"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
 # scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`.
@@ -89,73 +90,78 @@ SOURCE_EXCLUDES = [
 ]
 
 
+def dependency_build_context(source: dagger.Directory) -> dagger.Directory:
+    dockerfile_override = os.environ.get(
+        "PYTEST_DEPENDENCY_DOCKERFILE",
+        "",
+    ).strip()
+    if dockerfile_override:
+        dockerfile = dag.host().file(dockerfile_override)
+    else:
+        dockerfile = source.file(DEPENDENCY_DOCKERFILE_PATH)
+
+    return (
+        dag.directory()
+        .with_file("pyproject.toml", source.file("pyproject.toml"))
+        .with_file("uv.lock", source.file("uv.lock"))
+        .with_file("pytest-deps.Dockerfile", dockerfile)
+    )
+
+
+def dependency_base(source: dagger.Directory) -> dagger.Container:
+    """Return the immutable dependency image or build it locally when absent."""
+    dependency_image = os.environ.get("PYTEST_DEPENDENCY_IMAGE", "").strip()
+    if not dependency_image:
+        print("Pytest dependency image: unavailable; building cold")
+        return dependency_build_context(source).docker_build(
+            dockerfile="pytest-deps.Dockerfile",
+            platform=dagger.Platform("linux/arm64"),
+        )
+
+    if "@sha256:" not in dependency_image:
+        raise ValueError(
+            "PYTEST_DEPENDENCY_IMAGE must be an immutable digest reference",
+        )
+
+    print(f"Pytest dependency image: {dependency_image}")
+    registry_host = dependency_image.split("/", 1)[0]
+    container = dag.container(platform=dagger.Platform("linux/arm64"))
+    registry_token = os.environ.get("NAMESPACE_REGISTRY_TOKEN", "").strip()
+    if registry_token:
+        registry_secret = dag.set_secret("namespace-registry-token", registry_token)
+        return (
+            container.with_registry_auth(registry_host, "token", registry_secret)
+            .from_(dependency_image)
+            .without_registry_auth(registry_host)
+        )
+
+    return container.from_(dependency_image)
+
+
 def build_container() -> dagger.Container:
     """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     scripts = dag.host().directory("scripts")
-    uv_cache = dag.cache_volume("uv-cache")
-    host_uv_cache = dag.host().directory(str(HOST_UV_CACHE))
-    # The host workflow warms these paths under the Namespace cache. Mount
-    # them at their original absolute paths so the project's Python symlink
-    # resolves through the sibling uv-managed interpreter directory. A
-    # mounted directory is session input, not a multi-GB container layer.
-    host_project_env = dag.host().directory(str(HOST_PROJECT_ENV))
-    host_uv_python = dag.host().directory(str(HOST_UV_PYTHON))
+    base = dependency_base(source)
 
     return (
-        dag.container()
-        .from_("python:3.13")
-        .with_exec(
-            ["bash", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"],
-        )
-        .with_env_variable("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
-        # The uv wheel cache and .venv are distinct mounts (separate
-        # filesystems), so uv's default hardlink install always fails and
-        # falls back to copying with a per-run warning; declare copy mode.
-        .with_env_variable("UV_LINK_MODE", "copy")
-        .with_mounted_cache(
-            "/root/.cache/uv",
-            uv_cache,
-            source=host_uv_cache,
-        )
-        .with_mounted_directory(
-            str(HOST_PROJECT_ENV),
-            host_project_env,
-            read_only=True,
-        )
-        .with_mounted_directory(
-            str(HOST_UV_PYTHON),
-            host_uv_python,
-            read_only=True,
-        )
-        # uv's host venv uses symlink mode by default. Expose the artifact
-        # cache at its original path so those package links resolve in the
-        # container; the /root cache mount above is the path used by uv itself.
-        .with_mounted_directory(
-            str(HOST_UV_CACHE),
-            host_uv_cache,
-            read_only=True,
-        )
-        .with_directory("/src", source)
+        base.with_directory("/src", source, owner="runner")
         # Keep the small repo-local helper package under a separate import
         # root so an incomplete `/src` snapshot cannot shadow `scripts.lib`.
-        .with_directory("/opt/gtm-sdk/scripts", scripts)
+        .with_directory("/opt/gtm-sdk/scripts", scripts, owner="runner")
         .with_workdir("/src")
-        # The editable project path recorded in the host venv points at the
-        # runner checkout, not /src. Tests import the checked-out source
-        # directly, so make that path explicit instead of copying/rebuilding
-        # the host environment.
-        .with_env_variable("UV_PROJECT_ENVIRONMENT", str(HOST_PROJECT_ENV))
         .with_env_variable("PYTHONPATH", "/src")
+        .with_env_variable("PYTHONDONTWRITEBYTECODE", "1")
         .with_exec(["bash", "-c", GIT_INIT_CMD])
         .with_env_variable("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+        .with_exec(["bash", "-c", DEPENDENCY_CHECK_CMD])
+        .with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
         .with_exec(["bash", "-c", PYTEST_CMD])
     )
 
 
 async def main() -> None:
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
-        print("Dagger uv cache: seeding from Namespace host cache (~/.cache/uv)")
         ctr = build_container()
 
         # Read pytest's real exit code (captured in PYTEST_CMD) first so we know
