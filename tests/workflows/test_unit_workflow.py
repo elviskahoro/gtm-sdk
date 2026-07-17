@@ -188,6 +188,8 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
     assert (
         "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     )
+    assert "id-token: write" in workflow
+    assert "nsc auth exchange-github-token --ensure 10m" in workflow
     assert "nsc auth generate-dev-token --output_to" in workflow
     assert 'echo "::add-mask::${registry_token}"' in workflow
     assert "NAMESPACE_REGISTRY_TOKEN" in workflow
@@ -212,6 +214,7 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
     )
     assert (
         run_step.index("git show")
+        < run_step.index("nsc auth exchange-github-token")
         < run_step.index(
             "nsc auth generate-dev-token",
         )
