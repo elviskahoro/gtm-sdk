@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   pytest:
@@ -354,6 +355,7 @@ jobs:
             fi
           fi
           if [ -n "${PYTEST_DEPENDENCY_IMAGE}" ]; then
+            nsc auth exchange-github-token --ensure 10m
             registry_token_file="$(mktemp)"
             trap 'rm -f "${registry_token_file}"' EXIT
             nsc auth generate-dev-token --output_to "${registry_token_file}"
