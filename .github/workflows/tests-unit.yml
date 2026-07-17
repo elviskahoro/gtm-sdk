@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   pytest:
@@ -273,6 +272,14 @@ jobs:
           fi
           echo "reference=${reference}" >> "${GITHUB_OUTPUT}"
 
+      # Namespace runners mount a short-lived workload token, but direct `nsc`
+      # calls only discover it after the official setup action exports
+      # NSC_TOKEN_FILE. Automatic host Docker auth does not propagate into the
+      # nested Dagger engine.
+      - name: Configure Namespace registry access
+        if: steps.selected_pytest_dependency_image.outputs.reference != ''
+        uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
+
       - name: Report Namespace cache state
         run: |
           echo "Namespace cache exact hit: ${{ steps.namespace_cache.outputs.cache-hit }}"
@@ -355,7 +362,6 @@ jobs:
             fi
           fi
           if [ -n "${PYTEST_DEPENDENCY_IMAGE}" ]; then
-            nsc auth exchange-github-token --ensure 10m
             registry_token_file="$(mktemp)"
             trap 'rm -f "${registry_token_file}"' EXIT
             nsc auth generate-dev-token --output_to "${registry_token_file}"
