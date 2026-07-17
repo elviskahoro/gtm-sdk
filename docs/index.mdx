@@ -1,19 +1,16 @@
 ---
-title: "gtm-sdk: Go-To-Market SDK and CLI for Modal"
-description: "Layered Python SDK and Typer CLI for account research, enrichment, CRM sync, and outreach workflows, deployed as Modal serverless functions."
+title: "Go-To-Market SDK and CLI"
+description: "Layered Python SDK and CLI for GTM workflows e.g. account research, enrichment, CRM sync, and outreach workflows."
 ---
 
-**gtm-sdk** is a layered Go-To-Market toolkit: a thin Typer CLI on top of workflow
-orchestration on top of single-SDK adapters. It deploys as Modal serverless functions
-and is consumable as an editable Python package.
+**A** thin Typer CLI on top of workflow orchestration on top of single-SDK adapters. It deploys as Modal serverless functions (enables being called via webhooks or directly within a Modal proxy as functions) and is consumable as an editable Python package.
 
 With one CLI you can:
 
 - **Research and enrich accounts** — `gtm accounts research`, `gtm apollo people enrich`
 - **Sync your CRM** — `gtm attio people upsert`, `gtm attio companies add`
 - **Search and extract from the web** — `gtm exa search`, `gtm parallel extract`
-- **Export meetings** — `gtm granola export`, plus Cal.com, Fathom, and Fireflies webhook
-  pipelines into Attio
+- **Export meetings** — `gtm granola export`, plus Cal.com, Fathom, and Fireflies webhook pipelines into Attio
 - **Track visitors and mentions** — RB2B and Octolens webhook handlers with CRM export
 
 ## Architecture
@@ -28,8 +25,7 @@ The repo enforces a strict layering:
 | Data products | `data-gen/` | Independent, composable data generation and enrichment pipelines. |
 | Webhooks | `webhooks/` | Standalone Modal webhook handlers, deployed individually. |
 
-The [architecture page](/concepts/architecture) covers the layer rules and where new code
-goes.
+The [architecture page](/concepts/architecture) covers the layer rules and where new code goes.
 
 ## Start here
 
@@ -37,12 +33,15 @@ goes.
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Install dependencies and run your first command in five minutes.
   </Card>
+
   <Card title="CLI reference" icon="terminal" href="/cli/index">
     Every command group, generated from the CLI's own help text.
   </Card>
+
   <Card title="Secrets and API keys" icon="key" href="/secrets">
     Provider keys via flags, environment variables, or Infisical.
   </Card>
+
   <Card title="Telemetry" icon="chart-line" href="/telemetry/overview">
     Wire the OTEL collector to Dash0, Grafana Cloud, and other providers.
   </Card>
@@ -50,7 +49,4 @@ goes.
 
 ## Built for agents
 
-Every page here is machine-readable: the site serves
-[`/llms.txt`](https://elviskahoro.mintlify.app/llms.txt), Markdown variants of every page
-(append `.md` to any URL), and a hosted MCP server. If you are pointing an AI agent at
-this SDK, start with [Using these docs with AI tools](/ai-tools).
+Every page here is machine-readable: the site serves [`/llms.txt`](https://elviskahoro.mintlify.app/llms.txt), Markdown variants of every page (append `.md` to any URL), and a hosted MCP server. If you are pointing an AI agent at this SDK, start with [Using these docs with AI tools](/ai-tools).

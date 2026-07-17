@@ -1,5 +1,5 @@
 ---
-title: "Quickstart: install gtm-sdk and run your first command"
+title: "Installing the SDK and running your first command"
 description: "Clone gtm-sdk, install dependencies with uv, run local CLI commands, then wire credentials and a Modal deployment for the provider-backed commands."
 ---
 
@@ -9,9 +9,7 @@ import SecretsSetup from '/snippets/secrets-setup.mdx';
 
 - Python `>=3.13,<3.14`
 - [`uv`](https://docs.astral.sh/uv/) — the only supported package manager (never bare `pip`)
-- For provider-backed commands: a [Modal](https://modal.com/) account and either provider
-  API keys or an [Infisical](https://infisical.com/) project (see
-  [Secrets and API keys](/secrets))
+- For provider-backed commands: a [Modal](https://modal.com/) account and either provider API keys or an [Infisical](https://infisical.com/) project (see [Secrets and API keys](/secrets))
 
 ## Get started
 
@@ -40,12 +38,10 @@ import SecretsSetup from '/snippets/secrets-setup.mdx';
     gtm v0.1.0
     ```
 
-    `uv run gtm --help` lists the command groups: `accounts`, `apollo`, `attio`,
-    `enrichment`, `exa`, `gmail`, `granola`, `parallel`, `sanity`, and `webhook`.
+    `uv run gtm --help` lists the command groups: `accounts`, `apollo`, `attio`, `enrichment`, `exa`, `gmail`, `granola`, `parallel`, `sanity`, and `webhook`.
   </Step>
   <Step title="Try a local command">
-    Some commands run entirely on your machine — no keys, no deployment. Decode a Gmail
-    web URL to its API message ID:
+    Some commands run entirely on your machine — no keys, no deployment. Decode a Gmail web URL to its API message ID:
 
     ```bash
     uv run gtm gmail url decode "https://mail.google.com/mail/u/0/#inbox/FMfcgzQgLPNbWJPPscDGRbsGngFwlCpq"
@@ -56,23 +52,16 @@ import SecretsSetup from '/snippets/secrets-setup.mdx';
     ```
   </Step>
   <Step title="Wire credentials for provider-backed commands">
-    Commands that touch external providers (Exa, Attio, Apollo, Parallel, …) execute as
-    functions on **your Modal deployment** — the CLI is a thin client that invokes them by
-    name. Two things make those commands work:
+    Commands that touch external providers (Exa, Attio, Apollo, Parallel, …) execute as functions on **your Modal deployment** — the CLI is a thin client that invokes them by name. Two things make those commands work:
 
     1. **A deployed app.** Authenticate with Modal (`uv run modal token new`), then:
-
        ```bash
        uv run modal deploy deploy.py
        ```
-
-    2. **Provider keys.** Pass them per command with API-key flags, or let the deployed
-       functions fetch them from Infisical at entry:
-
+    2. **Provider keys.** Pass them per command with API-key flags, or let the deployed functions fetch them from Infisical at entry:
        <SecretsSetup />
 
-    The [Secrets and API keys](/secrets) page explains the resolution order and the
-    Infisical bootstrap in full.
+    The [Secrets and API keys](/secrets) page explains the resolution order and the Infisical bootstrap in full.
   </Step>
 </Steps>
 
@@ -89,12 +78,15 @@ uv run pytest       # tests (integration tests excluded by default)
   <Card title="Secrets and API keys" icon="key" href="/secrets">
     Key resolution order, Infisical bootstrap, and the env-var reference.
   </Card>
+
   <Card title="CLI contract" icon="terminal" href="/concepts/cli-contract">
     JSON on stdout, errors on stderr, preview-by-default mutations.
   </Card>
+
   <Card title="Architecture" icon="layer-group" href="/concepts/architecture">
     The enforced cli → src → libs layering and where new code goes.
   </Card>
+
   <Card title="Telemetry" icon="chart-line" href="/telemetry/overview">
     OTEL collector fan-out to Dash0, HyperDX, Logfire, and Grafana.
   </Card>
