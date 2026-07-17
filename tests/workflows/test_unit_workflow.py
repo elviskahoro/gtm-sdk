@@ -204,7 +204,10 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
         "steps.selected_pytest_dependency_image.outputs.reference != ''"
         in namespace_setup_step
     )
-    assert "nsc auth generate-dev-token --output_to" in workflow
+    assert "nsc auth generate-dev-token" not in workflow
+    assert "registry_token_file" not in workflow
+    assert 'os.environ["NSC_TOKEN_FILE"]' in run_step
+    assert 'token.get("bearer_token", "")' in run_step
     assert 'echo "::add-mask::${registry_token}"' in workflow
     assert "NAMESPACE_REGISTRY_TOKEN" in workflow
     assert "Fork pull request: dependency image disabled" in workflow
@@ -228,9 +231,8 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
     )
     assert (
         run_step.index("git show")
-        < run_step.index(
-            "nsc auth generate-dev-token",
-        )
+        < run_step.index('os.environ["NSC_TOKEN_FILE"]')
+        < run_step.index('echo "::add-mask::${registry_token}"')
         < run_step.index('dagger run python "${pipeline}"')
     )
 
