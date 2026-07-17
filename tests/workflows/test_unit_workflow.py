@@ -184,12 +184,26 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
         "- name: Upload Test Results to Trunk.io",
         1,
     )[0]
+    assert "- name: Configure Namespace registry access" in workflow
+    namespace_setup_step = workflow.split(
+        "- name: Configure Namespace registry access",
+        1,
+    )[1].split("- name: Report Namespace cache state", 1)[0]
 
     assert (
         "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     )
-    assert "id-token: write" in workflow
-    assert "nsc auth exchange-github-token --ensure 10m" in workflow
+    assert "id-token: write" not in workflow
+    assert "nsc auth exchange-github-token" not in workflow
+    assert (
+        "namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc"
+        in namespace_setup_step
+    )
+    assert "# v0.0.12" in namespace_setup_step
+    assert (
+        "steps.selected_pytest_dependency_image.outputs.reference != ''"
+        in namespace_setup_step
+    )
     assert "nsc auth generate-dev-token --output_to" in workflow
     assert 'echo "::add-mask::${registry_token}"' in workflow
     assert "NAMESPACE_REGISTRY_TOKEN" in workflow
@@ -214,7 +228,6 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
     )
     assert (
         run_step.index("git show")
-        < run_step.index("nsc auth exchange-github-token")
         < run_step.index(
             "nsc auth generate-dev-token",
         )
