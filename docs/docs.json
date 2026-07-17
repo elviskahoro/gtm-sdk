@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "sequoia",
+  "theme": "luma",
   "name": "gtm-sdk",
   "description": "Go-To-Market Python SDK + CLI for account research, enrichment, CRM sync, and outreach. A foundation to bootstrap GTM Agents.",
   "colors": {
