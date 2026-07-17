@@ -3,15 +3,15 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Lint docs/ pages for the conventions the Mintlify site depends on.
+"""Lint docs/ pages for the conventions the published site depends on.
 
 Checks every page under docs/ (``.mdx``, plus any legacy ``.md``):
 
 1. Frontmatter has a ``title`` and a ``description``.
-2. The description is a single line under 300 characters — Mintlify serves it
+2. The description is a single line under 300 characters — the site serves it
    as the page's llms.txt entry, and llms.txt truncates at 300 chars / first
    line break, so a violation silently degrades agent-facing output.
-3. The body contains no ``#`` H1 heading — Mintlify renders the frontmatter
+3. The body contains no ``#`` H1 heading — the site renders the frontmatter
    title as the H1, so a body H1 duplicates it on the rendered page.
 4. Adapter-inventory completeness: every ``libs/<dir>`` adapter appears in
    ``docs/sdk/index.mdx`` (skipped until that page exists). This is the
@@ -85,7 +85,7 @@ def _check_page(path: Path) -> list[str]:
                     f"(max {MAX_DESCRIPTION_LEN} — llms.txt truncates beyond it)",
                 )
 
-        # Mintlify consumes these values as page metadata. Block/folded YAML
+        # The site consumes these values as page metadata. Block/folded YAML
         # scalars are technically valid YAML but make the generated metadata
         # depend on indentation and can leak line breaks into llms.txt.
         line_match = re.search(
@@ -111,7 +111,7 @@ def _check_page(path: Path) -> list[str]:
             continue
         if not in_fence and re.match(r"^#\s", line):
             findings.append(
-                f"{rel}:{lineno}: body H1 ('# ...') — Mintlify renders the "
+                f"{rel}:{lineno}: body H1 ('# ...') — the site renders the "
                 "frontmatter title as H1; start body headings at ##",
             )
     return findings

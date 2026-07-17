@@ -145,7 +145,7 @@ If you finish a task and want to summarize, output it as your final response. Do
 
 ### Docs site (`docs/`)
 
-`docs/` is the published Mintlify site — the no-summary-`.md` rule does not apply there. Local preview: `npm i -g mint`, then `mint dev` inside `docs/` (Node 24 via `docs/.node-version`; mint breaks on Node 25+).
+`docs/` is the published documentation site — the no-summary-`.md` rule does not apply there. Local preview: `npm i -g mint`, then `mint dev` inside `docs/` (Node 24 via `docs/.node-version`; mint breaks on Node 25+).
 
 - Every page is `.mdx` with `title` + one-line `description` frontmatter (the description becomes the page's llms.txt entry) and no body H1. `scripts/docs-pages-lint.py` enforces this.
 - **`docs/cli/` is generated — never hand-edit** (except `cli/index.mdx`). Change the `help=` strings in `cli/` and run `uv run scripts/docs-cli_reference-generate.py`. CI (`docs-checks.yml`) fails on drift.

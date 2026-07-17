@@ -1,6 +1,6 @@
 name: Docs checks
 
-# Validates the Mintlify docs site and gates CLI-reference drift.
+# Validates the documentation site and gates CLI-reference drift.
 # Plain runner (no Dagger): the checks are a Node CLI plus two Python
 # scripts — Dagger's hermeticity buys nothing here and adds engine flake.
 # Deliberately NOT in trunk's merge.required_statuses: path-filtered
@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   mint-checks:
-    name: Mintlify validate + broken links
+    name: Docs validate + broken links
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,7 +40,7 @@ jobs:
         with:
           node-version-file: docs/.node-version
 
-      # mint is deliberately unpinned: it tracks the hosted Mintlify platform,
+      # mint is deliberately unpinned: it tracks the hosted documentation runtime,
       # and validating against a stale pin would drift from production.
       - name: Install mint
         run: npm install -g mint

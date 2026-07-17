@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run python
 """Generate the docs-site CLI reference from the Typer app tree.
 
-Emits one Mintlify MDX page per `gtm` subapp into ``docs/cli/`` by walking the
+Emits one documentation MDX page per `gtm` subapp into ``docs/cli/`` by walking the
 click command tree behind ``cli.main.app``. The Typer ``help=`` strings are the
 single source of truth: improving the reference means improving ``--help`` in
 ``cli/`` and regenerating — never editing the generated pages by hand.
