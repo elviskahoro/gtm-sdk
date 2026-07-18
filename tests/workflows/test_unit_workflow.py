@@ -116,6 +116,9 @@ def test_unit_workflow_resolves_an_immutable_dependency_image() -> None:
     assert "docker manifest inspect --verbose" in workflow
     assert "Compressed dependency image bytes:" in workflow
     assert "Compressed dependency layer:" in workflow
+    assert 'layer["digest"]' in workflow
+    assert 'layer["size"]' in workflow
+    assert "layer['digest']" not in workflow
     assert 'reference="${image_tag}@${digest}"' in workflow
     assert '[[ "${digest}" == sha256:* ]]' in workflow
     assert "PYTEST_DEPENDENCY_IMAGE" in workflow
