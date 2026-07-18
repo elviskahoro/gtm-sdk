@@ -8,6 +8,7 @@ These tests validate the workflow changes from issues #296, #321, and #330:
 """
 
 import runpy
+import re
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -30,6 +31,9 @@ PYTEST_DEPENDENCY_DOCKERIGNORE = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
 )
 PYTEST_DEPENDENCY_KEY = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
     "pytest_dependency_key.py",
+)
+PYTEST_DEPENDENCY_PACKER = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
+    "pytest_dependency_pack.py",
 )
 PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
 UV_LOCK = Path(__file__).parents[2] / "uv.lock"
@@ -110,6 +114,8 @@ def test_unit_workflow_resolves_an_immutable_dependency_image() -> None:
     assert ".github/workflows/ci/pytest-deps.Dockerfile" in workflow
     assert 'arch="$(uname -m)"' in workflow
     assert "docker manifest inspect --verbose" in workflow
+    assert "Compressed dependency image bytes:" in workflow
+    assert "Compressed dependency layer:" in workflow
     assert 'reference="${image_tag}@${digest}"' in workflow
     assert '[[ "${digest}" == sha256:* ]]' in workflow
     assert "PYTEST_DEPENDENCY_IMAGE" in workflow
@@ -155,6 +161,46 @@ def test_dependency_image_key_ignores_unrelated_project_metadata(
     assert calculate(PYPROJECT, architecture="amd64") != baseline
 
 
+def test_dependency_image_key_covers_layout_and_packer(
+    tmp_path: Path,
+) -> None:
+    namespace = runpy.run_path(str(PYTEST_DEPENDENCY_KEY))
+    dependency_image_key = cast(
+        Callable[..., str],
+        namespace["dependency_image_key"],
+    )
+
+    def calculate(
+        layout: str,
+        packer: Path = PYTEST_DEPENDENCY_PACKER,
+        compression: str = "zstd:3",
+    ) -> str:
+        return dependency_image_key(
+            pyproject=PYPROJECT,
+            uv_lock=UV_LOCK,
+            dockerfile=PYTEST_DEPENDENCY_DOCKERFILE,
+            dockerignore=PYTEST_DEPENDENCY_DOCKERIGNORE,
+            packer=packer,
+            layout=layout,
+            compression=compression,
+            python_version="3.13",
+            architecture="arm64",
+        )
+
+    changed_packer = tmp_path / "pytest_dependency_pack.py"
+    changed_packer.write_text(PYTEST_DEPENDENCY_PACKER.read_text() + "\n")
+
+    assert calculate("minimal-packed") != calculate("minimal-expanded")
+    assert calculate("minimal-packed") != calculate(
+        "minimal-packed",
+        changed_packer,
+    )
+    assert calculate("minimal-compiled") != calculate(
+        "minimal-compiled",
+        compression="gzip",
+    )
+
+
 def test_unit_workflow_only_publishes_dependency_images_from_trusted_main() -> None:
     workflow = WORKFLOW.read_text()
     normalized = " ".join(workflow.split())
@@ -167,12 +213,18 @@ def test_unit_workflow_only_publishes_dependency_images_from_trusted_main() -> N
     assert "github.event_name != 'pull_request'" in normalized
     assert "steps.pytest_dependency_image.outputs.hit != 'true'" in normalized
     assert "platforms: linux/arm64" in workflow
-    assert "push: true" in workflow
+    assert (
+        "type=image,name=${{ steps.pytest_dependency_image.outputs.tag }}" in workflow
+    )
+    assert "push=true" in workflow
     assert "steps.build_pytest_dependency_image.outputs.digest" in workflow
     assert "cache-from" not in workflow
     assert "cache-to" not in workflow
     assert "docker/setup-qemu-action" not in workflow
     assert "docker/setup-buildx-action" not in workflow
+    assert "compression=zstd" in workflow
+    assert "compression-level=3" in workflow
+    assert "force-compression=true" in workflow
 
 
 def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> None:
@@ -221,11 +273,19 @@ def test_unit_workflow_uses_trusted_controller_and_withholds_fork_tokens() -> No
     assert "SAME_REPOSITORY_PR" in workflow
     assert "trusted CI assets are unavailable for a fork pull request" in workflow
     assert "bootstrapping trusted CI assets from this same-repository PR" in workflow
+    assert "trusted legacy base SHA without checkpoint packer" in workflow
+    assert run_step.index(
+        'git show "${BASE_SHA}:.github/workflows/ci/pytest-deps.Dockerfile"',
+    ) < run_step.index(
+        'git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_pack.py"',
+    )
     assert 'if [ "${PULL_REQUEST_RUN}" = "true" ]; then' in workflow
     assert (
         'git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_key.py"'
         in resolve_step
     )
+    assert 'python "${trusted_key_script}" --help' in resolve_step
+    assert 'grep -q -- "--layout"' in resolve_step
     assert resolve_step.index('if [ "${TRUSTED_REGISTRY_PULL}" != "true" ]') < (
         resolve_step.index('image_key="$(python "${key_script}"')
     )
@@ -291,6 +351,7 @@ def test_unit_workflow_uses_dependency_image_and_local_fallbacks() -> None:
     assert "dag.host().file(dockerfile_override)" in dagger
     assert '.with_file("pyproject.toml", source.file("pyproject.toml"))' in dagger
     assert '.with_file("uv.lock", source.file("uv.lock"))' in dagger
+    assert ".with_file(DEPENDENCY_PACKER_PATH, packer)" in dagger
     assert "publish(" not in dagger
     for forbidden in (
         "HOST_PROJECT_ENV",
@@ -330,6 +391,17 @@ def test_local_dagger_commands_provision_the_project_environment() -> None:
     assert "dagger run .venv/bin/python scripts/ci.py" not in ci_validate
 
 
+def test_unit_dagger_keeps_ci_suite_validator_build_interface() -> None:
+    dagger = PYTEST_DAGGER.read_text()
+    ci_validate = (
+        Path(__file__).parents[2] / "scripts" / "ci-suite-validate.py"
+    ).read_text()
+
+    assert "pytest_dagger.build_container()" in ci_validate
+    assert "def build_container() -> dagger.Container:" in dagger
+    assert "return build_containers()[-1]" in dagger
+
+
 def test_unit_workflow_no_longer_builds_the_project_environment_on_host() -> None:
     workflow = WORKFLOW.read_text()
 
@@ -353,6 +425,23 @@ def test_unit_workflow_supports_manual_dispatch() -> None:
     assert "workflow_dispatch:" in workflow
 
 
+def test_unit_workflow_exposes_checkpoint_benchmark_variants() -> None:
+    workflow = WORKFLOW.read_text()
+
+    assert "artifact_variant:" in workflow
+    for variant in (
+        "full-compiled",
+        "full-source",
+        "minimal-compiled",
+        "minimal-expanded",
+        "minimal-packed",
+    ):
+        assert f"- {variant}" in workflow
+    assert "benchmark_nonce:" in workflow
+    assert "PYTEST_BENCHMARK_NONCE" in workflow
+    assert '--layout "${artifact_variant}"' in workflow
+
+
 def test_unit_workflow_uses_a_fresh_dagger_engine() -> None:
     workflow = WORKFLOW.read_text()
 
@@ -372,22 +461,22 @@ def test_unit_dagger_pipeline_validates_the_immutable_environment() -> None:
     dagger = PYTEST_DAGGER.read_text()
 
     normalized = " ".join(dagger.replace("\\\n", " ").split())
-    check_command = (
-        "uv sync --all-extras --dev --locked --no-install-project --inexact "
-        "--check --python /opt/venv/bin/python"
-    )
-    assert check_command in normalized
+    assert '"--all-extras --dev"' in dagger
+    assert 'else "--only-group unit-ci"' in dagger
+    assert "--locked --no-install-project --inexact --check" in normalized
     assert (
         "uv pip install --no-deps --reinstall --no-build-isolation --offline " in dagger
     )
     assert '"--python /opt/venv/bin/python ."' in dagger
     check_exec = normalized.index(
-        '.with_exec(["bash", "-c", DEPENDENCY_CHECK_CMD])',
+        '.with_exec(["bash", "-c", dependency_check_cmd(layout)])',
     )
     install_exec = normalized.index(
         '.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])',
     )
-    pytest_exec = normalized.index('.with_exec(["bash", "-c", PYTEST_CMD])')
+    pytest_exec = normalized.index(
+        'tested = installed.with_exec(["bash", "-c", PYTEST_CMD])'
+    )
     assert check_exec < install_exec < pytest_exec
     assert "Warm project uv cache" not in workflow
     assert 'dag.cache_volume("venv")' not in dagger
@@ -404,7 +493,7 @@ def test_unit_dependency_image_contains_only_locked_dependencies() -> None:
     assert dockerfile.count("@sha256:") >= 2
     assert "python:3.13-slim-bookworm@sha256:" in dockerfile
     assert "ghcr.io/astral-sh/uv:0.11.26@sha256:" in dockerfile
-    assert "apt-get install -y --no-install-recommends git" in dockerfile
+    assert "apt-get install -y --no-install-recommends git time" in dockerfile
     assert "UV_PROJECT_ENVIRONMENT=/opt/venv" in dockerfile
     assert "PYTHONDONTWRITEBYTECODE=1" in dockerfile
     assert "useradd" in dockerfile
@@ -423,12 +512,70 @@ def test_unit_dependency_image_contains_only_locked_dependencies() -> None:
     assert "COPY . " not in dockerfile
     assert "ADD . " not in dockerfile
     assert "/src" not in dockerfile
-    assert dockerignore.splitlines() == ["**", "!pyproject.toml", "!uv.lock"]
+    assert dockerignore.splitlines() == [
+        "**",
+        "!pyproject.toml",
+        "!uv.lock",
+        "!.github/",
+        "!.github/workflows/",
+        "!.github/workflows/ci/",
+        "!.github/workflows/ci/pytest_dependency_pack.py",
+    ]
     assert "setuptools>=83.0.0" in pyproject["dependency-groups"]["dev"]
     locked_setuptools = next(
         package for package in lock["package"] if package["name"] == "setuptools"
     )
     assert locked_setuptools["version"] == "83.0.0"
+
+
+def test_unit_dependency_image_builds_checkpoint_variants() -> None:
+    dockerfile = PYTEST_DEPENDENCY_DOCKERFILE.read_text()
+    pyproject = tomllib.loads(PYPROJECT.read_text())
+    lock = tomllib.loads(UV_LOCK.read_text())
+    root_package = next(
+        package
+        for package in lock["package"]
+        if package["name"] == pyproject["project"]["name"]
+    )
+    locked_unit_ci = root_package["dev-dependencies"]["unit-ci"]
+    locked_unit_ci_metadata = root_package["metadata"]["requires-dev"]["unit-ci"]
+    project_unit_ci_names = {
+        re.split(r"[\[<>=!~ ]", requirement, maxsplit=1)[0]
+        for requirement in pyproject["dependency-groups"]["unit-ci"]
+    }
+
+    assert PYTEST_DEPENDENCY_PACKER.is_file()
+    assert "unit-ci" in pyproject["dependency-groups"]
+    assert {dependency["name"] for dependency in locked_unit_ci} == (
+        project_unit_ci_names
+    )
+    assert {dependency["name"] for dependency in locked_unit_ci_metadata} == (
+        project_unit_ci_names
+    )
+    assert "ARG PYTEST_DEPENDENCY_LAYOUT=minimal-compiled" in dockerfile
+    assert "--only-group unit-ci" in dockerfile
+    assert "pytest_dependency_pack.py" in dockerfile
+    assert "python /build/pytest_dependency_pack.py /opt/venv" in dockerfile
+    assert "pytest-deps.zip" in PYTEST_DEPENDENCY_PACKER.read_text()
+
+
+def test_unit_workflow_reports_four_by_eight_runner_and_phase_diagnostics() -> None:
+    workflow = WORKFLOW.read_text()
+    dagger = PYTEST_DAGGER.read_text()
+
+    assert "Expected runner shape: 4 vCPU / 8 GiB" in workflow
+    assert "aarch64|arm64) ;;" in workflow
+    assert "runner architecture must be ARM64" in workflow
+    assert "getconf _NPROCESSORS_ONLN" in workflow
+    assert "/proc/meminfo" in workflow
+    assert "Dependency image digest:" in workflow
+    assert "Peak container memory:" in dagger
+    assert "Dagger dependency base ready:" in dagger
+    assert "Dependency checkpoint bytes:" in dagger
+    assert "Dependency checkpoint files:" in dagger
+    assert "Dagger dependency check:" in dagger
+    assert "Dagger local project install:" in dagger
+    assert "Pytest session completed:" in dagger
 
 
 def test_dagger_pipelines_export_exit_codes_without_contents_readback() -> None:

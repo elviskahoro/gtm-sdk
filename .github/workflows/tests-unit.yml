@@ -7,7 +7,27 @@ on:
     branches: [main]
   # Manual trigger for cache/perf measurement runs (issues #303/#305) —
   # avoids the `# RUN #N` marker-commit pattern.
-  workflow_dispatch: {}
+  # trunk-ignore-begin(checkov/CKV_GHA_7): benchmark-only inputs are constrained
+  # to immutable layouts and do not alter push or pull-request defaults.
+  workflow_dispatch:
+    inputs:
+      artifact_variant:
+        description: "Dependency checkpoint layout (issue #338)"
+        required: false
+        default: "minimal-compiled"
+        type: choice
+        options:
+          - full-compiled
+          - full-source
+          - minimal-compiled
+          - minimal-expanded
+          - minimal-packed
+      benchmark_nonce:
+        description: "Unique nonce to prevent a cached pytest exec (issue #338)"
+        required: false
+        default: ""
+        type: string
+        # trunk-ignore-end(checkov/CKV_GHA_7)
 
 permissions:
   contents: read
@@ -21,6 +41,25 @@ jobs:
         uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           fetch-depth: 0
+
+      - name: Verify Namespace runner shape
+        run: |
+          set -euo pipefail
+          echo "Expected runner shape: 4 vCPU / 8 GiB"
+          arch="$(uname -m)"
+          cpus="$(getconf _NPROCESSORS_ONLN)"
+          memory_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+          echo "Runner architecture: ${arch}"
+          echo "Runner CPUs: ${cpus}"
+          echo "Runner memory: ${memory_kib} KiB"
+          case "${arch}" in
+            aarch64|arm64) ;;
+            *) echo "::error::runner architecture must be ARM64"; exit 1 ;;
+          esac
+          if [ "${cpus}" -ne 4 ] || [ "${memory_kib}" -lt 7000000 ] || [ "${memory_kib}" -gt 9000000 ]; then
+            echo "::error::runner does not match the required 4 vCPU / 8 GiB profile"
+            exit 1
+          fi
 
       # Must run BEFORE the Namespace cache step: `cache: uv` planning shells
       # out to `uv cache dir` (via spacectl), so a missing uv binary fails the
@@ -152,12 +191,20 @@ jobs:
           PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
           SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ARTIFACT_VARIANT: ${{ inputs.artifact_variant }}
         run: |
           set -euo pipefail
           dockerfile=".github/workflows/ci/pytest-deps.Dockerfile"
           dockerignore="${dockerfile}.dockerignore"
+          packer=".github/workflows/ci/pytest_dependency_pack.py"
           key_script=".github/workflows/ci/pytest_dependency_key.py"
           arch="$(uname -m)"
+          artifact_variant="${ARTIFACT_VARIANT:-minimal-compiled}"
+          compression="zstd:3"
+          case "${artifact_variant}" in
+            full-compiled|full-source|minimal-compiled|minimal-expanded|minimal-packed) ;;
+            *) echo "::error::unsupported artifact variant: ${artifact_variant}"; exit 2 ;;
+          esac
 
           if [ "${TRUSTED_REGISTRY_PULL}" != "true" ]; then
             echo "Fork pull request: dependency image disabled; using cold Dagger build"
@@ -173,7 +220,15 @@ jobs:
           if [ "${PULL_REQUEST_RUN}" = "true" ]; then
             trusted_key_script="${RUNNER_TEMP}/pytest_dependency_key.py"
             if git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_key.py" > "${trusted_key_script}"; then
-              key_script="${trusted_key_script}"
+              if python "${trusted_key_script}" --help | grep -q -- "--layout"; then
+                key_script="${trusted_key_script}"
+              elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
+                echo "::warning::bootstrapping checkpoint key helper from this same-repository PR"
+                rm -f "${trusted_key_script}"
+              else
+                echo "::error::trusted checkpoint key helper is unavailable for a fork pull request"
+                exit 1
+              fi
             elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
               echo "::warning::bootstrapping trusted CI assets from this same-repository PR"
               rm -f "${trusted_key_script}"
@@ -188,10 +243,14 @@ jobs:
             --pyproject pyproject.toml \
             --uv-lock uv.lock \
             --dockerfile "${dockerfile}" \
-            --dockerignore "${dockerignore}")"
+            --dockerignore "${dockerignore}" \
+            --packer "${packer}" \
+            --layout "${artifact_variant}" \
+            --compression "${compression}")"
           image_tag="${NSC_CONTAINER_REGISTRY}/gtm-sdk-pytest-deps:${image_key}"
           echo "key=${image_key}" >> "${GITHUB_OUTPUT}"
           echo "tag=${image_tag}" >> "${GITHUB_OUTPUT}"
+          echo "layout=${artifact_variant}" >> "${GITHUB_OUTPUT}"
 
           manifest_error="$(mktemp)"
           trap 'rm -f "${manifest_error}"' EXIT
@@ -220,7 +279,20 @@ jobs:
               raise SystemExit(
                   f"expected one {architecture} manifest, found {len(matches)}",
               )
-          print(matches[0]["Descriptor"]["digest"])
+          match = matches[0]
+          layers = match.get("OCIManifest", {}).get("layers", [])
+          compressed_bytes = sum(int(layer["size"]) for layer in layers)
+          print(
+              f"Compressed dependency image bytes: {compressed_bytes}",
+              file=sys.stderr,
+          )
+          for layer in layers:
+              print(
+                  "Compressed dependency layer: "
+                  f"{layer['digest']} {layer['size']} bytes",
+                  file=sys.stderr,
+              )
+          print(match["Descriptor"]["digest"])
           ')"
             if [[ "${digest}" == sha256:* ]]; then
               reference="${image_tag}@${digest}"
@@ -250,8 +322,10 @@ jobs:
           context: .
           file: .github/workflows/ci/pytest-deps.Dockerfile
           platforms: linux/arm64
-          push: true
-          tags: ${{ steps.pytest_dependency_image.outputs.tag }}
+          build-args: |
+            PYTEST_DEPENDENCY_LAYOUT=${{ steps.pytest_dependency_image.outputs.layout }}
+          outputs: >-
+            type=image,name=${{ steps.pytest_dependency_image.outputs.tag }},push=true,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true
 
       - name: Select pytest dependency image
         id: selected_pytest_dependency_image
@@ -288,6 +362,7 @@ jobs:
           else
             echo "Namespace cache volume: absent"
           fi
+          echo "Dependency image digest: ${{ steps.selected_pytest_dependency_image.outputs.reference }}"
 
       - name: Resolve Dagger engine version
         id: dagger_engine
@@ -342,20 +417,29 @@ jobs:
           PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
           SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PYTEST_DEPENDENCY_LAYOUT: ${{ steps.pytest_dependency_image.outputs.layout }}
+          PYTEST_BENCHMARK_NONCE: ${{ inputs.benchmark_nonce }}
         run: |
           set -euo pipefail
           pipeline=".github/workflows/ci/pytest_dagger.py"
           if [ "${PULL_REQUEST_RUN}" = "true" ]; then
             trusted_pipeline="${RUNNER_TEMP}/pytest_dagger.py"
             trusted_dockerfile="${RUNNER_TEMP}/pytest-deps.Dockerfile"
+            trusted_packer="${RUNNER_TEMP}/pytest_dependency_pack.py"
             if git show "${BASE_SHA}:.github/workflows/ci/pytest_dagger.py" > "${trusted_pipeline}" &&
               git show "${BASE_SHA}:.github/workflows/ci/pytest-deps.Dockerfile" > "${trusted_dockerfile}"; then
               pipeline="${trusted_pipeline}"
               export PYTEST_DEPENDENCY_DOCKERFILE="${trusted_dockerfile}"
-              echo "Pull request controller: trusted base SHA (${BASE_SHA})"
+              if git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_pack.py" > "${trusted_packer}"; then
+                export PYTEST_DEPENDENCY_PACKER="${trusted_packer}"
+                echo "Pull request controller: trusted base SHA (${BASE_SHA})"
+              else
+                rm -f "${trusted_packer}"
+                echo "Pull request controller: trusted legacy base SHA without checkpoint packer (${BASE_SHA})"
+              fi
             elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
               echo "::warning::bootstrapping trusted CI assets from this same-repository PR"
-              rm -f "${trusted_pipeline}" "${trusted_dockerfile}"
+              rm -f "${trusted_pipeline}" "${trusted_dockerfile}" "${trusted_packer}"
             else
               echo "::error::trusted CI assets are unavailable for a fork pull request"
               exit 1

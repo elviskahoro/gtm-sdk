@@ -1,3 +1,7 @@
 **
 !pyproject.toml
 !uv.lock
+!.github/
+!.github/workflows/
+!.github/workflows/ci/
+!.github/workflows/ci/pytest_dependency_pack.py

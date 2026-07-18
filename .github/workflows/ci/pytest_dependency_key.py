@@ -11,6 +11,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
 DEFAULT_UV_LOCK = REPOSITORY_ROOT / "uv.lock"
 DEFAULT_DOCKERFILE = Path(__file__).with_name("pytest-deps.Dockerfile")
+DEFAULT_PACKER = Path(__file__).with_name("pytest_dependency_pack.py")
 DEFAULT_DOCKERIGNORE = DEFAULT_DOCKERFILE.with_name(
     f"{DEFAULT_DOCKERFILE.name}.dockerignore",
 )
@@ -44,14 +45,20 @@ def dependency_image_key(
     dockerignore: Path,
     python_version: str,
     architecture: str,
+    packer: Path = DEFAULT_PACKER,
+    layout: str = "minimal-compiled",
+    compression: str = "zstd:3",
 ) -> str:
     inputs = {
         "architecture": architecture,
+        "compression": compression,
         "dependency-metadata": dependency_metadata(pyproject),
         "dockerfile-sha256": file_sha256(dockerfile),
         "dockerignore-sha256": file_sha256(dockerignore),
+        "layout": layout,
+        "packer-sha256": file_sha256(packer),
         "python-version": python_version,
-        "schema": 1,
+        "schema": 3,
         "uv-lock-sha256": file_sha256(uv_lock),
     }
     encoded = json.dumps(
@@ -70,6 +77,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pyproject", type=Path, default=DEFAULT_PYPROJECT)
     parser.add_argument("--uv-lock", type=Path, default=DEFAULT_UV_LOCK)
     parser.add_argument("--dockerfile", type=Path, default=DEFAULT_DOCKERFILE)
+    parser.add_argument("--packer", type=Path, default=DEFAULT_PACKER)
+    parser.add_argument("--layout", default="minimal-compiled")
+    parser.add_argument("--compression", default="zstd:3")
     parser.add_argument(
         "--dockerignore",
         type=Path,
@@ -86,6 +96,9 @@ def main() -> None:
             uv_lock=args.uv_lock,
             dockerfile=args.dockerfile,
             dockerignore=args.dockerignore,
+            packer=args.packer,
+            layout=args.layout,
+            compression=args.compression,
             python_version=args.python_version,
             architecture=args.architecture,
         ),
