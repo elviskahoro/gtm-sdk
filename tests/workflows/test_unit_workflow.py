@@ -120,7 +120,7 @@ def test_unit_workflow_resolves_an_immutable_dependency_image() -> None:
     assert '[[ "${digest}" == sha256:* ]]' in workflow
     assert "PYTEST_DEPENDENCY_IMAGE" in workflow
     assert ":latest" not in workflow
-    assert "manifest unknown|no such manifest|name[ _]unknown" in workflow
+    assert "manifest[ _]unknown|no such manifest|name[ _]unknown" in workflow
     assert "manifest unknown|no such manifest|not found" not in workflow
 
 
@@ -475,7 +475,7 @@ def test_unit_dagger_pipeline_validates_the_immutable_environment() -> None:
         '.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])',
     )
     pytest_exec = normalized.index(
-        'tested = installed.with_exec(["bash", "-c", PYTEST_CMD])'
+        'tested = installed.with_exec(["bash", "-c", PYTEST_CMD])',
     )
     assert check_exec < install_exec < pytest_exec
     assert "Warm project uv cache" not in workflow

@@ -4,7 +4,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 
 PACKER = (
@@ -37,7 +37,7 @@ def _write_distribution(
 
 def _pack(site_packages: Path) -> dict[str, int]:
     namespace = runpy.run_path(str(PACKER))
-    pack_site_packages = cast(Any, namespace["pack_site_packages"])
+    pack_site_packages = namespace["pack_site_packages"]
     return cast(dict[str, int], pack_site_packages(site_packages))
 
 
