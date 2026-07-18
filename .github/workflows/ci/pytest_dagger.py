@@ -42,16 +42,46 @@ from dagger import dag
 # The trailing `echo $? > /src/pytest_rc` always exits 0, so the `with_exec`
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
-PYTEST_CMD = (
-    "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\"); import scripts.lib' "
-    ">/tmp/sitecustomize.py; "
-    "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
-    '"/opt/venv/bin/python" -m pytest '
-    "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
-    "-n 4 --dist=loadfile "
-    "--junit-xml=junit.xml -o junit_family=xunit1; "
-    "echo $? > /src/pytest_rc"
-)
+#
+# TEMPORARY (issue #331): the `-n N` slot is templated from PYTEST_WORKERS so the
+# benchmark can dispatch {2,4,6,8,10}. When unset, DEFAULT_PYTEST_WORKERS keeps
+# the measured production value. Remove the env plumbing (and this note) once a
+# winner is picked.
+DEFAULT_PYTEST_WORKERS = 4
+ALLOWED_PYTEST_WORKERS = frozenset({2, 4, 6, 8, 10})
+
+
+def _pytest_workers() -> int:
+    raw = os.environ.get("PYTEST_WORKERS", "").strip()
+    if not raw:
+        return DEFAULT_PYTEST_WORKERS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"PYTEST_WORKERS={raw!r} is not an integer; "
+            f"allowed: {sorted(ALLOWED_PYTEST_WORKERS)}",
+        ) from exc
+    if value not in ALLOWED_PYTEST_WORKERS:
+        raise ValueError(
+            f"PYTEST_WORKERS={value} is not one of {sorted(ALLOWED_PYTEST_WORKERS)}",
+        )
+    return value
+
+
+def _pytest_cmd(workers: int) -> str:
+    return (
+        "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\"); import scripts.lib' "
+        ">/tmp/sitecustomize.py; "
+        "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
+        '"/opt/venv/bin/python" -m pytest '
+        "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
+        f"-n {workers} --dist=loadfile "
+        "--junit-xml=junit.xml -o junit_family=xunit1; "
+        "echo $? > /src/pytest_rc"
+    )
+
+
 DEPENDENCY_CHECK_CMD = "uv sync --all-extras --dev --locked --no-install-project --inexact --check --python /opt/venv/bin/python"
 PROJECT_INSTALL_CMD = (
     "uv pip install --no-deps --reinstall --no-build-isolation --offline "
@@ -151,7 +181,17 @@ def build_container() -> dagger.Container:
     scripts = dag.host().directory("scripts")
     base = dependency_base(source)
 
-    return (
+    workers = _pytest_workers()
+    # TEMPORARY (issue #331): a plain env var burned into the pytest exec busts
+    # Dagger's exec cache without touching the /src snapshot, so back-to-back
+    # dispatches with the same worker count produce fresh measurements. Empty
+    # string = production (no forced cache bust).
+    nonce = os.environ.get("PYTEST_BENCHMARK_NONCE", "").strip()
+    print(f"Pytest worker mode: {workers}")
+    if nonce:
+        print(f"Pytest benchmark nonce: {nonce}")
+
+    container = (
         base.with_directory("/src", source, owner="runner")
         # Keep the small repo-local helper package under a separate import
         # root so an incomplete `/src` snapshot cannot shadow `scripts.lib`.
@@ -163,8 +203,10 @@ def build_container() -> dagger.Container:
         .with_env_variable("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
         .with_exec(["bash", "-c", DEPENDENCY_CHECK_CMD])
         .with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
-        .with_exec(["bash", "-c", PYTEST_CMD])
     )
+    if nonce:
+        container = container.with_env_variable("PYTEST_BENCHMARK_NONCE", nonce)
+    return container.with_exec(["bash", "-c", _pytest_cmd(workers)])
 
 
 async def main() -> None:
