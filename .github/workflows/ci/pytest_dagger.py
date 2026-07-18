@@ -13,11 +13,9 @@ a bare `dagger run python "${pipeline}"`.
 
 The pipeline runs pytest from an immutable, lockfile-derived dependency image
 and exports `junit.xml` to the host so a follow-up step (e.g.
-trunk-io/analytics-uploader) can upload it. On the ARM64 4x16 Namespace runner
-(issue #331 benchmark, 2 trials per candidate), median dagger evaluation was
-n=2 57.65s, n=4 58.44s, n=6 66.52s, n=8 72.83s, n=10 72.60s: n=4 lands within
-3% of the n=2 winner and stays there under wider historical sampling, so
-production keeps `-n 4` to match the historical CI baseline.
+trunk-io/analytics-uploader) can upload it. Production keeps four workers while
+dependency checkpoint layouts are benchmarked on the ARM64 4x8 Namespace
+runner, so artifact transport remains the only independent variable.
 
 Trusted main runs publish the image outside this pipeline. Pulling by digest
 keeps dependency selection immutable; when no image is available, Dagger builds
@@ -48,14 +46,26 @@ PYTEST_CMD = (
     "printf '%s\\n' 'import sys; sys.path.insert(0, \"/opt/gtm-sdk\"); import scripts.lib' "
     ">/tmp/sitecustomize.py; "
     "export PYTHONPATH=/tmp:/opt/gtm-sdk:/src${PYTHONPATH:+:$PYTHONPATH}; "
+    "/usr/bin/time -v -o /tmp/pytest-time "
     '"/opt/venv/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
-    "echo $? > /src/pytest_rc"
+    "rc=$?; "
+    "awk '/Maximum resident set size/ {print \"Peak container memory: \" $0}' "
+    "/tmp/pytest-time; "
+    "echo ${rc} > /src/pytest_rc"
 )
 
-DEPENDENCY_CHECK_CMD = "uv sync --all-extras --dev --locked --no-install-project --inexact --check --python /opt/venv/bin/python"
+DEPENDENCY_LAYOUTS = frozenset(
+    {
+        "full-compiled",
+        "full-source",
+        "minimal-compiled",
+        "minimal-expanded",
+        "minimal-packed",
+    },
+)
 PROJECT_INSTALL_CMD = (
     "uv pip install --no-deps --reinstall --no-build-isolation --offline "
     "--python /opt/venv/bin/python ."
@@ -64,6 +74,7 @@ JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
 DEPENDENCY_DOCKERFILE_PATH = ".github/workflows/ci/pytest-deps.Dockerfile"
+DEPENDENCY_PACKER_PATH = ".github/workflows/ci/pytest_dependency_pack.py"
 
 # Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
 # scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`.
@@ -110,11 +121,44 @@ def dependency_build_context(source: dagger.Directory) -> dagger.Directory:
     else:
         dockerfile = source.file(DEPENDENCY_DOCKERFILE_PATH)
 
+    packer_override = os.environ.get("PYTEST_DEPENDENCY_PACKER", "").strip()
+    if packer_override:
+        packer = dag.host().file(packer_override)
+
+    else:
+        packer = source.file(DEPENDENCY_PACKER_PATH)
+
     return (
         dag.directory()
         .with_file("pyproject.toml", source.file("pyproject.toml"))
         .with_file("uv.lock", source.file("uv.lock"))
         .with_file("pytest-deps.Dockerfile", dockerfile)
+        .with_file(DEPENDENCY_PACKER_PATH, packer)
+    )
+
+
+def dependency_layout() -> str:
+    layout = (
+        os.environ.get(
+            "PYTEST_DEPENDENCY_LAYOUT",
+            "minimal-compiled",
+        ).strip()
+        or "minimal-compiled"
+    )
+    if layout not in DEPENDENCY_LAYOUTS:
+        raise ValueError(f"unsupported pytest dependency layout: {layout}")
+    return layout
+
+
+def dependency_check_cmd(layout: str) -> str:
+    selection = (
+        "--all-extras --dev"
+        if layout in {"full-compiled", "full-source"}
+        else "--only-group unit-ci"
+    )
+    return (
+        f"uv sync {selection} --locked --no-install-project --inexact --check "
+        "--python /opt/venv/bin/python"
     )
 
 
@@ -126,6 +170,12 @@ def dependency_base(source: dagger.Directory) -> dagger.Container:
         return dependency_build_context(source).docker_build(
             dockerfile="pytest-deps.Dockerfile",
             platform=dagger.Platform("linux/arm64"),
+            build_args=[
+                dagger.BuildArg(
+                    "PYTEST_DEPENDENCY_LAYOUT",
+                    dependency_layout(),
+                ),
+            ],
         )
 
     if "@sha256:" not in dependency_image:
@@ -148,13 +198,18 @@ def dependency_base(source: dagger.Directory) -> dagger.Container:
     return container.from_(dependency_image)
 
 
-def build_container() -> dagger.Container:
-    """Build the pytest container. Caller must be inside `dagger.connection(...)`."""
+def build_containers() -> tuple[
+    dagger.Container,
+    dagger.Container,
+    dagger.Container,
+    dagger.Container,
+]:
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     scripts = dag.host().directory("scripts")
     base = dependency_base(source)
+    layout = dependency_layout()
 
-    return (
+    prepared = (
         base.with_directory("/src", source, owner="runner")
         # Keep the small repo-local helper package under a separate import
         # root so an incomplete `/src` snapshot cannot shadow `scripts.lib`.
@@ -164,15 +219,52 @@ def build_container() -> dagger.Container:
         .with_env_variable("PYTHONDONTWRITEBYTECODE", "1")
         .with_exec(["bash", "-c", GIT_INIT_CMD])
         .with_env_variable("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
-        .with_exec(["bash", "-c", DEPENDENCY_CHECK_CMD])
-        .with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
-        .with_exec(["bash", "-c", PYTEST_CMD])
     )
+    checked = prepared.with_exec(["bash", "-c", dependency_check_cmd(layout)])
+    installed = checked.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
+    nonce = os.environ.get("PYTEST_BENCHMARK_NONCE", "").strip()
+    if nonce:
+        installed = installed.with_env_variable("PYTEST_BENCHMARK_NONCE", nonce)
+    tested = installed.with_exec(["bash", "-c", PYTEST_CMD])
+    return base, checked, installed, tested
+
+
+def build_container() -> dagger.Container:
+    """Keep the container-only interface used by ci-suite-validate.py."""
+    return build_containers()[-1]
 
 
 async def main() -> None:
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
-        ctr = build_container()
+        pipeline_started = perf_counter()
+        base, checked, installed, ctr = build_containers()
+
+        phase_started = perf_counter()
+        await base.sync()
+        print(f"Dagger dependency base ready: {perf_counter() - phase_started:.2f}s")
+        checkpoint_stats = await base.with_exec(
+            [
+                "bash",
+                "-c",
+                "bytes=$(du -sb /opt/venv | cut -f1); "
+                "files=$(find /opt/venv -type f | wc -l); "
+                "archive=$(find /opt/venv -name pytest-deps.zip -type f "
+                "-exec stat -c %s {} \\; | head -n1); "
+                "printf 'Dependency checkpoint bytes: %s\\n' \"${bytes}\"; "
+                "printf 'Dependency checkpoint files: %s\\n' \"${files}\"; "
+                "printf 'Dependency checkpoint archive bytes: %s\\n' "
+                '"${archive:-0}"',
+            ],
+        ).stdout()
+        print(checkpoint_stats, end="")
+
+        phase_started = perf_counter()
+        await checked.sync()
+        print(f"Dagger dependency check: {perf_counter() - phase_started:.2f}s")
+
+        phase_started = perf_counter()
+        await installed.sync()
+        print(f"Dagger local project install: {perf_counter() - phase_started:.2f}s")
 
         # Read pytest's real exit code (captured in PYTEST_CMD) first so we know
         # whether a missing report is an expected consequence of a crashed run or
@@ -180,12 +272,15 @@ async def main() -> None:
         # killed/cancelled container, empty value, non-integer) fails closed at
         # rc=1 so the job goes red with a controlled message, not a traceback.
         try:
-            started = perf_counter()
+            phase_started = perf_counter()
             await ctr.file(PYTEST_RC_PATH).export(PYTEST_RC_HOST_PATH)
             rc = int(Path(PYTEST_RC_HOST_PATH).read_text().strip())
             print(
+                f"Pytest session completed: {perf_counter() - phase_started:.2f}s",
+            )
+            print(
                 "Dagger pipeline evaluation + pytest_rc export: "
-                f"{perf_counter() - started:.2f}s",
+                f"{perf_counter() - pipeline_started:.2f}s",
             )
         except (dagger.DaggerError, OSError, ValueError) as exc:
             sys.stderr.write(
