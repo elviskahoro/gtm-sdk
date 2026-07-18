@@ -7,7 +7,28 @@ on:
     branches: [main]
   # Manual trigger for cache/perf measurement runs (issues #303/#305) —
   # avoids the `# RUN #N` marker-commit pattern.
-  workflow_dispatch: {}
+  #
+  # TEMPORARY (issue #331): xdist worker-count benchmark inputs. Remove this
+  # `inputs:` block, plus the matching `PYTEST_WORKERS` / `PYTEST_BENCHMARK_NONCE`
+  # env plumbing on the "Run pytest in Dagger" step, once a production worker
+  # count has been chosen. Non-dispatch triggers (push, pull_request) inherit
+  # the pipeline's built-in defaults and behave identically to before.
+  # trunk-ignore-begin(checkov/CKV_GHA_7): dispatch-only benchmark inputs; no
+  # effect on push/PR build output; constrained to a fixed choice list.
+  workflow_dispatch:
+    inputs:
+      pytest_workers:
+        description: "xdist worker count (benchmark; issue #331)"
+        required: false
+        default: "4"
+        type: choice
+        options: ["2", "4", "6", "8", "10"]
+      benchmark_nonce:
+        description: "Unique nonce to bust the pytest exec cache (issue #331)"
+        required: false
+        default: ""
+        type: string
+        # trunk-ignore-end(checkov/CKV_GHA_7)
 
 permissions:
   contents: read
@@ -342,6 +363,10 @@ jobs:
           PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
           SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # TEMPORARY (issue #331): worker-count benchmark plumbing. Empty on
+          # push/PR runs — pytest_dagger.py falls back to its measured default.
+          PYTEST_WORKERS: ${{ inputs.pytest_workers }}
+          PYTEST_BENCHMARK_NONCE: ${{ inputs.benchmark_nonce }}
         run: |
           set -euo pipefail
           pipeline=".github/workflows/ci/pytest_dagger.py"

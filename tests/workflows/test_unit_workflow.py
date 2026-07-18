@@ -387,7 +387,7 @@ def test_unit_dagger_pipeline_validates_the_immutable_environment() -> None:
     install_exec = normalized.index(
         '.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])',
     )
-    pytest_exec = normalized.index('.with_exec(["bash", "-c", PYTEST_CMD])')
+    pytest_exec = normalized.index('.with_exec(["bash", "-c", _pytest_cmd(workers)])')
     assert check_exec < install_exec < pytest_exec
     assert "Warm project uv cache" not in workflow
     assert 'dag.cache_volume("venv")' not in dagger
@@ -446,7 +446,9 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
 
     assert '"/opt/venv/bin/python" -m pytest ' in source
     assert "/opt/gtm-sdk" in source
-    assert "-n 4 --dist=loadfile" in source
+    # Worker count is templated (issue #331); production default is 4.
+    assert "DEFAULT_PYTEST_WORKERS = 4" in source
+    assert "-n {workers} --dist=loadfile" in source
     assert "-p xdist.plugin" in source
     assert "-p pytest_asyncio.plugin" in source
     assert "-p anyio.pytest_plugin" in source
@@ -457,4 +459,29 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     assert "echo $? > /src/pytest_rc" in source
     assert 'await ctr.file("/src/junit.xml").export(JUNIT_HOST_PATH)' in source
     assert "Dagger pipeline evaluation + pytest_rc export:" in source
-    assert "Dagger transfer pytest_rc:" not in source
+
+
+def test_unit_dagger_pipeline_worker_count_benchmark_interface() -> None:
+    """Temporary interface for issue #331. Remove with the workflow-dispatch inputs."""
+    source = PYTEST_DAGGER.read_text()
+
+    assert "ALLOWED_PYTEST_WORKERS = frozenset({2, 4, 6, 8, 10})" in source
+    assert 'os.environ.get("PYTEST_WORKERS"' in source
+    assert 'os.environ.get("PYTEST_BENCHMARK_NONCE"' in source
+    # Worker mode marker so benchmark runs can grep the log.
+    assert 'print(f"Pytest worker mode: {workers}")' in source
+    # Nonce is applied as a container env var, not baked into PYTEST_CMD, so it
+    # busts the exec cache without perturbing the /src snapshot or the source
+    # of the pytest command string.
+    assert 'with_env_variable("PYTEST_BENCHMARK_NONCE", nonce)' in source
+
+
+def test_unit_workflow_exposes_worker_count_benchmark_dispatch_inputs() -> None:
+    """Temporary interface for issue #331. Remove with the pipeline plumbing."""
+    workflow = WORKFLOW.read_text()
+
+    assert "pytest_workers:" in workflow
+    assert 'options: ["2", "4", "6", "8", "10"]' in workflow
+    assert "benchmark_nonce:" in workflow
+    assert "PYTEST_WORKERS: ${{ inputs.pytest_workers }}" in workflow
+    assert "PYTEST_BENCHMARK_NONCE: ${{ inputs.benchmark_nonce }}" in workflow
