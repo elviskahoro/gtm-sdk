@@ -288,8 +288,10 @@ jobs:
           )
           for layer in layers:
               print(
-                  "Compressed dependency layer: "
-                  f"{layer['digest']} {layer['size']} bytes",
+                  "Compressed dependency layer: {} {} bytes".format(
+                      layer["digest"],
+                      layer["size"],
+                  ),
                   file=sys.stderr,
               )
           print(match["Descriptor"]["digest"])
