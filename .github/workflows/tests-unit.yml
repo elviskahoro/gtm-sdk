@@ -14,7 +14,7 @@ on:
       artifact_variant:
         description: "Dependency checkpoint layout (issue #338)"
         required: false
-        default: "minimal-compiled"
+        default: minimal-compiled
         type: choice
         options:
           - full-compiled
@@ -303,7 +303,7 @@ jobs:
               echo "::error::registry returned an invalid dependency image digest"
               exit 1
             fi
-          elif grep -Eqi 'manifest unknown|no such manifest|name[ _]unknown' "${manifest_error}"; then
+          elif grep -Eqi 'manifest[ _]unknown|no such manifest|name[ _]unknown' "${manifest_error}"; then
             echo "Pytest dependency image: miss (${image_key})"
             echo "hit=false" >> "${GITHUB_OUTPUT}"
             echo "reference=" >> "${GITHUB_OUTPUT}"
