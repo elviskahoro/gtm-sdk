@@ -316,6 +316,20 @@ def test_unit_workflow_uses_dependency_image_and_local_fallbacks() -> None:
     assert "cache-to" not in workflow
 
 
+def test_local_dagger_commands_provision_the_project_environment() -> None:
+    """Local instructions must not rely on an already-created .venv."""
+    for path in (PYTEST_DAGGER, PYTEST_INTEGRATION_DAGGER):
+        source = path.read_text()
+        assert "uv run dagger run python" in source
+        assert "dagger run .venv/bin/python" not in source
+
+    ci_validate = (
+        Path(__file__).parents[2] / "scripts" / "ci-suite-validate.py"
+    ).read_text()
+    assert "uv run dagger run python scripts/ci.py" in ci_validate
+    assert "dagger run .venv/bin/python scripts/ci.py" not in ci_validate
+
+
 def test_unit_workflow_no_longer_builds_the_project_environment_on_host() -> None:
     workflow = WORKFLOW.read_text()
 

@@ -11,13 +11,13 @@ The pytest pipelines are imported from the actual workflow scripts so any
 change there propagates here automatically. Trunk lives inline because there
 is no upstream Dagger pipeline for it.
 
-Usage. Point at the project's own `.venv` explicitly — a bare `python`
-resolves via `$PATH` (e.g. a pyenv shim), not this repo's `uv`-managed venv
-where `dagger-io`/`anyio` are installed:
+Usage. Let `uv run` provision and select the project's environment — a bare
+`python` resolves via `$PATH` (e.g. a pyenv shim), not this repo's `uv`-managed
+venv where `dagger-io`/`anyio` are installed:
 
-    dagger run .venv/bin/python scripts/ci.py              # all jobs
-    dagger run .venv/bin/python scripts/ci.py --skip integration
-    dagger run .venv/bin/python scripts/ci.py --only unit
+    uv run dagger run python scripts/ci.py              # all jobs
+    uv run dagger run python scripts/ci.py --skip integration
+    uv run dagger run python scripts/ci.py --only unit
 
 Integration tests are skipped (not failed) when any of the required credential
 env vars (`INTEGRATION_SECRET_ENV_VARS`) are absent — locally, run under

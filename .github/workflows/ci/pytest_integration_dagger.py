@@ -1,11 +1,11 @@
 """Dagger pipeline: run integration pytest in a container and export the JUnit report.
 
-Invoked the same way locally and in CI. Locally, point at the project's own
-`.venv` explicitly — a bare `python` resolves via `$PATH` (e.g. a pyenv
-shim), not this repo's `uv`-managed venv where `dagger-io`/`anyio` are
+Invoked the same way locally and in CI. Locally, let `uv run` provision and
+select the project's environment — a bare `python` resolves via `$PATH` (e.g.
+a pyenv shim), not this repo's `uv`-managed venv where `dagger-io`/`anyio` are
 installed:
 
-    dagger run .venv/bin/python .github/workflows/ci/pytest_integration_dagger.py
+    uv run dagger run python .github/workflows/ci/pytest_integration_dagger.py
 
 CI resolves `python` to a dedicated dagger-io/anyio venv via `$GITHUB_PATH`
 instead (see `.github/workflows/tests-unit.yml`), so the CI invocation stays
