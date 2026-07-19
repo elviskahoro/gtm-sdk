@@ -8,6 +8,12 @@ __pycache__/
 junit.xml
 pytest_rc
 
+# Bazel
+# Output symlinks bazel creates at the workspace root (bazel-bin, bazel-out,
+# bazel-testlogs, bazel-<workspace>). MODULE.bazel.lock is intentionally NOT
+# ignored — it is the committed, lockfile_mode=error-enforced module lock.
+bazel-*
+
 # OS
 .DS_Store
 *.pyc

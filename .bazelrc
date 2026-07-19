@@ -1,0 +1,22 @@
+# =============================================================================
+# Bazel configuration for the gtm-sdk workspace.
+#
+# PR1 bootstrap (plan ai-m4p9, Task 3): a reproducible Bzlmod foundation.
+# Bazel 8.7.0 is pinned via .bazelversion; rules_python 2.2.0 and a hermetic
+# Python 3.13.13 toolchain are declared in MODULE.bazel. This file holds only
+# the settings required for a clean, hermetic, lock-enforced bootstrap.
+#
+# Intentionally absent: remote cache, remote execution, auth headers, and any
+# CI cache wiring (see plan constraints). No setting here weakens a lock or
+# hash; --lockfile_mode=error makes MODULE.bazel.lock authoritative.
+# =============================================================================
+
+# Bzlmod is the sole external-dependency system in Bazel 8 (WORKSPACE is gone).
+# Stated explicitly so the bootstrap does not silently fall back.
+common --enable_bzlmod
+
+# Treat MODULE.bazel.lock as authoritative: a drift between MODULE.bazel and
+# the committed lock fails the build instead of being silently rewritten. This
+# is what makes "module locks enforce cleanly" an executable guarantee rather
+# than a convention.
+common --lockfile_mode=error
