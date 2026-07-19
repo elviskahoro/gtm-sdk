@@ -26,7 +26,6 @@ python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
     python_version = "3.13",
 )
-
 use_repo(python, "python_3_13")
 
 # Third-party PyPI dependencies. requirements_lock points at the checked,
@@ -38,5 +37,4 @@ pip.parse(
     python_version = "3.13",
     requirements_lock = "//:requirements_bazel.txt",
 )
-
 use_repo(pip, "pip")
