@@ -1,0 +1,42 @@
+# Bzlmod module for the gtm-sdk workspace.
+#
+# PR1 bootstrap (plan ai-m4p9, Task 3): pins Bazel 8.7.0 (via .bazelversion),
+# rules_python 2.2.0, and a hermetic Python 3.13.13 toolchain. Third-party
+# wheels resolve from requirements_bazel.txt -- the frozen projection of
+# uv.lock (see scripts/bazel-requirements-sync.py) -- so Bazel's pip layer
+# never re-resolves at build time and stays hash-pinned.
+#
+# No first-party application, CLI, script, or test targets are declared here;
+# those land in later PRs (plan ai-m4p9, Tasks 9-16). The pip hub is exposed
+# as @pip so the wheel repositories materialize, but nothing depends on them
+# yet.
+
+module(
+    name = "gtm",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_python", version = "2.2.0")
+
+# Hermetic Python toolchain. Requesting the 3.13 minor makes rules_python
+# resolve and download the exact 3.13.13 interpreter (python/versions.bzl
+# MINOR_MAPPING pins "3.13" -> "3.13.13"); the resolved version is then frozen
+# in MODULE.bazel.lock, so --lockfile_mode=error makes 3.13.13 authoritative.
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    python_version = "3.13",
+)
+
+use_repo(python, "python_3_13")
+
+# Third-party PyPI dependencies. requirements_lock points at the checked,
+# frozen, hash-bearing projection of uv.lock -- a derivative artifact, never a
+# second source of dependency truth. The hub @pip exposes every wheel repo.
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pip",
+    python_version = "3.13",
+    requirements_lock = "//:requirements_bazel.txt",
+)
+
+use_repo(pip, "pip")

@@ -1,0 +1,7 @@
+# Directories Bazel must not traverse. These are external API reference,
+# standalone data products, the docs site, and webhook apps -- none are
+# Bazelified, and webhooks stay out permanently (AGENTS.md adapter boundary).
+api
+data-gen
+docs
+webhooks

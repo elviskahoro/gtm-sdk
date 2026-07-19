@@ -1,0 +1,9 @@
+"""Root Bazel package for the gtm-sdk workspace.
+
+PR1 bootstrap (plan ai-m4p9, Task 3): no first-party targets are declared.
+This file exists so the root package is a valid Bazel package and the
+//:requirements_bazel.txt label resolves for the pip extension in MODULE.bazel.
+Application, CLI, script, and test targets land in later PRs (Tasks 9-16).
+"""
+
+exports_files(["requirements_bazel.txt"])
