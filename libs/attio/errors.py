@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from pydantic import ValidationError as PydanticValidationError
 
 from libs.attio.contracts import ErrorEntry
 from libs.attio.sdk_boundary import describe_attio_error
-from src.modal_app import MODAL_APP
+
+# Resolved in-module rather than imported from ``src.modal_app`` so the adapter
+# is callable in isolation and adds no libs -> src graph edge (ai-m4p9.1). This
+# mirrors ``src.modal_app.MODAL_APP`` verbatim — same env var, same default,
+# read at import time exactly as the orchestration constant is — so the
+# redeploy remediation message below is byte-for-byte unchanged.
+MODAL_APP = os.environ.get("MODAL_APP", "gtm-sdk")
 
 
 class AttioError(Exception):

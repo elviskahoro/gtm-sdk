@@ -2,14 +2,14 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from libs.filesystem.files import DestinationFileData
+from libs.dlt.filesystem_types import DestinationFileData, WritableFile
 
 if TYPE_CHECKING:
     import unittest.mock
 
 
 def to_filesystem_local(
-    destination_file_data: Iterator[DestinationFileData],
+    destination_file_data: Iterator[WritableFile],
 ) -> None:
     for file_data in destination_file_data:
         file_path: Path = Path(file_data.path)
