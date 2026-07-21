@@ -1,0 +1,6 @@
+exports_files(
+    [
+        "pyproject.toml",
+        "requirements_bazel.txt",
+    ],
+)

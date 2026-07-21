@@ -24,6 +24,11 @@ data/
 out/
 worktrees/
 
+# Bazel workspace symlinks (bazel-bin, bazel-out, bazel-testlogs, bazel-gtm_sdk)
+# created at the repo root by `bazel build`/`test`. The local opt-in disk cache
+# lives under tmp/ (already ignored above); MODULE.bazel.lock IS committed.
+/bazel-*
+
 # Kilo Agent Manager generated state — the setup-script/run-script under
 # .kilo/ are committed; managed worktrees and UI state are not.
 .kilo/worktrees/
