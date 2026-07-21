@@ -4,6 +4,16 @@ PR1 bootstrap (plan ai-m4p9, Task 3): no first-party targets are declared.
 This file exists so the root package is a valid Bazel package and the
 //:requirements_bazel.txt label resolves for the pip extension in MODULE.bazel.
 Application, CLI, script, and test targets land in later PRs (Tasks 9-16).
+
+PR2 Task 9 exports pyproject.toml so the ``pytest_test`` macro
+(bazel/pytest_test.bzl) can add ``//:pyproject.toml`` to each test target's
+``data``; the launcher (bazel/pytest_main.py) reads its authoritative pytest
+config (``-c <root>/pyproject.toml``) from runfiles.
 """
 
-exports_files(["requirements_bazel.txt"])
+exports_files(
+    [
+        "pyproject.toml",
+        "requirements_bazel.txt",
+    ],
+)

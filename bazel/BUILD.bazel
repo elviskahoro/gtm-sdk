@@ -1,0 +1,14 @@
+"""Bazel package for the shared pytest launcher and ``pytest_test`` macro.
+
+PR2 Task 9 (plan ai-m4p9). ``pytest_main.py`` is the Bazel-native pytest
+entrypoint pinned as ``main`` by the ``pytest_test`` macro; every generated
+test target runs through it. ``pytest_test.bzl`` is the macro Gazelle maps
+``py_test`` onto (via the root ``# gazelle:map_kind`` directive, added later).
+
+No ``__init__.py``: ``bazel/`` is a Bazel package, not a setuptools package
+(plan constraint). ``pytest_main.py`` is exported so the macro's
+``main = //bazel:pytest_main.py`` label resolves from any calling package;
+``pytest_test.bzl`` is loaded directly by label and needs no export.
+"""
+
+exports_files(["pytest_main.py"])
