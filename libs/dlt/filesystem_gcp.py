@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import gcsfs
 
 from libs.dlt.filesystem_local import to_filesystem_local
-from libs.filesystem.files import DestinationFileData
+from libs.dlt.filesystem_types import DestinationFileData, WritableFile
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -160,7 +160,7 @@ class CloudGoogle:
 
     @staticmethod
     def to_filesystem(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
         bucket_url: str | None,
     ) -> str:
         """Export data to filesystem (GCS or local).
@@ -199,7 +199,7 @@ class CloudGoogle:
 
     @staticmethod
     def to_filesystem_gcs(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
     ) -> None:
         """Export data specifically to Google Cloud Storage.
 
@@ -238,7 +238,7 @@ class CloudGoogle:
 
     @staticmethod
     def export_to_filesystem(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
         bucket_url: str,
     ) -> str:
         """Export data to filesystem (GCS or local).
@@ -257,7 +257,7 @@ class CloudGoogle:
 
     @staticmethod
     def export_to_gcs(
-        destination_file_data: Iterator[DestinationFileData],
+        destination_file_data: Iterator[WritableFile],
     ) -> None:
         """Export data specifically to Google Cloud Storage.
 

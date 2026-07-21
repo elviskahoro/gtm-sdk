@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from libs.attio.errors import (
     ConflictError,
+    DeploymentMismatchError,
+    MODAL_APP,
     SchemaMismatchError,
     classify_error,
     translate_modal_signature_error,
@@ -234,3 +236,22 @@ def test_classify_error_maps_modal_signature_mismatch_code() -> None:
     )
     mapped = classify_error(translate_modal_signature_error(err))
     assert mapped.code == "modal_signature_mismatch"
+
+
+def test_translate_modal_signature_error_preserves_redeploy_message() -> None:
+    """The redeploy remediation text is preserved verbatim (ai-m4p9.1).
+
+    ``MODAL_APP`` is now resolved in-module instead of imported from
+    ``src.modal_app``; this pins the exact message so the swap stays
+    behavior-preserving instead of silently drifting.
+    """
+    err = translate_modal_signature_error(
+        TypeError("got an unexpected keyword argument 'additional_emails'"),
+    )
+    assert isinstance(err, DeploymentMismatchError)
+    expected = (
+        "Modal function signature mismatch. Deployed function is stale for "
+        "current CLI payload. Redeploy with: "
+        f"modal app stop {MODAL_APP} && modal deploy deploy.py --name {MODAL_APP}"
+    )
+    assert str(err) == expected
