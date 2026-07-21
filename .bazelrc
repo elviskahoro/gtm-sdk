@@ -1,0 +1,36 @@
+###############################################################################
+# Bazel configuration for gtm-sdk
+###############################################################################
+# Conservative defaults for a reproducible, Bzlmod-first build:
+#   * Bzlmod is always enabled (MODULE.bazel is the source of truth for deps).
+#   * No remote cache is ever configured (local-only).
+#   * A local disk cache is available but opt-in (--config=local_cache).
+#   * CI strictness (lockfile enforcement) is opt-in via --config=ci.
+#
+# uv remains the authoritative Python dependency manager. Bazel consumes the
+# generated, hashed `requirements_bazel.txt` (Task 2's synchronizer) and does
+# not replace `uv sync`/`uv.lock`.
+###############################################################################
+
+# Bzlmod: module-based external dependencies (MODULE.bazel). Always on so
+# MODULE.bazel — never a legacy WORKSPACE — drives dependency resolution.
+common --enable_bzlmod
+
+###############################################################################
+# Local disk cache (opt-in)
+###############################################################################
+# Shares Bazel action outputs across workspaces via an on-disk cache. Purely
+# local — no remote/shared state, so it never makes a build non-hermetic. NOT
+# enabled by default; pass --config=local_cache to opt in. The cache lives
+# under tmp/ which is gitignored and .bazelignore'd, so it never pollutes the
+# working tree or package discovery.
+build:local_cache --disk_cache=%workspace%/tmp/bazel-disk-cache
+
+###############################################################################
+# CI configuration
+###############################################################################
+# Treat MODULE.bazel.lock as authoritative: fail the build if a dependency
+# change would require a lockfile update rather than silently rewriting it.
+# Pair with a committed, up-to-date MODULE.bazel.lock. Generate/refresh the
+# lock with a plain `bazel mod deps` (default --lockfile_mode=update).
+build:ci --lockfile_mode=error

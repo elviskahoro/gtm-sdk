@@ -1,0 +1,27 @@
+module(
+    name = "gtm_sdk",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_python", version = "2.2.0")
+
+# Python toolchain. rules_python 2.2.0 maps the minor "3.13" to the pinned
+# patch "3.13.13" (see @rules_python//python:versions.bzl), so requesting
+# "3.13" pins Python 3.13.13 exactly.
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    python_version = "3.13",
+)
+use_repo(python, "python_3_13", "pythons_hub")
+
+# Pinned, hashed third-party Python deps. The hub name "pypi" makes every
+# wheel available as @pypi//<dist>; downstream targets reference deps as
+# e.g. @pypi//pytest. requirements_bazel.txt is generated from uv.lock by
+# scripts/bazel-requirements-sync.py (Task 2) and must never be hand-edited.
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pypi",
+    python_version = "3.13",
+    requirements_lock = "//:requirements_bazel.txt",
+)
+use_repo(pip, "pypi")

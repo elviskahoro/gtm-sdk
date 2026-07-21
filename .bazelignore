@@ -1,0 +1,15 @@
+# Directories Bazel must not traverse for packages/BUILD files. These are
+# tooling state, generated artifacts, virtualenvs, or scratch trees that must
+# never become Bazel packages. `webhooks/` is deliberately NOT ignored — it is
+# first-party source (webhook handlers are intentionally Bazelifiable later).
+.agents
+.beads
+.claude
+.context
+.dolt
+.venv
+data
+data-gen
+out
+tmp
+worktrees
