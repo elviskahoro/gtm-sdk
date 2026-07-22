@@ -1,0 +1,43 @@
+"""Bazel package for the ``libs/fathom`` adapter (project mode).
+
+PR2 Task 11 (plan ai-m4p9.9). Each external-service adapter is a single
+project-mode ownership unit: Gazelle generates one ``py_library`` covering
+this directory and any nested packages that lack their own ``BUILD.bazel``
+(e.g. ``models/``), so the adapter stays one importable, independently
+buildable target with no unreviewed nested package.
+
+The private ``architecture_sources`` filegroup exposes the adapter's full
+recursive source corpus to the import-boundary test
+(``//tests/architecture:test_import_boundaries``, Task 12) as test ``data``
+only — never a production ``dep`` (plan constraint: architecture filegroups
+are not production dependencies).
+"""
+
+# One py_library for the whole adapter, folding nested packages that have no
+# BUILD.bazel of their own (project mode collects subdirectory sources).
+# gazelle:python_generation_mode project
+
+load("@rules_python//python:defs.bzl", "py_library")
+
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "fathom",
+    srcs = [
+        "__init__.py",
+        "client.py",
+        "errors.py",
+        "from_sdk.py",
+        "models.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pip//fathom_python",
+        "@pip//orjson",
+        "@pip//pydantic",
+    ],
+)

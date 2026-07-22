@@ -1,0 +1,60 @@
+"""Bazel package for ``libs/`` — root library helpers (file mode).
+
+PR2 Task 11 (plan ai-m4p9.9). The repo-root ``libs/`` package owns two
+first-party helpers (``__init__.py`` and ``telemetry.py``). File-mode
+generation gives each helper its own ``py_library`` so a dependent can pull a
+single file target without dragging in unrelated helpers.
+
+Each ``libs/<adapter>/`` sibling is a project-mode ownership unit (one
+``py_library`` per adapter, seeded in its own ``BUILD.bazel``); this file's
+``file`` directive is inherited but overridden to ``project`` in those
+packages, keeping the root helpers the only file-mode targets under ``libs/``.
+
+The private ``architecture_sources`` filegroup exposes every root helper to
+the import-boundary test (``//tests/architecture:test_import_boundaries``,
+Task 12) as test ``data`` only — never as a production ``dep`` (plan
+constraint: architecture filegroups are not production dependencies).
+"""
+
+# Root helpers: one py_library per .py file (file mode). Adapter siblings
+# override this with project mode in their own BUILD.bazel.
+# gazelle:python_generation_mode file
+
+# ``opentelemetry.sdk._logs`` is the SDK logs subpackage of the
+# ``opentelemetry-sdk`` wheel (it owns ``LoggerProvider`` /
+# ``BatchLogRecordProcessor`` / ``LogRecordExporter``), but rules_python's
+# ``modules_mapping`` omits the ``_logs`` namespace submodule from the manifest,
+# so Gazelle cannot resolve ``from opentelemetry.sdk._logs import ...`` on its
+# own. Point it at the providing wheel explicitly to preserve the real
+# dependency edge instead of dropping or ignoring it. (The matching API gap,
+# ``opentelemetry._logs``, is resolved in ``libs/logging/BUILD.bazel`` next to
+# its sole consumer.)
+# gazelle:resolve py opentelemetry.sdk._logs @pip//opentelemetry_sdk
+
+load("@rules_python//python:defs.bzl", "py_library")
+
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_library(
+    name = "telemetry",
+    srcs = ["telemetry.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pip//modal",
+        "@pip//opentelemetry_api",
+        "@pip//opentelemetry_exporter_otlp_proto_common",
+        "@pip//opentelemetry_exporter_otlp_proto_http",
+        "@pip//opentelemetry_sdk",
+        "@pip//opentelemetry_semantic_conventions",
+    ],
+)
