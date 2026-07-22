@@ -9,11 +9,104 @@ PR2 Task 9 exports pyproject.toml so the ``pytest_test`` macro
 (bazel/pytest_test.bzl) can add ``//:pyproject.toml`` to each test target's
 ``data``; the launcher (bazel/pytest_main.py) reads its authoritative pytest
 config (``-c <root>/pyproject.toml``) from runfiles.
+
+PR2 Task 10 (plan ai-m4p9.3) wires up Gazelle 0.51.3 + the version-matched
+rules_python Gazelle plugin (2.2.0). The ``modules_mapping`` rule fetches
+per-wheel import->distribution metadata from the @pip hub; the
+``gazelle_python_manifest`` macro bridges that to the checked-in
+``gazelle_python.yaml`` Gazelle reads at generation time, with its integrity
+hash tied to ``requirements_bazel.txt`` (the Bazel requirements bridge). The
+Gazelle directives below configure the Python extension for the later
+first-party generation tasks; the PR-2 ``# gazelle:exclude`` directives keep
+cli/src/scripts and the orchestration/webhook test trees out of the graph
+until later tasks generate them deliberately.
 """
+
+# --- Gazelle directives -----------------------------------------------------
+# Inert for ``bazel build`` (Bazel treats these as comments); read by the
+# Gazelle Python extension when ``bazel run //:gazelle`` generates first-party
+# BUILD files (later tasks).
+#
+# The repo root is the Python import root: libs/, src/, cli/, scripts/ are
+# top-level importable packages, matching setuptools [tool.setuptools.packages.
+# find] (include = ["cli*", "libs*", "scripts*", "src*"]). Setting python_root
+# also seeds default visibility to //:__subpackages__; the next directive makes
+# that explicit.
+# gazelle:python_root
+# gazelle:python_default_visibility //:__subpackages__
+# Map every Gazelle-generated ``py_test`` onto the deterministic ``pytest_test``
+# macro (bazel/pytest_test.bzl, Task 9) so every generated test target runs
+# through the shared //bazel:pytest_main.py entrypoint with pinned pytest deps.
+# gazelle:map_kind py_test pytest_test //bazel:pytest_test.bzl
+
+# --- PR-2 generation scope --------------------------------------------------
+# Keep the first-party graph narrow: cli/src/scripts and the orchestration /
+# webhook / script / integration test trees are excluded until later tasks
+# generate them deliberately (Tasks 11-16). ``webhooks`` and ``data-gen`` are
+# also in .bazelignore, but Gazelle does not read .bazelignore, so they are
+# excluded here as well.
+# gazelle:exclude cli
+# gazelle:exclude scripts
+# gazelle:exclude src
+# gazelle:exclude tests/cli
+# gazelle:exclude tests/integration
+# gazelle:exclude tests/scripts
+# gazelle:exclude tests/src
+# gazelle:exclude tests/webhooks
+# gazelle:exclude webhooks
+# gazelle:exclude data-gen
+
+load("@bazel_gazelle//:def.bzl", "gazelle", "gazelle_binary")
+load("@pip//:requirements.bzl", "all_whl_requirements")
+load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
+load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
 
 exports_files(
     [
         "pyproject.toml",
         "requirements_bazel.txt",
     ],
+)
+
+# Fetches per-wheel import->distribution metadata from the @pip hub. Gazelle
+# reads the resulting modules_mapping.json to resolve a third-party ``import``
+# (e.g. ``import yaml``) to the wheel that provides it (``@pip//pyyaml``).
+# ``all_whl_requirements`` comes from the same requirements_bazel.txt the pip
+# extension parses, so the mapping is pinned to the frozen uv.lock projection.
+modules_mapping(
+    name = "modules_map",
+    wheels = all_whl_requirements,
+)
+
+# Bridges modules_mapping to the checked-in gazelle_python.yaml manifest Gazelle
+# reads at generation time. ``pip_repository_name = "pip"`` matches the hub_name
+# in MODULE.bazel; ``requirements = "//:requirements_bazel.txt"`` ties the
+# manifest's integrity hash to the frozen Bazel requirements bridge, so the
+# ``.test`` target is a fast, reproducible integrity check and the manifest
+# stays in lockstep with requirements_bazel.txt (run
+# scripts/bazel-requirements-sync.py after editing uv.lock, then regenerate).
+# Produces:
+#   //:gazelle_python_manifest.update -- ``bazel run`` to regenerate the manifest.
+#   //:gazelle_python_manifest.test  -- integrity check (fails if stale).
+gazelle_python_manifest(
+    name = "gazelle_python_manifest",
+    modules_mapping = ":modules_map",
+    pip_repository_name = "pip",
+    requirements = "//:requirements_bazel.txt",
+)
+
+# The Gazelle binary with the rules_python language extension. ``bazel run
+# //:gazelle`` (later tasks) walks the source tree and updates BUILD.bazel
+# files from Python imports, resolving third-party edges via the manifest and
+# first-party edges via the import graph.
+gazelle_binary(
+    name = "gazelle_binary",
+    languages = [
+        "@rules_python_gazelle_plugin//python",
+    ],
+)
+
+gazelle(
+    name = "gazelle",
+    gazelle = ":gazelle_binary",
 )

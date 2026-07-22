@@ -6,10 +6,14 @@
 # uv.lock (see scripts/bazel-requirements-sync.py) -- so Bazel's pip layer
 # never re-resolves at build time and stays hash-pinned.
 #
-# No first-party application, CLI, script, or test targets are declared here;
-# those land in later PRs (plan ai-m4p9, Tasks 9-16). The pip hub is exposed
-# as @pip so the wheel repositories materialize, but nothing depends on them
-# yet.
+# PR2 Task 10 (plan ai-m4p9.3): adds version-matched Gazelle 0.51.3 and
+# rules_python_gazelle_plugin 2.2.0 (the plugin is released version-matched to
+# rules_python, so they share the 2.2.0 line). Gazelle derives first-party
+# BUILD edges from Python imports; the plugin's modules_mapping/manifest rules
+# (root BUILD.bazel) bridge the pip hub (@pip) to an import->wheel manifest
+# (gazelle_python.yaml) that Gazelle reads at generation time. No first-party
+# targets are generated in this task -- the PR-2 exclusions in root BUILD.bazel
+# keep cli/src/scripts/tests out until later tasks.
 
 module(
     name = "gtm",
@@ -17,6 +21,13 @@ module(
 )
 
 bazel_dep(name = "rules_python", version = "2.2.0")
+
+# Gazelle + the rules_python Gazelle plugin. The plugin is version-matched to
+# rules_python (both 2.2.0); gazelle is pinned to the verified 0.51.3 release.
+# repo_name = "bazel_gazelle" gives the conventional @bazel_gazelle label the
+# plugin and root BUILD.bazel load Gazelle's macros from.
+bazel_dep(name = "gazelle", version = "0.51.3", repo_name = "bazel_gazelle")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "2.2.0")
 
 # Hermetic Python toolchain. Requesting the 3.13 minor makes rules_python
 # resolve and download the exact 3.13.13 interpreter (python/versions.bzl
