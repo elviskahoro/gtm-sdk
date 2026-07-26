@@ -29,3 +29,7 @@ utility = true
 [[modules]]
 path = "libs.logging"
 utility = true
+
+[[modules]]
+path = "libs.filesystem"
+utility = true
