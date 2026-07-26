@@ -21,7 +21,10 @@ exclude = [
 forbid_circular_dependencies = true
 ignore_type_checking_imports = true
 
-# Utilities: accessible from anywhere (no dependencies)
+# ============================================================================
+# UTILITIES: Accessible from anywhere (no dependencies)
+# ============================================================================
+
 [[modules]]
 path = "libs.telemetry"
 utility = true
@@ -34,25 +37,150 @@ utility = true
 path = "libs.filesystem"
 utility = true
 
-# Core layers with dependencies
+# ============================================================================
+# CORE LAYERS: CLI → SRC/WEBHOOKS → LIBS
+# ============================================================================
+
 [[modules]]
 path = "cli"
-depends_on = ["src", "libs"]
+depends_on = ["src", "libs.apollo", "libs.attio", "libs.browserbase", "libs.caldotcom",
+              "libs.dlt", "libs.exa", "libs.fathom", "libs.fireflies", "libs.gmail",
+              "libs.granola", "libs.harvest", "libs.infisical", "libs.linear", "libs.linkedin",
+              "libs.logging", "libs.meetings", "libs.motherduck", "libs.octolens", "libs.openai",
+              "libs.parallel", "libs.parsers", "libs.perplexity", "libs.rb2b", "libs.resend",
+              "libs.sanity", "libs.slack", "libs.telemetry", "libs.webhook", "libs.filesystem"]
 
 [[modules]]
 path = "src"
-depends_on = ["libs"]
+depends_on = ["libs.apollo", "libs.attio", "libs.browserbase", "libs.caldotcom",
+              "libs.dlt", "libs.exa", "libs.fathom", "libs.fireflies", "libs.gmail",
+              "libs.granola", "libs.harvest", "libs.infisical", "libs.linear", "libs.linkedin",
+              "libs.logging", "libs.meetings", "libs.motherduck", "libs.octolens", "libs.openai",
+              "libs.parallel", "libs.parsers", "libs.perplexity", "libs.rb2b", "libs.resend",
+              "libs.sanity", "libs.slack", "libs.telemetry", "libs.webhook", "libs.filesystem"]
 
 [[modules]]
 path = "webhooks"
-depends_on = ["src", "libs"]
+depends_on = ["src", "libs.apollo", "libs.attio", "libs.browserbase", "libs.caldotcom",
+              "libs.dlt", "libs.exa", "libs.fathom", "libs.fireflies", "libs.gmail",
+              "libs.granola", "libs.harvest", "libs.infisical", "libs.linear", "libs.linkedin",
+              "libs.logging", "libs.meetings", "libs.motherduck", "libs.octolens", "libs.openai",
+              "libs.parallel", "libs.parsers", "libs.perplexity", "libs.rb2b", "libs.resend",
+              "libs.sanity", "libs.slack", "libs.telemetry", "libs.webhook", "libs.filesystem"]
 
-# Adapter modules cannot depend on each other (only on utilities)
+# ============================================================================
+# ADAPTER MODULES: Each wraps one external SDK/API
+# No cross-lib imports allowed (only utilities)
+# ============================================================================
+
 [[modules]]
-path = "libs"
+path = "libs.apollo"
 depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
 
-# Data export is standalone
+[[modules]]
+path = "libs.attio"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.browserbase"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.caldotcom"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.dlt"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.exa"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.fathom"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.fireflies"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.gmail"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.granola"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.harvest"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.infisical"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.linear"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.linkedin"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.meetings"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.motherduck"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.octolens"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.openai"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.parallel"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.parsers"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.perplexity"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.rb2b"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.resend"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.sanity"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.slack"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+[[modules]]
+path = "libs.webhook"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+# ============================================================================
+# DATA EXPORT: Standalone products with no inter-product dependencies
+# ============================================================================
+
 [[modules]]
 path = "data-gen"
 depends_on = []
