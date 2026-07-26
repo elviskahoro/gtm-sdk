@@ -21,7 +21,7 @@ exclude = [
 forbid_circular_dependencies = true
 ignore_type_checking_imports = true
 
-# Utilities: accessible from anywhere
+# Utilities: accessible from anywhere (no dependencies)
 [[modules]]
 path = "libs.telemetry"
 utility = true
@@ -33,3 +33,26 @@ utility = true
 [[modules]]
 path = "libs.filesystem"
 utility = true
+
+# Core layers with dependencies
+[[modules]]
+path = "cli"
+depends_on = ["src", "libs"]
+
+[[modules]]
+path = "src"
+depends_on = ["libs"]
+
+[[modules]]
+path = "webhooks"
+depends_on = ["src", "libs"]
+
+# Adapter modules cannot depend on each other (only on utilities)
+[[modules]]
+path = "libs"
+depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+
+# Data export is standalone
+[[modules]]
+path = "data-gen"
+depends_on = []
