@@ -6,7 +6,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from libs.attio.contracts import ErrorEntry
 from libs.attio.sdk_boundary import describe_attio_error
-from src.modal_app import MODAL_APP
+from src.modal_app import MODAL_APP  # tach-ignore(gtm-4xl.2)
 
 
 class AttioError(Exception):
