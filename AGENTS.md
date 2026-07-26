@@ -14,8 +14,9 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 ### Hard rules
 
-- **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`.
+- **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`. Exceptions: utilities (`libs.telemetry`, `libs.logging`, `libs.filesystem`) are importable from anywhere.
 - **No orchestration in `libs/`.** Adapter modules must be callable in isolation.
+- **Module boundaries are enforced by tach.** Run `uv run tach check` locally to verify boundaries before pushing. The CI gate in `trunk-check.yml` also runs this check on every PR.
 - **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `libs*`, `src*`).
 
 ## Modal gotchas

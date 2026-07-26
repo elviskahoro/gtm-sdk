@@ -1,0 +1,87 @@
+---
+title: "Module boundaries"
+description: "Enforce architectural rules with tach: no cross-lib imports, no orchestration in libs/, CLI has no business logic. Run tach check locally and in CI."
+---
+
+The gtm-sdk enforces module boundaries using **tach**, a Rust-based static checker that prevents layering violations and maintains a clean architecture.
+
+## Architecture layers
+
+The codebase is organized into three main layers:
+
+- **cli/** — User-facing commands. Parses flags, runs preflight checks, calls orchestration, renders output. **No business logic.**
+- **src/** — Orchestration. Multi-step workflows, side effects, Modal decorators. Depends on adapters.
+- **libs/** — Adapters wrapping external SDKs/APIs. Each `libs/<service>/` is self-contained and idiomatic to one external service.
+
+Additionally:
+
+- **webhooks/** — Standalone Modal apps for event handling. Depend on libs and src.
+- **data-gen/** — Independent data products.
+
+## Boundary rules
+
+<Card title="No cross-lib imports">
+`libs/<x>` must not import from `libs/<y>`. If two adapters must coordinate, route through `src/` orchestration instead.
+
+**Exception:** Shared utilities (`libs.telemetry`, `libs.logging`, `libs.filesystem`) are importable from anywhere.
+</Card>
+
+<Card title="No orchestration in libs/">
+Adapters must be callable in isolation. No side effects, no Modal decorators, no orchestration logic. `libs/<x>` exposes idiomatic Python functions and types.
+</Card>
+
+<Card title="No business logic in cli/">
+The CLI layer parses arguments, validates input, and calls `src/` workflows. It does not contain application logic.
+</Card>
+
+## Enforcing boundaries with tach
+
+Boundaries are checked automatically by **tach** in two places:
+
+1. **Locally** — Run `uv run tach check` before pushing:
+   ```bash
+   uv run tach check                # Verify all modules
+   uv run tach show                 # Visualize the dependency graph
+   ```
+
+2. **In CI** — The `trunk-check.yml` workflow runs `uv run tach check` on every PR. Violations block merges.
+
+## Common violations and fixes
+
+### "libs.<x> cannot depend on libs.<y>"
+
+If two adapters genuinely share code (beyond the utilities exceptions above):
+
+1. **Move the shared code to a utility** — Declare it in `tach.toml` with `utility = true` if it's cross-cutting (e.g., file operations).
+2. **Route through src/** — Have both adapters expose functions, then coordinate them in `src/` orchestration.
+3. **Duplicate the type** — For small, self-contained types, duplication can be simpler than introducing a dependency.
+
+### "src cannot depend on libs.<x>"
+
+This is expected — `src/` depends on all libs adapters. If a `libs/` module imports from `src/`, invert the dependency:
+
+- Remove the import from `libs/`
+- Pass the needed value (e.g., an app name) as a parameter or environment variable
+- Move the Modal-aware logic into `src/`
+
+### "cli cannot depend on specific libs"
+
+The CLI layer can import types and utilities from any adapter (for validation, rendering), but should avoid deep orchestration logic. If you're writing workflow code in `cli/`, move it to `src/` instead.
+
+## Configuration (tach.toml)
+
+The `tach.toml` file at the repo root defines:
+
+- **source_roots** — Where to search for modules (the repo root)
+- **exclude** — Paths to skip (tests, docs, scripts, etc.)
+- **modules** — Explicit layer definitions and utility declarations
+- **forbid_circular_dependencies** — Prevent circular imports
+- **ignore_type_checking_imports** — Allow `TYPE_CHECKING` blocks to bypass import rules (used by webhook type stubs)
+
+See the `tach.toml` source for the full configuration.
+
+## Resources
+
+- **Tach documentation** — https://github.com/tach-org/tach
+- **AGENTS.md** — Architecture rules for this repo (in the root)
+- **trunk-check.yml** — CI workflow that enforces boundaries
