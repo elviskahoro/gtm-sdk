@@ -34,14 +34,32 @@ jobs:
       # the cloud engine unchanged.
       #
       # Token model: `--cloud` authenticates with a Dagger Cloud token, read only
-      # from DAGGER_CLOUD_TOKEN. During early access the org's single Dagger Cloud
-      # token serves both compute and telemetry, so DAGGER_CLOUD_COMPUTE_TOKEN
-      # currently carries the *same value* as DAGGER_CLOUD_TOKEN. It is kept as a
-      # separate secret so the two can diverge later if Dagger issues a distinct
-      # compute token. See https://docs.dagger.io/reference/configuration/cloud/
+      # from DAGGER_CLOUD_TOKEN, and the token MUST be of Dagger Cloud's `Engine`
+      # type — the default org token authenticates telemetry but is rejected by
+      # the engine-provisioning endpoint with "invalid token type" (upstream
+      # asserts this in internal/cmd/dagger/cloud_test.go). Mint an Engine token
+      # at https://dagger.cloud/<org>/settings?tab=Tokens.
+      #
+      # This previously read a separate DAGGER_CLOUD_COMPUTE_TOKEN secret. That
+      # secret was dropped in a 2026-07-16 secret re-sync and never recreated, so
+      # the env var expanded to "" and every nightly run failed with "please run
+      # `dagger login <org>` first" for ten days before anyone noticed. The two
+      # secrets always carried the same value; they are now consolidated onto
+      # DAGGER_CLOUD_TOKEN. The preflight below makes a missing token loud.
+      - name: Verify Dagger Cloud token is present
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+        run: |
+          if [ -z "${DAGGER_CLOUD_TOKEN}" ]; then
+            echo "::error::DAGGER_CLOUD_TOKEN is empty. Set the repo secret to a" \
+              "Dagger Cloud token of type 'Engine'; --cloud cannot provision" \
+              "an engine without one."
+            exit 1
+          fi
+
       - name: Run integration pytest in Dagger (Cloud engine)
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_COMPUTE_TOKEN }}
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           ATTIO_API_KEY: ${{ secrets.ATTIO_API_KEY }}
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
