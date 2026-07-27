@@ -86,26 +86,65 @@ def test_no_step_reaches_for_the_dagger_cloud_engine(
         )
 
 
+def test_runs_on_a_namespace_runner(steps: list[dict[str, Any]]) -> None:
+    """The profile's container-image cache is why this job is on Namespace.
+
+    It serves registry.dagger.io/engine locally after the first run — the same
+    property `--cloud` was chasing. Dropping back to a GitHub-hosted runner would
+    silently reinstate the cold pull on every run.
+    """
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+
+    assert workflow["jobs"]["pytest-integration"]["runs-on"] == "namespace-profile-test"
+    checkout = _step(steps, "Checkout")
+    assert checkout["uses"].startswith("namespacelabs/nscloud-checkout-action@")
+
+
+def test_dagger_sdk_install_survives_pep_668(steps: list[dict[str, Any]]) -> None:
+    """No bare `pip`/`--system` install — the Namespace image is externally managed.
+
+    Its system Python is not writable without root, so `pip install dagger-io
+    anyio` (what this job used on ubuntu-latest) fails outright. The venv's bin
+    must reach $GITHUB_PATH or `dagger run python` resolves an interpreter with
+    no SDK.
+    """
+    install = _step(steps, "Install Dagger Python SDK")
+    run = install["run"]
+
+    assert "uv venv" in run
+    assert "uv pip install --python" in run
+    assert "$GITHUB_PATH" in run
+    assert "pip install dagger-io" not in run
+    assert "--system" not in run
+
+
 def test_engine_pull_mitigation_is_present(steps: list[dict[str, Any]]) -> None:
     resolve = _step(steps, "Resolve Dagger engine version")
     assert resolve["id"] == "dagger_engine"
 
-    cache = _step(steps, "Cache Dagger engine image")
-    assert cache["uses"].startswith("actions/cache@")
-    # Asserting on the workflow's literal cache path; nothing is created here.
-    # trunk-ignore(bandit/B108)
-    assert cache["with"]["path"] == "/tmp/dagger-engine.tar"
-    # Keyed on the engine version so an upstream CLI bump pays exactly one cold run.
-    assert "steps.dagger_engine.outputs.version" in cache["with"]["key"]
-
-    pull = _step(
-        steps,
-        "Load or pre-pull Dagger engine image (resilient to registry flakiness)",
-    )
+    pull = _step(steps, "Ensure Dagger engine image (resilient to registry flakiness)")
+    # Local-daemon hit first: on Namespace the profile's container-image cache
+    # makes this the common path, so the registry is never touched.
+    assert "docker image inspect" in pull["run"]
     # Bounded retry with a per-attempt timeout: a hung blob must cede to a fresh
     # attempt rather than wedging the job (dagger/dagger#7548).
     assert "for attempt in $(seq 1 6)" in pull["run"]
     assert "timeout 150 docker pull" in pull["run"]
+
+
+def test_dagger_cli_and_sdk_versions_are_pinned_together(
+    steps: list[dict[str, Any]],
+) -> None:
+    """An unpinned CLI silently changes the engine version and forces cold pulls.
+
+    The SDK pin must track it — a client/engine skew is the kind of thing that
+    only shows up as a confusing runtime error inside the pipeline.
+    """
+    setup = _step(steps, "Setup Dagger")
+    install = _step(steps, "Install Dagger Python SDK")
+
+    cli_version = str(setup["with"]["version"])
+    assert f'"dagger-io=={cli_version}"' in install["run"]
 
 
 def test_run_step_forwards_every_suite_credential(run_step: dict[str, Any]) -> None:
