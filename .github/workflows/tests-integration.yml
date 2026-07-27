@@ -11,35 +11,62 @@ permissions:
 jobs:
   pytest-integration:
     name: Integration tests
-    runs-on: ubuntu-latest
+    # Namespace, matching tests-unit.yml. The profile's container-image cache is
+    # the whole point: it serves registry.dagger.io/engine locally after the
+    # first run, which is the same "never pull the engine image" property the
+    # abandoned --cloud experiment was chasing (#223). ARM64, 4 vCPU / 8 GiB.
+    runs-on: namespace-profile-test
     steps:
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
         with:
           fetch-depth: 0
 
+      - name: Report runner shape
+        run: |
+          set -uo pipefail
+          echo "Runner architecture: $(uname -m)"
+          echo "Runner CPUs: $(getconf _NPROCESSORS_ONLN)"
+          awk '/^MemTotal:/ {printf "Runner memory: %s KiB\n", $2}' /proc/meminfo
+
+      # Pinned by SHA per repo convention; the official action avoids the
+      # `curl | sh` install pattern (semgrep gha-curl-pipe-shell). Needs the
+      # checkout first — the uv version resolves from pyproject.toml.
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+
+      # The Namespace runner image is Debian/PEP 668 externally-managed and its
+      # system Python (/usr) is not writable without root, so the `pip install
+      # dagger-io anyio` this job used on ubuntu-latest does NOT work here —
+      # neither does `uv pip install --system`. Create a root-free uv venv and
+      # prepend its bin to $GITHUB_PATH so the later `dagger run python ...`
+      # resolves `python` to an interpreter that has dagger-io/anyio.
+      #
+      # Unlike tests-unit.yml this venv is deliberately NOT cached across runs.
+      # Unit is on the every-PR hot path and earns the nscloud-cache-action
+      # plumbing (plus its staleness validation, see #330); this job runs once a
+      # night, where a ~20s cold create is cheaper than the failure modes of a
+      # stale cached interpreter.
+      - name: Install Dagger Python SDK
+        run: |
+          set -euo pipefail
+          dagger_venv="$HOME/.dagger-sdk/controller-venv"
+          uv venv --python 3.13 "${dagger_venv}"
+          uv pip install --python "${dagger_venv}/bin/python" \
+            "dagger-io==0.21.7" "anyio==4.13.0"
+          echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
+
+      # `version` is pinned deliberately: without it the action installs the
+      # latest CLI at run time, so an upstream Dagger release silently changes
+      # the engine version and forces a cold image pull with no diff in this
+      # repo. Keep in lockstep with the dagger-io pin above.
       - name: Setup Dagger
         uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
+        with:
+          version: 0.21.7
 
-      - name: Install Dagger Python SDK
-        run: pip install dagger-io anyio
-
-      # This job ran on a managed Dagger Cloud engine (`dagger --cloud run`) from
-      # #222 until this revert. That never worked: `--cloud` requires a token of
-      # Dagger Cloud's `Engine` type, and the elviskahoro org cannot mint one
-      # without Cloud Engines early access, which is still not enabled (issue
-      # #223). Every scheduled run from 2026-07-16 onward failed before pytest
-      # started. Back on a local engine; #223 remains the resumption point if
-      # early access ever lands, and `dagger-cloud-smoke.yml` is the cheap retest.
-      #
-      # This restores the #221 mitigation that #222 deleted. registry.dagger.io
-      # brownouts (dagger/dagger#7548) stall the first-use engine image pull and
-      # kill the job before any test runs. Two layers: cache the engine tarball
-      # keyed on the engine version so most runs skip the registry, and on a miss
-      # retry the pull with a per-attempt timeout so a hung blob cedes to a fresh
-      # attempt. tests-unit.yml instead leans on its Namespace runner profile's
-      # container-image cache; this job is on ubuntu-latest, which has no such
-      # profile, so the tarball cache is still the right fit here.
       - name: Resolve Dagger engine version
         id: dagger_engine
         run: |
@@ -50,56 +77,36 @@ jobs:
           fi
           echo "version=${version}" >>"${GITHUB_OUTPUT}"
 
-      - name: Cache Dagger engine image
-        if: steps.dagger_engine.outputs.version != ''
-        id: dagger_engine_cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: /tmp/dagger-engine.tar
-          key: dagger-engine-${{ runner.os }}-${{ steps.dagger_engine.outputs.version }}
-
-      - name: Load or pre-pull Dagger engine image (resilient to registry flakiness)
+      # This job ran on a managed Dagger Cloud engine (`dagger --cloud run`) from
+      # #222 until this revert. That never worked: `--cloud` requires a token of
+      # Dagger Cloud's `Engine` type, and the elviskahoro org cannot mint one
+      # without Cloud Engines early access, which is still not enabled (issue
+      # #223). Every scheduled run from 2026-07-16 onward failed before pytest
+      # started. #223 stays the resumption point if early access ever lands, and
+      # `dagger-cloud-smoke.yml` is the cheap retest.
+      #
+      # registry.dagger.io brownouts (dagger/dagger#7548) stall the first-use
+      # engine pull and kill the job before any test runs. Two layers, same as
+      # tests-unit.yml: the runner profile's container-image cache serves the
+      # pull locally after the first run, and on a cold miss the pull retries
+      # with a per-attempt timeout so a hung blob cedes to a fresh attempt.
+      # No actions/cache tarball here — the profile cache replaces it, and a
+      # tarball entry cannot be repaired once corrupt (GitHub cache keys are
+      # immutable and actions/cache skips its save on a primary-key hit).
+      - name: Ensure Dagger engine image (resilient to registry flakiness)
         if: steps.dagger_engine.outputs.version != ''
         env:
           ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
-          CACHE_HIT: ${{ steps.dagger_engine_cache.outputs.cache-hit }}
-          CACHE_KEY: dagger-engine-${{ runner.os }}-${{ steps.dagger_engine.outputs.version }}
         run: |
           set -uo pipefail
           image="registry.dagger.io/engine:${ENGINE_VERSION}"
-          tarball="/tmp/dagger-engine.tar"
-          if [ "${CACHE_HIT}" = "true" ] && [ -f "${tarball}" ]; then
-            echo "Loading ${image} from cache (${tarball})"
-            if docker load -i "${tarball}"; then
-              echo "Loaded ${image} from cache; skipping registry pull"
-              exit 0
-            fi
-            # This run self-heals via the pull below, but the cache does not:
-            # GitHub cache keys are immutable and actions/cache skips its save
-            # when the primary key already hit, so the corrupt archive is served
-            # again every night until the key changes. Bumping the pinned Dagger
-            # version rotates the key; otherwise evict it by hand. Loud on
-            # purpose — silently degrading to an uncached registry pull is how
-            # this mitigation would rot unnoticed.
-            echo "::warning::cached engine tarball failed to load and CANNOT be" \
-              "repaired in place. Falling back to a registry pull for this run." \
-              "Evict the poisoned entry to restore caching:" \
-              "gh cache delete '${CACHE_KEY}' --repo \$GITHUB_REPOSITORY"
+          if docker image inspect "${image}" >/dev/null 2>&1; then
+            echo "Dagger engine image cache: local hit (${image})"
+            exit 0
           fi
-          echo "Pulling ${image} from registry"
           for attempt in $(seq 1 6); do
             if timeout 150 docker pull "${image}"; then
-              echo "Pulled ${image} on attempt ${attempt}"
-              # Fail closed on the cache, not the job: the engine is already in the
-              # local daemon so this run proceeds regardless. A partial/failed save
-              # must NOT be persisted by actions/cache or every later run loads a
-              # broken tarball — delete it so the cache step finds nothing to store.
-              if docker save "${image}" -o "${tarball}"; then
-                echo "Saved ${image} to ${tarball} for future runs"
-              else
-                echo "::warning::docker save failed; removing partial tarball so a bad cache is not persisted"
-                rm -f "${tarball}"
-              fi
+              echo "Dagger engine image cache: registry pull succeeded on attempt ${attempt} (${image})"
               exit 0
             fi
             echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
