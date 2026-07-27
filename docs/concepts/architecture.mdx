@@ -5,7 +5,8 @@ description: "The enforced cli → src → libs layering, the repo layout, hard 
 
 gtm-sdk is three layers with one-way dependencies: the CLI calls orchestration,
 orchestration chains adapters, and adapters wrap exactly one external service each. The
-layering is enforced in review and by convention, not just described here.
+layering is enforced by **tach** (statically, in CI) and in review — not just described
+here. See [Module boundaries](/contributing/module-boundaries) for the tach setup.
 
 ## Repo layout
 
