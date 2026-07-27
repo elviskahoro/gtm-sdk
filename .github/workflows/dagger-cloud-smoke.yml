@@ -1,17 +1,22 @@
-# TEMPORARY. Minimal end-to-end check that the DAGGER_CLOUD_TOKEN secret is of
-# Dagger Cloud's `Engine` type and can actually provision a managed engine.
+# Standing retest harness for issue #223: does the DAGGER_CLOUD_TOKEN secret
+# provision a managed Dagger Cloud engine? It only succeeds with a token of
+# Dagger Cloud's `Engine` type, which this org cannot mint without Cloud Engines
+# early access.
 #
-# The nightly integration suite is a poor test rig for this: it takes minutes,
-# needs four unrelated API secrets, and its failure output buries the auth error.
-# This runs one container on the cloud engine and nothing else, so the only thing
-# it can fail on is token/provisioning.
+# Kept deliberately. CI has moved to a local engine on Namespace, but Dagger has
+# a managed-compute product landing and we intend to revisit `--cloud` when it
+# ships. Dispatch this first — it answers in ~15 seconds whether the entitlement
+# is there, before anyone spends time refactoring a workflow around it.
 #
-# Delete this file once the token is confirmed working.
+# The nightly integration suite is a poor rig for the same question: it takes
+# minutes, needs four unrelated API secrets, and buries the auth error. This runs
+# one container and nothing else, so token/provisioning is the only thing it can
+# fail on.
+#
+# Manual only. It previously also fired on a now-deleted branch.
 name: Dagger Cloud smoke
 
 on:
-  push:
-    branches: [conductor/dagger-cloud-token-error]
   workflow_dispatch: {}
 
 permissions:
