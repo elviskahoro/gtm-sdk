@@ -48,7 +48,7 @@ Boundaries are checked automatically by **tach** in two places:
 
 ## Common violations and fixes
 
-### "libs.<x> cannot depend on libs.<y>"
+### "`libs.<x>` cannot depend on `libs.<y>`"
 
 If two adapters genuinely share code (beyond the utilities exceptions above):
 
@@ -56,7 +56,7 @@ If two adapters genuinely share code (beyond the utilities exceptions above):
 2. **Route through src/** — Have both adapters expose functions, then coordinate them in `src/` orchestration.
 3. **Duplicate the type** — For small, self-contained types, duplication can be simpler than introducing a dependency.
 
-### "src cannot depend on libs.<x>"
+### "`src` cannot depend on `libs.<x>`"
 
 This is expected — `src/` depends on all libs adapters. If a `libs/` module imports from `src/`, invert the dependency:
 
@@ -72,11 +72,11 @@ The CLI layer can import types and utilities from any adapter (for validation, r
 
 The `tach.toml` file at the repo root defines:
 
-- **source_roots** — Where to search for modules (the repo root)
-- **exclude** — Paths to skip (tests, docs, scripts, etc.)
-- **modules** — Explicit layer definitions and utility declarations
-- **forbid_circular_dependencies** — Prevent circular imports
-- **ignore_type_checking_imports** — Allow `TYPE_CHECKING` blocks to bypass import rules (used by webhook type stubs)
+- **`source_roots`** — Where to search for modules (the repo root)
+- **`exclude`** — Paths to skip (tests, docs, scripts, etc.)
+- **`modules`** — Explicit layer definitions and utility declarations
+- **`forbid_circular_dependencies`** — Prevent circular imports
+- **`ignore_type_checking_imports`** — Allow `TYPE_CHECKING` blocks to bypass import rules (used by webhook type stubs)
 
 See the `tach.toml` source for the full configuration.
 
