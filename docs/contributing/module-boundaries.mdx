@@ -36,15 +36,15 @@ The CLI layer parses arguments, validates input, and calls `src/` workflows. It 
 
 ## Enforcing boundaries with tach
 
-Boundaries are checked automatically by **tach** in two places:
+tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alongside every other linter/formatter in this repo — not as a bare binary.
 
-1. **Locally** — Run `uv run tach check` before pushing:
+1. **Locally** — Reproduce a finding before pushing:
    ```bash
-   uv run tach check                # Verify all modules
-   uv run tach show                 # Visualize the dependency graph
+   trunk check --filter=tach         # Verify all modules
+   uv run tach show                  # Visualize the dependency graph
    ```
 
-2. **In CI** — The `trunk-check.yml` workflow runs `uv run tach check` on every PR. Violations block merges.
+2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs tach (via `lint.enabled: [tach@0.35.0, ...]`) on every PR. Violations block merges.
 
 ## Common violations and fixes
 
