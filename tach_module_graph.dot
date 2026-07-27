@@ -1,0 +1,17 @@
+strict digraph {
+cli;
+src;
+libs;
+webhooks;
+"libs.telemetry";
+"libs.logging";
+"libs.filesystem";
+cli -> src;
+cli -> libs;
+src -> libs;
+libs -> "libs.telemetry";
+libs -> "libs.logging";
+libs -> "libs.filesystem";
+webhooks -> src;
+webhooks -> libs;
+}
