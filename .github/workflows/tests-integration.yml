@@ -24,47 +24,105 @@ jobs:
       - name: Install Dagger Python SDK
         run: pip install dagger-io anyio
 
-      # See tests-unit.yml for the full rationale (ai-bic). `--cloud` runs the
-      # pipeline on a managed Dagger Cloud engine instead of one inside the
-      # runner, so the runner never pulls registry.dagger.io/engine and is immune
-      # to that registry's brownouts (dagger/dagger#7548) — superseding the
-      # cache+timeout mitigation in #221. The Python SDK's dagger.connection()
-      # reuses the CLI's session, so the source dir, the ATTIO/MODAL/PARALLEL
-      # secrets (forwarded as Dagger secrets), and the uv-cache volume stream to
-      # the cloud engine unchanged.
+      # This job ran on a managed Dagger Cloud engine (`dagger --cloud run`) from
+      # #222 until this revert. That never worked: `--cloud` requires a token of
+      # Dagger Cloud's `Engine` type, and the elviskahoro org cannot mint one
+      # without Cloud Engines early access, which is still not enabled (issue
+      # #223). Every scheduled run from 2026-07-16 onward failed before pytest
+      # started. Back on a local engine; #223 remains the resumption point if
+      # early access ever lands, and `dagger-cloud-smoke.yml` is the cheap retest.
       #
-      # Token model: `--cloud` authenticates with a Dagger Cloud token, read only
-      # from DAGGER_CLOUD_TOKEN, and the token MUST be of Dagger Cloud's `Engine`
-      # type — the default org token authenticates telemetry but is rejected by
-      # the engine-provisioning endpoint with "invalid token type" (upstream
-      # asserts this in internal/cmd/dagger/cloud_test.go). Mint an Engine token
-      # at https://dagger.cloud/<org>/settings?tab=Tokens.
-      #
-      # This previously read a separate DAGGER_CLOUD_COMPUTE_TOKEN secret. That
-      # secret was dropped in a 2026-07-16 secret re-sync and never recreated, so
-      # the env var expanded to "" and every nightly run failed with "please run
-      # `dagger login <org>` first" for ten days before anyone noticed. The two
-      # secrets always carried the same value; they are now consolidated onto
-      # DAGGER_CLOUD_TOKEN. The preflight below makes a missing token loud.
-      - name: Verify Dagger Cloud token is present
-        env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+      # This restores the #221 mitigation that #222 deleted. registry.dagger.io
+      # brownouts (dagger/dagger#7548) stall the first-use engine image pull and
+      # kill the job before any test runs. Two layers: cache the engine tarball
+      # keyed on the engine version so most runs skip the registry, and on a miss
+      # retry the pull with a per-attempt timeout so a hung blob cedes to a fresh
+      # attempt. tests-unit.yml instead leans on its Namespace runner profile's
+      # container-image cache; this job is on ubuntu-latest, which has no such
+      # profile, so the tarball cache is still the right fit here.
+      - name: Resolve Dagger engine version
+        id: dagger_engine
         run: |
-          if [ -z "${DAGGER_CLOUD_TOKEN}" ]; then
-            echo "::error::DAGGER_CLOUD_TOKEN is empty. Set the repo secret to a" \
-              "Dagger Cloud token of type 'Engine'; --cloud cannot provision" \
-              "an engine without one."
-            exit 1
+          set -uo pipefail
+          version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+          if [ -z "${version}" ]; then
+            echo "::warning::could not determine Dagger engine version; skipping pre-pull"
           fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
 
-      - name: Run integration pytest in Dagger (Cloud engine)
+      - name: Cache Dagger engine image
+        if: steps.dagger_engine.outputs.version != ''
+        id: dagger_engine_cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /tmp/dagger-engine.tar
+          key: dagger-engine-${{ runner.os }}-${{ steps.dagger_engine.outputs.version }}
+
+      - name: Load or pre-pull Dagger engine image (resilient to registry flakiness)
+        if: steps.dagger_engine.outputs.version != ''
+        env:
+          ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
+          CACHE_HIT: ${{ steps.dagger_engine_cache.outputs.cache-hit }}
+          CACHE_KEY: dagger-engine-${{ runner.os }}-${{ steps.dagger_engine.outputs.version }}
+        run: |
+          set -uo pipefail
+          image="registry.dagger.io/engine:${ENGINE_VERSION}"
+          tarball="/tmp/dagger-engine.tar"
+          if [ "${CACHE_HIT}" = "true" ] && [ -f "${tarball}" ]; then
+            echo "Loading ${image} from cache (${tarball})"
+            if docker load -i "${tarball}"; then
+              echo "Loaded ${image} from cache; skipping registry pull"
+              exit 0
+            fi
+            # This run self-heals via the pull below, but the cache does not:
+            # GitHub cache keys are immutable and actions/cache skips its save
+            # when the primary key already hit, so the corrupt archive is served
+            # again every night until the key changes. Bumping the pinned Dagger
+            # version rotates the key; otherwise evict it by hand. Loud on
+            # purpose — silently degrading to an uncached registry pull is how
+            # this mitigation would rot unnoticed.
+            echo "::warning::cached engine tarball failed to load and CANNOT be" \
+              "repaired in place. Falling back to a registry pull for this run." \
+              "Evict the poisoned entry to restore caching:" \
+              "gh cache delete '${CACHE_KEY}' --repo \$GITHUB_REPOSITORY"
+          fi
+          echo "Pulling ${image} from registry"
+          for attempt in $(seq 1 6); do
+            if timeout 150 docker pull "${image}"; then
+              echo "Pulled ${image} on attempt ${attempt}"
+              # Fail closed on the cache, not the job: the engine is already in the
+              # local daemon so this run proceeds regardless. A partial/failed save
+              # must NOT be persisted by actions/cache or every later run loads a
+              # broken tarball — delete it so the cache step finds nothing to store.
+              if docker save "${image}" -o "${tarball}"; then
+                echo "Saved ${image} to ${tarball} for future runs"
+              else
+                echo "::warning::docker save failed; removing partial tarball so a bad cache is not persisted"
+                rm -f "${tarball}"
+              fi
+              exit 0
+            fi
+            echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
+            sleep 20
+          done
+          echo "::error::failed to pull ${image} after 6 attempts"
+          exit 1
+
+      # DAGGER_CLOUD_TOKEN here is the org's *telemetry* token — the local engine
+      # reads it from the runner's process environment to ship traces to Dagger
+      # Cloud. That is what this token type is for, and it works; only engine
+      # provisioning ever rejected it. Absence degrades to "no traces", so this is
+      # deliberately not gated. Synced from Infisical by its GitHub App, same path
+      # as the ATTIO/MODAL/PARALLEL keys below.
+      # See https://docs.dagger.io/reference/configuration/cloud/
+      - name: Run integration pytest in Dagger
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           ATTIO_API_KEY: ${{ secrets.ATTIO_API_KEY }}
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           PARALLEL_API_KEY: ${{ secrets.PARALLEL_API_KEY }}
-        run: dagger --cloud run python .github/workflows/ci/pytest_integration_dagger.py
+        run: dagger run python .github/workflows/ci/pytest_integration_dagger.py
 
       # If this step errors "Unauthorized access, your Trunk organization URL
       # slug or token may be incorrect", it is almost always a dead/revoked
