@@ -44,26 +44,12 @@ class SourceEntry(BaseModel):
     handlers: list[HandlerEntry]
 
 
-class SingletonEntry(BaseModel):
-    """Source-agnostic Modal app (e.g. the dev raw-passthrough bucket)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    deployed: bool
-    modal_app: str
-    modal_url: str | None
-    hookdeck_source_id: str | None
-    hookdeck_destination_id: str | None
-    hookdeck_connection_id: str | None
-
-
 class Registry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     generated_at: datetime
     webhooks: list[SourceEntry]
-    singletons: list[SingletonEntry]
+    singletons: list[Any]
 
 
 def write_registry(registry: Registry) -> None:
