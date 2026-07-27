@@ -659,9 +659,8 @@ _PUNCT_RE = re.compile(r"[^\w\s]")
 def normalize_company_name(name: str) -> str:
     """Lowercase, strip trailing legal suffix, collapse punctuation/whitespace.
 
-    Used by both ``libs.attio.companies.find_company_by_name`` and the
-    Snowflake loader's per-row dedup to match Attio Companies whose stored
-    name differs only in legal suffix or punctuation from the CSV value.
+    Used to match Attio Companies whose stored name differs only in legal
+    suffix or punctuation from the CSV value.
     """
     stripped = name.strip()
     suffix_stripped = _LEGAL_SUFFIX_RE.sub("", stripped)
