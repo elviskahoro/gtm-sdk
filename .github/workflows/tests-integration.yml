@@ -82,8 +82,11 @@ jobs:
       # Dagger Cloud's `Engine` type, and the elviskahoro org cannot mint one
       # without Cloud Engines early access, which is still not enabled (issue
       # #223). Every scheduled run from 2026-07-16 onward failed before pytest
-      # started. #223 stays the resumption point if early access ever lands, and
-      # `dagger-cloud-smoke.yml` is the cheap retest.
+      # started.
+      #
+      # Not a permanent verdict on managed compute: Dagger has a new product
+      # landing and #223 stays open to revisit this once it ships. Dispatch
+      # `dagger-cloud-smoke.yml` to check the entitlement before refactoring.
       #
       # registry.dagger.io brownouts (dagger/dagger#7548) stall the first-use
       # engine pull and kill the job before any test runs. Two layers, same as

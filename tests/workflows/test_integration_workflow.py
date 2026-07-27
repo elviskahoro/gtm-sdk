@@ -5,8 +5,12 @@ nightly runs:
 
 - `--cloud` must stay out of the executed steps. The elviskahoro org cannot mint
   a Dagger Cloud `Engine`-type token without Cloud Engines early access, so it
-  dies at engine provisioning before pytest starts. #222 adopted it anyway. Do
-  not re-add it without closing #223 first.
+  dies at engine provisioning before pytest starts. #222 adopted it anyway.
+
+  This guard is a speed bump, not a verdict. Dagger has a managed-compute
+  product landing and #223 stays open to revisit `--cloud` when it ships;
+  updating this test is the expected first step of that refactor. Dispatch
+  `dagger-cloud-smoke.yml` to confirm the entitlement before starting.
 - `DAGGER_CLOUD_COMPUTE_TOKEN` must stay out. It was a manually-set repo secret
   that got deleted in a secret re-sync, and GitHub expands a missing secret to
   "" rather than failing, so the job kept running against no credential at all.
