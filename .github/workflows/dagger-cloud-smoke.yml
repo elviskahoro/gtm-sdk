@@ -1,0 +1,54 @@
+# TEMPORARY. Minimal end-to-end check that the DAGGER_CLOUD_TOKEN secret is of
+# Dagger Cloud's `Engine` type and can actually provision a managed engine.
+#
+# The nightly integration suite is a poor test rig for this: it takes minutes,
+# needs four unrelated API secrets, and its failure output buries the auth error.
+# This runs one container on the cloud engine and nothing else, so the only thing
+# it can fail on is token/provisioning.
+#
+# Delete this file once the token is confirmed working.
+name: Dagger Cloud smoke
+
+on:
+  push:
+    branches: [conductor/dagger-cloud-token-error]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Provision a Dagger Cloud engine
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Setup Dagger
+        uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
+
+      # Separates "secret missing" from "secret present but wrong type" — the two
+      # failure modes look nothing alike and conflating them is what hid the
+      # DAGGER_CLOUD_COMPUTE_TOKEN regression for ten days. Presence only: never
+      # echo a length or substring of the token, since GitHub masks the literal
+      # secret but not values derived from it.
+      - name: Verify token is present
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+        run: |
+          if [ -z "${DAGGER_CLOUD_TOKEN}" ]; then
+            echo "::error::DAGGER_CLOUD_TOKEN is empty."
+            exit 1
+          fi
+          echo "DAGGER_CLOUD_TOKEN is set."
+
+      # A successful provision + exec proves the token is Engine-typed. A wrong
+      # type dies here with "failed to provision a remote Engine: invalid token
+      # type" before the query is ever sent.
+      - name: Run a container on the cloud engine
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+        run: |
+          echo '{container{from(address:"alpine:latest"){withExec(args:["echo","dagger cloud engine ok"]){stdout}}}}' \
+            | dagger --cloud --progress plain query
