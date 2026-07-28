@@ -93,10 +93,9 @@ jobs:
         env:
           WARP_API_KEY: ${{ secrets.WARP_API_KEY }}
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
         run: |
           missing=''
-          for name in WARP_API_KEY LINEAR_API_KEY LINEAR_TEAM_ID; do
+          for name in WARP_API_KEY LINEAR_API_KEY; do
             eval "value=\${$name}"
             if [ -z "${value}" ]; then
               missing="${missing} ${name}"
@@ -204,16 +203,49 @@ jobs:
               applies to issue text too.
             - Do not modify any tracked file. Write only under `tmp/`.
 
-      # Deterministic: dedupe and filing are plain Python, not prompt-dependent.
-      # Invoked with python3 rather than `uv run` so triage does not depend on the
-      # dependency graph installing -- `uv sync` is itself a plausible cause of the
-      # failure being triaged. The script is stdlib-only for the same reason.
-      - name: File or bump the Linear issue
-        id: linear
+      # Dagger from here on: the filing step is deterministic, so it belongs in a
+      # pinned container rather than running against whatever the runner happens to
+      # ship. `version` is pinned deliberately -- without it the action installs the
+      # latest CLI at run time, so an upstream release silently changes the engine
+      # and forces a cold image pull with no diff in this repo. Keep in lockstep
+      # with the dagger-io pin below and with tests-*.yml.
+      - name: Setup Dagger
         if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
+        with:
+          version: 0.21.7
+
+      # ubuntu-latest, so a plain venv works -- unlike the Namespace runners in
+      # tests-*.yml, which are PEP 668 externally-managed and need the root-free
+      # dance. Prepending to $GITHUB_PATH lets the invocation stay a bare
+      # `dagger run python …`.
+      - name: Install Dagger Python SDK
+        id: dagger_sdk
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          dagger_venv="$HOME/.dagger-sdk/controller-venv"
+          python3 -m venv "${dagger_venv}"
+          "${dagger_venv}/bin/pip" install --quiet \
+            "dagger-io==0.21.7" "anyio==4.13.0"
+          echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
+
+      # Primary path. Dedupe and filing are plain Python inside the container, not
+      # prompt-dependent -- see .github/workflows/ci/triage_dagger.py.
+      #
+      # continue-on-error because registry.dagger.io brownouts (dagger/dagger#7548)
+      # stall the first-use engine pull, and tests-integration.yml already needs six
+      # retries to survive them. A reporter that dies when the registry is flaky is
+      # useless precisely when CI is unhappy, so the next step falls back to the host.
+      - name: File or bump the Linear issue (Dagger)
+        id: linear_dagger
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           # Passed as env, never interpolated into the command line: a branch name
           # is attacker-influencable text, and `${{ }}` in a `run:` block is
           # substituted before the shell parses it (semgrep run-shell-injection).
@@ -223,6 +255,31 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
         run: |
+          dagger run python .github/workflows/ci/triage_dagger.py \
+            --workflow "${WORKFLOW}" \
+            --run-url "${RUN_URL}" \
+            --branch "${HEAD_BRANCH}" \
+            --commit "${HEAD_SHA}" \
+            --timestamp "${UPDATED_AT}" \
+            --diagnosis-file tmp/diagnosis.md \
+            --output tmp/linear-issue.tsv
+
+      # Fallback, not a second attempt at the same thing: runs the identical
+      # stdlib-only script directly on the runner when the containerized path could
+      # not start. Skipped when Dagger already succeeded.
+      - name: File or bump the Linear issue (host fallback)
+        id: linear_host
+        if: >-
+          steps.preflight.outputs.configured == 'true' && steps.linear_dagger.outcome != 'success'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          echo "::warning::Dagger path unavailable; filing from the host instead."
           python3 scripts/ci-triage-linear-issue.py \
             --workflow "${WORKFLOW}" \
             --run-url "${RUN_URL}" \
@@ -231,11 +288,18 @@ jobs:
             --timestamp "${UPDATED_AT}" \
             --diagnosis-file tmp/diagnosis.md \
             --output tmp/linear-issue.tsv
+
+      - name: Publish the issue reference
+        id: linear
+        if: steps.preflight.outputs.configured == 'true'
+        run: |
           if [ -s tmp/linear-issue.tsv ]; then
             {
               printf 'identifier=%s\n' "$(cut -f1 tmp/linear-issue.tsv | tail -1)"
               printf 'url=%s\n' "$(cut -f2 tmp/linear-issue.tsv | tail -1)"
             } >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No Linear issue was filed (no diagnosis, or both paths failed)."
           fi
 
       - name: Summarize

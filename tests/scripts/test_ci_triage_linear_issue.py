@@ -82,8 +82,14 @@ def _install_fake_graphql(
     return calls
 
 
-def _args(diagnosis: Path, output: Path) -> list[str]:
-    return [
+def _args(
+    diagnosis: Path,
+    output: Path,
+    *,
+    team: str | None = TEAM_UUID,
+) -> list[str]:
+    """Build a CLI invocation. ``team=None`` exercises the hard-coded default."""
+    args = [
         "--workflow",
         "Unit tests",
         "--run-url",
@@ -99,6 +105,9 @@ def _args(diagnosis: Path, output: Path) -> list[str]:
         "--output",
         str(output),
     ]
+    if team is not None:
+        args += ["--team", team]
+    return args
 
 
 @pytest.fixture
@@ -108,20 +117,36 @@ def diagnosis(tmp_path: Path) -> Path:
     return path
 
 
-def _set_creds(monkeypatch: pytest.MonkeyPatch, team: str = "ENG") -> None:
+def _set_creds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The API key is the only credential; the team is hard-coded in the script."""
     monkeypatch.setenv("LINEAR_API_KEY", "lin_api_test")
-    monkeypatch.setenv("LINEAR_TEAM_ID", team)
 
 
-def test_missing_credentials_exits_two(
+def test_missing_api_key_exits_two(
     script: Any,
     monkeypatch: pytest.MonkeyPatch,
     diagnosis: Path,
     tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("LINEAR_API_KEY", raising=False)
-    monkeypatch.delenv("LINEAR_TEAM_ID", raising=False)
     assert script.main(_args(diagnosis, tmp_path / "out.tsv")) == 2
+
+
+def test_team_defaults_to_the_hard_coded_constant(
+    script: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    diagnosis: Path,
+    tmp_path: Path,
+) -> None:
+    """No --team and no env var: the script must still know where to file."""
+    _set_creds(monkeypatch)
+    calls = _install_fake_graphql(script, monkeypatch)
+
+    assert script.main(_args(diagnosis, tmp_path / "out.tsv", team=None)) == 0
+
+    resolve = next(v for n, v in calls if n == "ResolveTeam")
+    assert resolve["key"] == script.LINEAR_TEAM
+    assert script.LINEAR_TEAM, "a team must actually be hard-coded"
 
 
 def test_missing_diagnosis_file_is_not_an_error(
@@ -160,7 +185,7 @@ def test_creates_issue_when_none_exists(
     calls = _install_fake_graphql(script, monkeypatch)
     output = tmp_path / "out.tsv"
 
-    assert script.main(_args(diagnosis, output)) == 0
+    assert script.main(_args(diagnosis, output, team="ENG")) == 0
 
     ops = [name for name, _ in calls]
     assert ops == ["ResolveTeam", "FindTriageIssue", "CreateTriageIssue"]
@@ -181,7 +206,7 @@ def test_team_uuid_skips_resolution(
     diagnosis: Path,
     tmp_path: Path,
 ) -> None:
-    _set_creds(monkeypatch, team=TEAM_UUID)
+    _set_creds(monkeypatch)
     calls = _install_fake_graphql(script, monkeypatch)
     assert script.main(_args(diagnosis, tmp_path / "out.tsv")) == 0
     assert "ResolveTeam" not in [name for name, _ in calls]
@@ -193,7 +218,7 @@ def test_unknown_team_key_fails_loudly(
     diagnosis: Path,
     tmp_path: Path,
 ) -> None:
-    _set_creds(monkeypatch, team="NOPE")
+    _set_creds(monkeypatch)
 
     def fake_graphql(
         query: str,  # noqa: ARG001
@@ -203,7 +228,8 @@ def test_unknown_team_key_fails_loudly(
         return {"teams": {"nodes": []}}
 
     monkeypatch.setattr(script, "_graphql", fake_graphql)
-    assert script.main(_args(diagnosis, tmp_path / "out.tsv")) == 1
+    # A key (not a UUID) so resolution actually runs and can come back empty.
+    assert script.main(_args(diagnosis, tmp_path / "out.tsv", team="NOPE")) == 1
 
 
 def test_recurrence_bumps_existing_issue_instead_of_duplicating(
@@ -236,7 +262,7 @@ def test_recurrence_bumps_existing_issue_instead_of_duplicating(
             "description": prior_description,
         },
     ]
-    _set_creds(monkeypatch, team=TEAM_UUID)
+    _set_creds(monkeypatch)
     calls = _install_fake_graphql(script, monkeypatch, existing=existing)
     output = tmp_path / "out.tsv"
 
@@ -277,7 +303,7 @@ def test_marker_is_scoped_per_workflow(
             "description": "something\n<!-- ci-triage-key: Docs checks -->",
         },
     ]
-    _set_creds(monkeypatch, team=TEAM_UUID)
+    _set_creds(monkeypatch)
     calls = _install_fake_graphql(script, monkeypatch, existing=existing)
 
     assert script.main(_args(diagnosis, tmp_path / "out.tsv")) == 0
@@ -303,7 +329,7 @@ def test_graphql_errors_surface_as_exit_one(
     diagnosis: Path,
     tmp_path: Path,
 ) -> None:
-    _set_creds(monkeypatch, team=TEAM_UUID)
+    _set_creds(monkeypatch)
 
     def boom(
         query: str,  # noqa: ARG001

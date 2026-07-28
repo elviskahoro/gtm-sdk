@@ -22,18 +22,20 @@ description, which is the same surface this script needs, and it cannot post
 comments. Same reasoning and precedent as ``scripts/docs-pages-lint.py``, which
 is deliberately standalone so CI can call it before ``uv sync`` finishes.
 
-Usage (see also .github/workflows/agent-ci-triage.yml):
+In CI this runs inside a Dagger container -- see
+``.github/workflows/ci/triage_dagger.py``, which is what
+``.github/workflows/agent-ci-triage.yml`` invokes. It is still directly runnable
+on a host, which is the workflow's fallback path when the Dagger engine is
+unavailable:
 
-    LINEAR_API_KEY=lin_api_xxx LINEAR_TEAM_ID=ENG \\
-      scripts/ci-triage-linear-issue.py \\
+    LINEAR_API_KEY=lin_api_xxx scripts/ci-triage-linear-issue.py \\
         --workflow "Unit tests" \\
         --run-url https://github.com/o/r/actions/runs/123 \\
         --branch main --commit abc1234 \\
         --diagnosis-file tmp/diagnosis.md
 
-``LINEAR_TEAM_ID`` accepts either a team UUID or a team key (``ENG``, ``AI``);
-a key is resolved to its UUID via one extra GraphQL round-trip, because
-Linear's ``issueCreate`` only accepts the UUID form.
+The target team is the hard-coded ``LINEAR_TEAM`` below; ``--team`` overrides it
+and accepts a key or a UUID.
 
 Exits non-zero only on misconfiguration or an API error. A missing or empty
 diagnosis file is reported and exits 0, so a flaky agent step cannot turn one
@@ -53,6 +55,14 @@ from pathlib import Path
 from typing import Any
 
 LINEAR_API_URL = "https://api.linear.app/graphql"
+
+# Hard-coded on purpose: there is exactly one team that owns this repo's CI, so
+# routing it through a GitHub secret bought nothing but another value to forget to
+# set (and a preflight branch that silently skipped triage when it was missing).
+# A team KEY rather than a UUID because it is legible in a diff -- ``resolve_team``
+# converts it with one extra GraphQL round-trip, since Linear's ``issueCreate``
+# only accepts the UUID form. Override with --team for local experiments.
+LINEAR_TEAM = "AI"
 
 # Sentinel that makes an issue findable on the next failure of the same
 # workflow. Lives in the description because Linear has no custom-field API on
@@ -263,6 +273,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="ISO timestamp for this occurrence (defaults to the run URL only)",
     )
     parser.add_argument(
+        "--team",
+        default=LINEAR_TEAM,
+        help=f"Linear team key or UUID (default: {LINEAR_TEAM})",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -275,18 +290,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     api_key = os.environ.get("LINEAR_API_KEY", "").strip()
-    team = os.environ.get("LINEAR_TEAM_ID", "").strip()
-    if not api_key or not team:
-        missing = " and ".join(
-            name
-            for name, value in (
-                ("LINEAR_API_KEY", api_key),
-                ("LINEAR_TEAM_ID", team),
-            )
-            if not value
-        )
-        print(f"error: {missing} must be set", file=sys.stderr)
+    if not api_key:
+        print("error: LINEAR_API_KEY must be set", file=sys.stderr)
         return 2
+    team = args.team.strip()
 
     if not args.diagnosis_file.is_file():
         print(
