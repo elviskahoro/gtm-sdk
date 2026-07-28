@@ -1,0 +1,452 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[prompts]
+create_pr = """
+# Creating Pull Requests
+
+## The principle: why over what
+
+A PR description's job is to give the reviewer what the diff *can't*: motivation, alternatives considered, risks worth scrutinizing, and a trail back to the originating context. The diff itself is the source of truth for what changed — paraphrasing it in the description is duplicate work that rots the moment someone force-pushes.
+
+Concretely:
+
+- Lead with the **problem**, not the change.
+- Name the **alternatives** you considered, briefly. Skip if there were no meaningful ones.
+- Call out what reviewers should **scrutinize**, not what they should take on faith.
+- Link the **breadcrumb trail** — Linear ticket, design spec/plan, predecessor PR.
+- **Never** summarize the diff. The reviewer is about to read it.
+
+A reader who skims your description should walk away with the mental model needed to read the diff with intention.
+
+**Announce at start:** "I'm using the pr-pull-request-creator skill to draft this PR."
+
+## Workflow
+
+### Step 1: Pre-flight checks
+
+Before drafting, run these in a single batch of parallel `Bash` calls:
+
+```bash
+git status                                          # working tree clean?
+git branch --show-current                           # current branch?
+git rev-parse --abbrev-ref @{upstream} 2>/dev/null  # is there a remote tracking ref?
+git log @{upstream}..HEAD --oneline 2>/dev/null     # any unpushed commits?
+git log main..HEAD --oneline                        # commits beyond main?
+git diff main...HEAD --stat                         # surface area?
+gh pr view --json url,state 2>/dev/null             # does a PR already exist?
+gh repo view --json defaultBranchRef --jq .defaultBranchRef.name  # confirm base
+```
+
+Stop and surface the problem to the user if any of these is true:
+
+- The working tree has uncommitted changes — ask the user whether to commit, stash, or abandon.
+- The branch has no upstream / is not pushed — confirm with the user before pushing.
+- The branch has zero commits beyond the base — there's nothing to PR.
+- A PR already exists for this branch — use `gh pr edit` to update it, not `gh pr create`.
+
+Don't paper over these by force-pushing, amending, or running `git push -f`. The CLAUDE.md rules apply: destructive operations need explicit user approval.
+
+### Step 2: Gather context for the "Why"
+
+A strong Why section comes from upstream artifacts, not from the diff. Pull from these sources in parallel where possible:
+
+**Linear ticket** — if the branch name matches `(feature|agent)/<team>-<number>-<slug>` (e.g., `feature/ai-268-foo`, `agent/eng-1234-bar`):
+
+1. Extract the ticket ID with a regex like `[A-Z]+-\d+` (case-insensitive).
+2. Read it via `mcp__linear__get_issue` with the identifier.
+3. Lift the problem statement and acceptance criteria into the Why section — **paraphrase, don't paste**. A wall of quoted ticket text isn't a PR description.
+4. Save the URL for the Links section.
+
+**Design artifacts** — scan `design/` for backlog/done files matching the branch topic:
+
+```bash
+ls "$(git rev-parse --show-toplevel)/design/" | grep -iE "<topic-keyword>"
+```
+
+- `*-spec-*.md` files carry motivation, constraints, trade-offs.
+- `*-plan-*.md` files carry scope (and by elision, what's out of scope).
+- Read the matching artifact in full before drafting.
+
+**Git history**:
+
+- `git log main..HEAD --format='%s%n%b%n---'` — commit subjects and bodies often capture in-flight decisions better than the final diff.
+
+**Current conversation**:
+
+- If the user discussed alternatives, made decisions mid-flight, or set constraints earlier in this session, those belong in Trade-offs or Risks.
+
+If none of these sources establishes a clear Why, **stop and ask the user**. Don't fabricate motivation — a confident-sounding-but-vague Why is worse than asking.
+
+### Step 3: Commit local changes
+
+If the pre-flight check surfaced uncommitted changes that belong in this PR, commit them **before** running roborev — roborev reviews committed history, not the working tree, so uncommitted edits would be invisible to it.
+
+- Stage only the files that belong to this PR. Skip tool-local cruft (e.g., `.agents/`, `.claude/`, Conductor-local files) unless the user explicitly opts in.
+- Confirm the file list and commit message with the user before running `git commit`. The commit message should mirror the PR title's intent (sentence-cased, why-focused) — not a Conventional Commits subject.
+- Do **not** push yet. Push happens in Step 10, after squash, roborev, the user-confirmation gate, and the rebase.
+
+If the working tree is already clean, skip this step.
+
+### Step 4: Squash to a coherent set of commits
+
+**Hard gate: squash before roborev, roborev before the user-confirmation gate, confirmation before push.** All three must happen before the branch hits `origin` so the review (and the merge) operate on the final history, not a noisy timeline.
+
+```bash
+git log main..HEAD --oneline
+```
+
+- **Default to one commit per PR.** Multi-commit PRs are only OK when each commit is independently reviewable and the slices land in order.
+- Squash with `git rebase -i main` or `git reset --soft main && git commit`. Never use `--no-edit` flags that bypass message review.
+- The squashed commit message mirrors the PR title's intent (sentence-cased, why-focused) and captures the motivation in the body. No Conventional Commits prefix.
+- If the branch already has a single commit (or each existing commit is independently reviewable and ordered), skip the rebase but still confirm the count before moving on.
+- **Never force-push to a shared branch to squash after publication.** Squash *before* the first push.
+
+### Step 5: Local roborev review before drafting
+
+**Hard gate: do not draft the PR or move toward `git push` until roborev has run and either reported clean or been explicitly acknowledged by the user.** This applies even if the change feels trivial, even if the diff is one line, and even if the user has not asked for review explicitly — the skill always runs roborev before the user is asked to approve a draft.
+
+With the squashed commit in place but the branch still local, run a local AI code review with roborev so findings surface *before* the user sees a draft and *before* GitHub sees the diff. This repo aliases `roborev` as a git subcommand — always invoke it with the `--wait` flag:
+
+```bash
+git roborev review --wait
+```
+
+- `--wait` is **required**, not optional — it blocks until the review completes so findings are available before the draft is shown. Do not run `git roborev review` without `--wait`.
+- Capture the outcome (clean, N findings, unavailable) — Step 8 surfaces it inside the draft preview so the user can see the gate was walked.
+- If roborev surfaces issues, **stop and show them to the user**. Do not draft, push, or create the PR until the user decides to fix, defer, or proceed. Fixes go into a follow-up commit and then back through Step 4 (re-squash) and Step 5 (re-run roborev) — never amend or force-push past findings silently.
+- If roborev is unavailable (no alias, command not installed, no network), say so explicitly to the user and ask whether to proceed without review. Do not silently skip.
+- For deeper fix/refine loops, see the [cli-roborev-guide](../cli-roborev-guide/SKILL.md) skill.
+
+### Step 6: Draft the title
+
+The title is a formal, sentence-cased statement of **why this change exists** — not a conventional commit subject. A reviewer scanning the PR list should understand the *motivation*, not just the area of code touched.
+
+Rules:
+
+- **Formal, sentence case.** "Eliminate duplicated Attio retry logic across five call sites" — not "attio retry refactor".
+- **Lead with the why, not the what.** Prefer the problem solved or the outcome enabled over the mechanical change. "Unblock Linear → Attio sync from rate-limit drift" beats "Add retry decorator to Attio client".
+- **No Conventional Commits prefix.** Do **not** use `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, etc. Even if recent commits or PRs use them, PR titles in this repo are full sentences. Commit messages and PR titles are different surfaces.
+- **Under 70 characters where possible**, but clarity wins over brevity — GitHub truncates in list views, so front-load the most important words.
+- **Specific.** "Fix off-by-one in Apollo pagination cursor causing missed contacts" — not "Bug fix" or "Improvements".
+- **No ticket IDs in the title.** They go in Links.
+- **No trailing period.**
+- **Avoid bare imperative verbs** like "Add", "Fix", "Update" as the first word when a why-framing is possible. They're allowed when the why genuinely is the action (e.g., a clear bugfix), but check first whether the motivation can lead instead.
+
+Good vs. bad title shapes:
+
+| Bad (conventional / what-focused) | Good (formal / why-focused) |
+|---|---|
+| `feat: add retry decorator` | `Consolidate Attio retry logic to unblock Linear sync` |
+| `fix: pagination bug` | `Fix off-by-one in Apollo pagination cursor causing missed contacts` |
+| `refactor: clean up attio client` | `Eliminate divergent retry behavior across Attio call sites` |
+| `chore: bump deps` | `Bump httpx to 0.27 to pick up the connection-pool leak fix` |
+
+### Step 7: Draft the description
+
+Use this template. **Drop sections that have nothing meaningful in them** — a section containing "None" or "N/A" is worse than no section.
+
+```markdown
+## Why
+<1-3 paragraphs. Lead with the problem or constraint. State the motivation. Reference upstream context (ticket, spec) by link, not paraphrase. The reviewer should finish this section understanding what would happen if the PR were *not* merged.>
+
+## Trade-offs
+<Only if there were meaningful alternatives. Format: "Chose X over Y because Z." Skip if the approach was obvious or there was only one reasonable way.>
+
+## Risks
+<What could break that isn't already covered by tests. Note rollback path if non-trivial. Skip for clearly low-risk changes (docs, comments, isolated refactors with full coverage).>
+
+## Test plan
+<Reasoning, not output. "Exercised X path with Y inputs because Z is the highest-risk surface." If full unit coverage exists and the change is small/obvious, skip this section.>
+
+## Links
+- Linear: [TEAM-NNN](https://linear.app/...)
+- Spec: design/backlog-...-spec-01.md
+- Plan: design/backlog-...-plan-01.md
+- Related PRs: #NNN
+```
+
+Section guidance:
+
+| Section | Required? | When to drop it |
+|---|---|---|
+| Why | Always | Never. If you can't write a specific one, the work isn't ready. |
+| Trade-offs | When meaningful alternatives existed | Obvious one-way changes, fixes to clear bugs |
+| Risks | When the change has non-trivial blast radius | Docs, comments, isolated refactors with coverage |
+| Test plan | When testing required judgment calls | Small changes with full unit coverage |
+| Links | If any upstream artifact exists | True greenfield work with no ticket, spec, or predecessor PR |
+
+### Step 8: Show the draft. Wait for confirmation. (Single approval gate before push.)
+
+**This is the only user-approval gate in the workflow, and it sits immediately before `git push`.** Steps 3–5 (commit, squash, roborev) must already be complete by the time you reach it — by construction the agent cannot honor a "yes" without having walked the roborev gate first.
+
+Show the draft title, the draft body, **and the roborev outcome** so the user can see the gate was walked. Even if the user said "create a PR", they agreed to the action, not blind-trusted your draft.
+
+Format the preview as:
+
+```
+Title: <draft title>
+
+Body:
+---
+<draft body>
+---
+
+Roborev: <clean | N findings acknowledged | unavailable (reason)>
+
+Push, create, and submit this PR to the merge queue? (or edit before I submit)
+```
+
+The roborev line is mandatory — never omit it. If it shows "unavailable", the user is implicitly being asked to proceed without review.
+
+If the user requests edits, revise and re-show. Don't auto-submit. A "yes" here authorizes the rebase (Step 9), the push (Step 10), the PR creation (Step 11), **and** submitting the PR to the Trunk merge queue (Step 12) — proceed through all of them without re-prompting (pausing only if the rebase hits conflicts). Because the queue auto-merges once its predictive CI passes, the "yes" is also the explicit human authorization to merge; there is no second gate before the merge lands.
+
+### Step 9: Rebase onto the latest base (last step before opening the PR)
+
+**This is the final step before the PR is opened.** Immediately before pushing, rebase the branch onto the freshest base so the PR opens against current `main` and merge conflicts surface here — locally, where they're cheap to resolve — instead of in GitHub's merge UI.
+
+This must happen **before** the first push (Step 10), not after. Rebasing a branch that's already on `origin` would require a force-push, which this repo forbids without explicit user approval.
+
+```bash
+git fetch origin
+git rebase origin/main   # or the confirmed base branch from pre-flight
+```
+
+- If the rebase is clean, proceed to Step 10.
+- If the rebase hits conflicts, **stop and surface them to the user.** Resolve them (or have the user resolve them), then re-run Steps 4–5 (re-squash if needed, re-run `git roborev review --wait`) so the review reflects the rebased history. Never `git rebase --skip` or abandon conflicting hunks silently.
+- If a `.beads/*.jsonl` conflict appears, route through the [beads-conflict-resolver](../beads-conflict-resolver/SKILL.md) skill.
+- If the branch is already up to date with the base, the rebase is a no-op — proceed.
+
+### Step 10: Push the branch
+
+Once the rebase is clean, push the branch to `origin` with upstream tracking:
+
+```bash
+git push -u origin "$(git branch --show-current)"
+```
+
+Confirm the push succeeded before moving on. If it fails (auth, protected branch, non-fast-forward), surface the error and stop — do not force-push.
+
+### Step 11: Create the PR
+
+With the branch pushed, use `gh pr create` with a HEREDOC body so newlines and special characters survive:
+
+```bash
+gh pr create --title "Fix race in Apollo enrichment dedup that double-charged credits" --body "$(cat <<'EOF'
+## Why
+... (real newlines, not \n)
+EOF
+)"
+```
+
+Return the PR URL to the user. Don't add follow-up commentary unless the user asks — the URL is the work product.
+
+### Step 12: Submit the PR to the Trunk merge queue
+
+This repo lands PRs through the **Trunk Merge Queue**, not GitHub's "Merge" button. Once the PR is open, submit it to the queue — the queue runs predictive CI on a simulated post-merge branch and **auto-merges the PR once tests pass**. You do not wait for tests, poll in a loop, or click merge; submitting is the whole step.
+
+```bash
+trunk merge <pr-number>
+```
+
+- `<pr-number>` is the GitHub PR number from Step 11's output — not a URL or branch name.
+- This step is already authorized by the single "yes" at Step 8. Don't re-prompt.
+- Optionally confirm acceptance with a **single** status check (never a tight loop): `trunk merge status <pr-number>`. Report the state (`Queued` / `Testing` / `Tests Passed` / `Merged`) and stop — the queue lands it asynchronously.
+
+Guardrails (see [trunk-cli-guide](../trunk-cli-guide/SKILL.md) for the full state table, priority levels, and troubleshooting):
+
+- **Default priority.** Never pass `-p` / `--priority` above `medium` without an explicit reason from the user; `urgent`/`high` are for incidents only.
+- **Never `gh pr merge` or the GitHub "Merge" button.** Both bypass the queue and can break the landing order.
+- **Never `trunk merge --force`, `trunk merge pause`, or `trunk merge resume`.** Force bypasses branch protection; pause/resume are admin operations affecting every contributor.
+- **Auth failure** — run `trunk login` once and retry the submit.
+- **`Failed` / `PENDING_FAILURE`** — surface the state to the user per the trunk-cli-guide state table. `PENDING_FAILURE` may be a flake (retry once); `Failed` means push a fix to the PR branch and resubmit. Do **not** resubmit blindly in a loop.
+- **Refuse on `main` or a protected branch** — the queue operates on the feature-branch PR; there is no PR to queue from a protected branch.
+
+## Modifiers: drafts, reviewers, labels
+
+`gh pr create` accepts modifiers that don't affect the description but matter for the PR's lifecycle. Don't auto-set any of these; only pass what the user explicitly asks for:
+
+| Flag | When |
+|---|---|
+| `--draft` | User says "draft", or commit history shows clear in-progress markers ("WIP", "spike"). |
+| `--reviewer <handle>` | Only when the user names reviewers. Don't guess. |
+| `--label <name>` | Only labels that exist (`gh label list`). Invented labels silently no-op. |
+| `--assignee <handle>` | Default to `@me` unless told otherwise. |
+| `--base <branch>` | Only override the default branch when the user says so. |
+
+## Anti-patterns
+
+These show up in autogenerated PR descriptions and this skill must actively avoid them. Several come from defaults baked into other tools — including the default `gh pr create` template suggested by the Bash tool — and this skill overrides them.
+
+### Don't summarize the diff
+
+```markdown
+## Summary
+- Added `retry_with_backoff` helper in `apollo/client.py`
+- Updated `enrich_account` to use it
+- Added 3 unit tests in `test_apollo.py`
+```
+
+The reviewer is about to read the diff. This is duplicate work that rots the moment the diff changes. Replace with **Why**.
+
+### Don't write empty sections
+
+```markdown
+## Risks
+None.
+
+## Test plan
+Tested locally.
+```
+
+"None" and "Tested locally" carry zero signal. Drop the section.
+
+### Don't add AI attribution
+
+This repo's CLAUDE.md forbids it. **Never** emit:
+
+- `Co-Authored-By: Claude <claude@anthropic.com>`
+- `🤖 Generated with [Claude Code](...)`
+- Any "Generated by ..." or "Powered by ..." footer
+
+The Bash tool's default PR template includes the 🤖 footer. **Strip it.** This skill overrides that default.
+
+### Don't restate the title
+
+If the title is "Fix race in Apollo enrichment dedup", the description shouldn't open with "This PR fixes a race in the Apollo enrichment dedup logic." Start the Why with the problem, not a rephrase.
+
+### Don't pad with boilerplate
+
+- "This PR makes some improvements to ..."
+- "As discussed offline, ..."
+- "Cleaning up some technical debt ..."
+
+If you can't write a specific Why, pause and ask the user. Vague motivation is a tell that the work isn't ready for review.
+
+### Don't paste test output
+
+The Test plan section is about the *reasoning* behind what was tested. A reviewer can run the tests. They cannot rederive your reasoning from the output.
+
+### Don't include "Closes #NNN" without confirming
+
+GitHub auto-closes referenced issues on merge. Only use `Closes` / `Fixes` / `Resolves` keywords if the PR fully resolves the issue. For partial work, mention the issue in Links instead — no magic keyword.
+
+### Don't autopilot the PR submission
+
+Even if the user said "create a PR for this", they agreed to the action, not to a specific draft. Show the draft, wait for confirmation, then submit.
+
+## Examples
+
+### Example 1: Small bug fix — Why + Links only
+
+**Title:** `Fix off-by-one in Apollo pagination cursor causing missed contacts`
+
+**Body:**
+
+```markdown
+## Why
+The Apollo `search_people` paginator was dropping the last page of results because the cursor check used `>` instead of `>=`. Affected every batch where total results were an exact multiple of page_size — roughly 10% of runs. Caught when a TAM build was missing ~50 known contacts ([AI-1234](https://linear.app/...)).
+
+## Links
+- Linear: [AI-1234](https://linear.app/...)
+```
+
+(Trade-offs, Risks, Test plan dropped — small obvious fix, full coverage exists.)
+
+### Example 2: Refactor — Why + Trade-offs + Risks + Links
+
+**Title:** `Consolidate Attio retry logic to unblock Linear → Attio sync`
+
+**Body:**
+
+```markdown
+## Why
+Five call sites in `libs/attio/` were duplicating retry/backoff logic, and each had drifted: `update_person` retried on 5xx but not 429; `create_person` retried on 429 but with no backoff; `list_workspaces` did no retry at all. The new Linear → Attio sync was about to become the sixth divergent copy.
+
+Pulling the logic into `@retry_with_backoff` lets callers opt in with one line and ensures consistent behavior across all Attio writes.
+
+## Trade-offs
+Considered `tenacity` instead. Rejected because the call sites already have idiosyncratic logic — custom backoff that respects Attio's `Retry-After` header — that `tenacity` would require a custom wait strategy to express. The hand-rolled decorator is ~30 lines and stays close to the Attio-specific behavior.
+
+## Risks
+Changes the *shape* of exceptions that bubble up: `AttioRateLimit` is now wrapped in `RetryExhausted` after N attempts. Two existing callers caught `AttioRateLimit` directly; both updated in this PR. Grep for `AttioRateLimit` returns no other matches.
+
+## Links
+- Linear: [AI-2891](https://linear.app/...)
+- Spec: design/backlog-202604010000-attio_retry_decorator-spec-01.md
+```
+
+### Example 3: Bad → Good
+
+**Bad:**
+
+```markdown
+## Summary
+- Added retry decorator
+- Updated 5 Attio call sites
+- Removed duplicate retry code
+- Added tests
+
+## Test plan
+- [x] Ran tests
+- [x] Tested locally
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
+What's wrong: the Summary paraphrases the diff, the Test plan has no reasoning, the AI footer is forbidden in this repo, and there's no motivation a reviewer can use to evaluate the change.
+
+**Good:** see Example 2.
+
+## Failure modes and recovery
+
+| What happened | What to do |
+|---|---|
+| Linear MCP unavailable or ticket not found | Continue without the Linear context. Note in Links: "Linear ticket: AI-NNN (MCP unavailable at draft time)" and let the user fill in. |
+| Branch doesn't match a Linear pattern | Skip the Linear lookup. Rely on design artifacts and conversation. |
+| No design artifact, no ticket, no clear Why from the conversation | Stop. Ask the user: "I can't establish a specific Why for this PR from the available context. Can you summarize the motivation in 1-2 sentences?" |
+| `gh pr create` fails (auth, network, no remote) | Surface the error to the user. Don't retry without diagnosing. |
+| User rejects the draft | Take their feedback and rewrite. Don't argue. |
+| User wants to skip the confirmation step | Honor it — but require an explicit "skip confirmation" or "just create it" from them. Default is to confirm. |
+
+## Integration with other skills
+
+| Skill | Relationship |
+|---|---|
+| [finishing-a-development-branch](../finishing-a-development-branch/SKILL.md) | Routes here when the user picks Option 2 (Push and create PR). That skill's inline `## Summary` template is superseded by this skill's template. |
+| [linear-ticket-creator](../linear-ticket-creator/SKILL.md) | Sibling. Both apply "why over what" — one to tickets, one to PRs. |
+| [cli-graphite-guide](../cli-graphite-guide/SKILL.md) | For stacked PRs, this skill drafts each PR in the stack. Each Why explains its slice of the larger change. |
+| [cli-linear-ticket-from-branch](../cli-linear-ticket-from-branch/SKILL.md) | Resolves the Linear ticket ID from the branch when the link isn't obvious from the name. |
+| [code-review](../code-review/SKILL.md) / [requesting-code-review](../requesting-code-review/SKILL.md) | Define the reader's perspective. This skill writes for that audience. |
+| [pr-review-fixer](../pr-review-fixer/SKILL.md) | Operates on the PR *after* this skill creates it. |
+| [trunk-cli-guide](../trunk-cli-guide/SKILL.md) | Reference for Step 12's `trunk merge` submission — queue states, priority levels, `PENDING_FAILURE` handling, and troubleshooting. |
+| [pr-merger](../pr-merger/SKILL.md) | Different scope: drives an *existing* PR through a pre-merge gauntlet (review fixes, trunk autofix, Dagger CI) and hands off the `trunk merge` command for the user to run. This skill, by contrast, opens a *fresh* PR and submits it to the queue itself as Step 12. |
+
+## Common pitfalls
+
+| Pitfall | Why it bites | Fix |
+|---|---|---|
+| Drafting before pre-flight checks | PR opened against stale base, with uncommitted work left behind | Run the pre-flight batch first |
+| Not checking for an existing PR | Duplicate PR, or `gh pr create` errors out | Always `gh pr view` first |
+| Pasting the Linear ticket verbatim | Description becomes a wall of duplicated text | Paraphrase the problem statement; link the rest |
+| Filling all sections regardless of signal | Skim-defeating filler | Drop sections that don't carry meaning |
+| Autopiloting `gh pr create` | Premature publication; harder to retract than to delay | Show draft, wait for confirmation |
+| Inheriting the default 🤖 footer | Violates CLAUDE.md | Strip it from the body |
+| Using "WIP" in title instead of `--draft` | Title noise; doesn't actually mark the PR as draft | Use `gh pr create --draft` and a clean title |
+| Linking to the PR's own branch name as "context" | The branch is implicit; this is noise | Only link to artifacts that aren't already obvious from the PR |
+
+## Red flags (stop and rethink)
+
+- **About to merge with `gh pr merge` or the GitHub "Merge" button.** This repo lands PRs through the Trunk merge queue (`trunk merge <pr>`, Step 12); the GitHub button bypasses the queue and can break the landing order.
+- **About to `git push` without running `git roborev review --wait` first.** Roborev is a hard gate before the branch reaches `origin`; no PR should skip it.
+- **About to `git push` with more commits than the PR needs.** Squash to a coherent set first (Step 4); don't rely on GitHub's "Squash and merge" button to clean up history before review.
+- Drafting a PR with no Linear ticket, no design artifact, and no conversation-derived motivation.
+- Writing more than 3 paragraphs in Why. If you need that much, the work is probably two PRs.
+- Including a `## Summary` section. This is the default template's tell — replace with `## Why`.
+- Including a 🤖 footer.
+- More than 5 bullets in any one section. Each bullet should be load-bearing.
+- A title that ends in a period, or starts with "Update", "Fix some", "Misc", "Various".
+- A title that uses a Conventional Commits prefix (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`). PR titles in this repo are formal sentences, not commit subjects.
+- A title that describes *what* the diff does (e.g., "Add X helper", "Refactor Y module") when a *why* framing was available.
+"""
+
+rename_branch = "make sure that the branch prefix is always \"conductor/\""
