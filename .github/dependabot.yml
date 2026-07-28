@@ -11,3 +11,14 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+
+  # trunk's pinact linter enforces that every `uses:` is SHA-pinned, but pinning is
+  # not upgrading -- nothing was bumping these, which is how trunk-check.yml drifted
+  # to setup-uv v7.6.0 while the test workflows sat on v8.3.2. Dependabot rewrites the
+  # SHA and the trailing `# vX.Y.Z` comment together, so pinact stays satisfied.
+  - package-ecosystem: github-actions
+    directory: / # `/` covers .github/workflows/**
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

@@ -1,7 +1,7 @@
 "$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
 
 [prompts]
-create_pr = """
+create_pr = '''
 # Creating Pull Requests
 
 ## The principle: why over what
@@ -447,6 +447,6 @@ What's wrong: the Summary paraphrases the diff, the Test plan has no reasoning, 
 - A title that ends in a period, or starts with "Update", "Fix some", "Misc", "Various".
 - A title that uses a Conventional Commits prefix (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`). PR titles in this repo are formal sentences, not commit subjects.
 - A title that describes *what* the diff does (e.g., "Add X helper", "Refactor Y module") when a *why* framing was available.
-"""
+'''
 
 rename_branch = "make sure that the branch prefix is always \"conductor/\""
