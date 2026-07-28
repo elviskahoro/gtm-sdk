@@ -16,7 +16,7 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 - **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`. Exceptions: utilities (`libs.telemetry`, `libs.logging`, `libs.filesystem`) are importable from anywhere.
 - **No orchestration in `libs/`.** Adapter modules must be callable in isolation.
-- **Module boundaries are enforced by tach**, run via trunk (like every other linter — see "Linting" below). Reproduce a finding with `trunk check --filter=tach`; it runs in CI as part of the `Trunk Check` gate on every PR. The `dev`-group `tach>=0.35.0` pin in `pyproject.toml` stays (for `tach show`/`tach sync` ergonomics) — bump it in lockstep with the `tach@` version in `.trunk/trunk.yaml`'s `lint.enabled` and the plugin `ref` in `oss-linter-trunk-tach`'s `plugin.yaml` `known_good_version`.
+- **Module boundaries are enforced by tach**, run via trunk (like every other linter — see "Linting" below). Reproduce a finding with `trunk check --filter=tach`; CI runs a full-graph `trunk check --filter=tach --all` step on every push and PR. The `dev`-group `tach>=0.35.0` pin in `pyproject.toml` stays (for `tach show`/`tach sync` ergonomics) — bump it in lockstep with the `tach@` version in `.trunk/trunk.yaml`'s `lint.enabled` and the plugin `ref` in `oss-linter-trunk-tach`'s `plugin.yaml` `known_good_version`.
 - **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `libs*`, `src*`).
 
 ## Modal gotchas
