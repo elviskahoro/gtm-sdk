@@ -1,27 +1,32 @@
 name: CI failure triage
 
-# Diagnoses a failed CI run and files (or updates) a GitHub issue explaining why.
+# Diagnoses a failed CI run and files (or bumps) a Linear issue explaining why.
 #
 # Why this exists: nothing closed the loop between "a check went red" and "here is
-# the cause". The nightly Integration tests were red for 13 consecutive nights
-# (2026-07-15 .. 2026-07-27) with no in-repo reaction, and a red Trunk Check landed
-# on main in eb815f9. Scheduled and non-required checks have no reviewer by
-# construction, so a PR-scoped tool cannot cover them.
+# the cause". Scheduled and non-required checks have no reviewer by construction,
+# and it showed -- the nightly Integration tests were red for 13 consecutive nights
+# (2026-07-15 .. 2026-07-27) with no in-repo reaction, and eb815f9 put a red Trunk
+# Check on main.
 #
-# Deliberately DIAGNOSIS-ONLY -- it never commits. Two reasons:
+# Deliberately DIAGNOSIS-ONLY -- it never commits and never opens a PR:
 #   1. GITHUB_TOKEN cannot push to .github/workflows/**, and no `permissions:` value
 #      grants that (there is no `workflows` permission; even write-all is rejected).
-#      Workflow YAML is a large share of this repo's failures, so the auto-fix path
+#      Workflow YAML is a large share of this repo's failures, so an auto-fix path
 #      would be unavailable exactly where it is needed most.
-#   2. An agent with `contents: write` on a public repo is a much bigger blast radius
+#   2. An agent with `contents: write` on a public repo is a far larger blast radius
 #      than the problem justifies.
 #
-# This is a hand-written workflow, NOT warpdotdev/oz-agent-action's reusable
-# `fix-failing-checks.yml`. That upstream file cannot be used as-is: its guard is
-# `if:\n  ${{ ... }} && !startsWith(...)`, which puts literal text outside the
-# replacement token so GitHub compiles it to a truthy string -- it fires on
-# SUCCESSFUL runs and its recursion guard never engages -- and it then does a
-# `git push --force`. Only the action itself is reused, SHA-pinned below.
+# The agent holds NO credentials. It reads a log and writes tmp/diagnosis.md; a
+# separate deterministic step turns that file into a Linear issue. So the Linear key
+# is never in the agent's environment, and dedupe logic lives in reviewable Python
+# rather than depending on the model following an instruction.
+#
+# This is hand-written, NOT warpdotdev/oz-agent-action's reusable
+# `fix-failing-checks.yml`. That file cannot be used as shipped: its guard is
+# `if:\n  ${{ ... }} && !startsWith(...)`, which leaves literal text outside the
+# replacement token, so GitHub compiles it to a non-empty (therefore truthy) string
+# -- it fires on SUCCESSFUL runs, its recursion guard never engages, and it then
+# runs `git push --force`. Only the action itself is reused, SHA-pinned below.
 
 on:
   workflow_run:
@@ -49,24 +54,22 @@ jobs:
     # on this as of 2026-01-29 and actionlint flags it.
     #
     # The head_repository guard is load-bearing: workflow_run executes in the BASE
-    # repo with full access to secrets even when the run it reacts to came from a
-    # fork PR. Without it, a fork's failing CI would reach our WARP_API_KEY.
+    # repo with full access to secrets even when reacting to a fork PR. Without it,
+    # a fork's failing CI would reach our credentials.
     if: >-
       github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_repository.full_name == github.repository && !startsWith(github.event.workflow_run.head_branch, 'agent/ci-triage')
     timeout-minutes: 20
     permissions:
       contents: read
       actions: read # download the failed run's logs
-      issues: write # file / update the triage issue
-      pull-requests: write # comment when the failure belongs to a PR
+      pull-requests: write # link the Linear issue from the PR, when there is one
     steps:
       # Check out the DEFAULT branch, never the failing run's head. A workflow_run
       # job holds secrets, so materializing the triggering commit into the workspace
-      # is the classic workflow-run-target-code-checkout weakness -- semgrep flags it
-      # and the fork guard above is not sufficient reason to take the risk. The next
-      # step fetches the failing commit as a bare object so the agent can READ it
-      # via `git show` without it ever becoming the working tree. This mirrors the
-      # trusted-asset pattern tests-unit.yml already uses for its CI pipeline files.
+      # is the classic workflow-run-target-code-checkout weakness that semgrep flags.
+      # The next step fetches the failing commit as a bare object so the agent can
+      # READ it via `git show` without it becoming the working tree -- the same
+      # trusted-asset pattern tests-unit.yml uses for its CI pipeline files.
       - name: Checkout the default branch
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -82,17 +85,26 @@ jobs:
           git fetch --no-tags --depth=1 origin "${HEAD_SHA}" 2>/dev/null \
             || echo "::notice::Could not fetch ${HEAD_SHA}; diagnosis will rely on logs alone."
 
-      # `secrets` is not available in a job-level `if:`, so gate on a step output.
-      # Without this, merging the workflow before WARP_API_KEY exists would turn
-      # every red check into two red checks.
-      - name: Preflight WARP_API_KEY
+      # `secrets` is unavailable in a job-level `if:`, so gate on a step output.
+      # Without this, merging before the secrets exist would turn every red check
+      # into two red checks.
+      - name: Preflight credentials
         id: preflight
         env:
           WARP_API_KEY: ${{ secrets.WARP_API_KEY }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
         run: |
-          if [ -z "${WARP_API_KEY}" ]; then
+          missing=''
+          for name in WARP_API_KEY LINEAR_API_KEY LINEAR_TEAM_ID; do
+            eval "value=\${$name}"
+            if [ -z "${value}" ]; then
+              missing="${missing} ${name}"
+            fi
+          done
+          if [ -n "${missing}" ]; then
             echo 'configured=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::WARP_API_KEY is not configured; skipping agent triage.'
+            echo "::notice::Skipping triage; not configured:${missing}"
           else
             echo 'configured=true' >> "$GITHUB_OUTPUT"
           fi
@@ -104,102 +116,159 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           mkdir -p tmp
-          # --log-failed exits non-zero when the run has no failed-step logs
+          # --log-failed exits non-zero when a run has no failed-step logs
           # (cancellation, startup_failure); a partial log still beats aborting.
           gh run view "${RUN_ID}" --log-failed > tmp/ci-failure.log 2>&1 || true
           # Bound the prompt: keep the tail, where the actual error lives.
           tail -c 100000 tmp/ci-failure.log > tmp/ci-failure-tail.log
           wc -l tmp/ci-failure-tail.log
 
+      # No GH_TOKEN and no Linear key in this step's environment -- on purpose. The
+      # agent's only output is a file.
       - name: Diagnose with Oz
         if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
         uses: warpdotdev/oz-agent-action@851b4af8e23dbc2c9558ab0e240c589b0f59e490 # v1.0.26
-        env:
-          GH_TOKEN: ${{ github.token }}
         with:
           warp_api_key: ${{ secrets.WARP_API_KEY }}
           output_format: text
           name: ci-triage-${{ github.event.workflow_run.id }}
           prompt: |
-            A CI run in ${{ github.repository }} just failed. Diagnose it and report
-            the cause as a GitHub issue.
+            A CI run in ${{ github.repository }} just failed. Diagnose the root cause
+            and write your findings to `tmp/diagnosis.md`. That file is the ONLY
+            output that matters -- a later step turns it into a Linear issue. If you
+            do not write it, nothing gets filed.
 
             Your working tree is the DEFAULT branch, not the failing commit. The
             failing commit is fetched but deliberately not checked out. Read it with
             `git show <sha>:<path>` and `git diff origin/HEAD <sha> -- <path>`. Do NOT
-            run `git checkout`/`git switch` onto it and do not execute code from it --
-            this job holds repository secrets.
+            `git checkout`/`git switch` onto it and do not execute code from it.
 
             Failing run:
               workflow:  ${{ github.event.workflow_run.name }}
               run URL:   ${{ github.event.workflow_run.html_url }}
-              run ID:    ${{ github.event.workflow_run.id }}
               branch:    ${{ github.event.workflow_run.head_branch }}
               commit:    ${{ github.event.workflow_run.head_sha }}
               triggered: ${{ github.event.workflow_run.event }}
 
-            The failed-step log tail is already saved at tmp/ci-failure-tail.log.
-            Read it first. Use `gh` for all GitHub operations.
+            The failed-step log tail is already saved at `tmp/ci-failure-tail.log`.
+            Read it first.
 
-            ## What to produce
+            ## What tmp/diagnosis.md must contain
 
-            Identify the single root cause. Quote the exact failing assertion, lint
-            code, or error line. Name the file and line when the log points at one.
-            State the concrete fix, but DO NOT apply it and DO NOT commit, push, or
-            open a pull request -- you have no write access to the repository
-            contents and any push would be rejected.
+            Markdown, no top-level heading, under roughly 400 words:
 
-            ## Deduplicate before filing -- this matters
+            1. **Root cause** -- one paragraph. Quote the exact failing assertion,
+               lint code, or error line. Name the file and line when the log points
+               at one.
+            2. **Fix** -- the concrete change you would make. Describe it; do NOT
+               apply it. You have no write access and any push would be rejected.
+            3. **Confidence** -- one line: high, medium, or low, and what would
+               raise it. Say plainly when the log is inconclusive rather than
+               guessing at a cause.
 
-            Recurring failures must not file one issue per occurrence. The nightly
-            Integration tests were red 13 nights running; that is one issue, not 13.
+            Do not restate the run metadata; the filing step adds it. Do not include
+            a title line -- the title is generated.
 
-            1. Search open issues for the marker line, which is exactly:
-                 `<!-- ci-triage: ${{ github.event.workflow_run.name }} -->`
-               e.g. `gh issue list --state open --search "ci-triage" --limit 50`
-               then inspect candidates for that marker.
-            2. If an open issue carries the marker AND describes the same root cause,
-               add a brief comment with the new run URL, the date, and anything the
-               new log adds. Do not restate the diagnosis. Then stop.
-            3. Otherwise file a new issue whose body BEGINS with that exact marker
-               line, so future runs can find it.
+            ## You have no network credentials
 
-            Title format: `ci: <workflow name> failing -- <one-line cause>`
-            Label it `bug` if the label exists; skip labelling rather than creating
-            labels.
-
-            If the failing run belongs to a pull request, also leave one short
-            comment on that PR linking the issue. Find it with
-            `gh pr list --search "${{ github.event.workflow_run.head_sha }}" --state open`.
-            If there is no PR, skip this -- do not invent one.
+            Do not attempt to use `gh`, open issues, comment, push, or call any API.
+            You have no tokens. Write the file and stop.
 
             ## Repository context (saves you a lot of log-reading)
 
             - Linters and formatters run ONLY through trunk. Reproduce a finding with
               `trunk check --filter=<tool> <path>`; the bare binaries are not on PATH
-              and will report differently. Active tools include ruff, mypy, pyright,
+              and report differently. Active tools include ruff, mypy, pyright,
               actionlint, checkov, yamllint, taplo, shellcheck, semgrep, and tach.
             - `tach` enforces module boundaries: `libs/<x>` must never import from
               `libs/<y>`. Cross-lib coordination belongs in `src/`.
             - Package manager is `uv`, never pip. `uv sync --frozen` respects uv.lock;
-              a lockfile/​manifest mismatch surfaces here first.
+              a lockfile/manifest mismatch surfaces here first.
             - Unit and Integration tests run pytest inside a Dagger container on a
-              Namespace ARM runner. A failure may be infrastructure, not code: stale
-              Namespace cache generations, registry.dagger.io pull brownouts, or
-              engine-readiness races have all caused red runs before. Say so plainly
-              when the log points that way instead of inventing a code cause.
+              Namespace ARM runner. A failure may be infrastructure rather than code:
+              stale Namespace cache generations, registry.dagger.io pull brownouts,
+              and engine-readiness races have all produced red runs. Say so when the
+              log points that way instead of inventing a code cause.
             - Integration tests are scheduled nightly and read live credentials from
-              the environment. Note that `schedule` runs have been failing while
-              manual `workflow_dispatch` runs of the same suite pass -- if this is
-              that failure, the trigger difference is the most important clue.
-            - `docs/cli/` is generated. Never hand-edit it; it is regenerated by
-              `uv run scripts/docs-cli_reference-generate.py`.
+              the environment. `schedule` runs have been failing while manual
+              `workflow_dispatch` runs of the same suite pass -- if this is that
+              failure, the trigger difference is the most important clue.
+            - `docs/cli/` is generated; it is rebuilt by
+              `uv run scripts/docs-cli_reference-generate.py`, never hand-edited.
 
             ## Hard constraints
 
-            - NEVER add a `Co-Authored-By:` trailer anywhere, including in issue or
-              comment text. This repo's git hooks reject known agent identities
-              (including oz-agent@warp.dev) and the policy applies to prose too.
-            - Do not modify any tracked file. Write scratch files only under `tmp/`.
-            - Be concise. A maintainer reading the issue wants the cause and the fix,
-              not a narration of your search.
+            - NEVER write a `Co-Authored-By:` trailer anywhere, including in prose.
+              This repo's git hooks reject known agent identities and the policy
+              applies to issue text too.
+            - Do not modify any tracked file. Write only under `tmp/`.
+
+      # Deterministic: dedupe and filing are plain Python, not prompt-dependent.
+      # Invoked with python3 rather than `uv run` so triage does not depend on the
+      # dependency graph installing -- `uv sync` is itself a plausible cause of the
+      # failure being triaged. The script is stdlib-only for the same reason.
+      - name: File or bump the Linear issue
+        id: linear
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+          # Passed as env, never interpolated into the command line: a branch name
+          # is attacker-influencable text, and `${{ }}` in a `run:` block is
+          # substituted before the shell parses it (semgrep run-shell-injection).
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          python3 scripts/ci-triage-linear-issue.py \
+            --workflow "${WORKFLOW}" \
+            --run-url "${RUN_URL}" \
+            --branch "${HEAD_BRANCH}" \
+            --commit "${HEAD_SHA}" \
+            --timestamp "${UPDATED_AT}" \
+            --diagnosis-file tmp/diagnosis.md \
+            --output tmp/linear-issue.tsv
+          if [ -s tmp/linear-issue.tsv ]; then
+            {
+              printf 'identifier=%s\n' "$(cut -f1 tmp/linear-issue.tsv | tail -1)"
+              printf 'url=%s\n' "$(cut -f2 tmp/linear-issue.tsv | tail -1)"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarize
+        if: steps.linear.outputs.url != ''
+        env:
+          IDENTIFIER: ${{ steps.linear.outputs.identifier }}
+          URL: ${{ steps.linear.outputs.url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          {
+            printf '### CI failure triaged\n\n'
+            printf '**%s** failed. Filed as [%s](%s).\n' \
+              "${WORKFLOW}" "${IDENTIFIER}" "${URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Best-effort: a red check on a PR should say where the explanation went.
+      # Scheduled failures have no PR, which is why Linear is the primary channel.
+      - name: Link the Linear issue from the PR, if there is one
+        if: steps.linear.outputs.url != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          IDENTIFIER: ${{ steps.linear.outputs.identifier }}
+          URL: ${{ steps.linear.outputs.url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          pr="$(gh pr list --search "${HEAD_SHA}" --state open \
+                  --json number --jq '.[0].number // empty')"
+          if [ -z "${pr}" ]; then
+            echo "::notice::No open PR for ${HEAD_SHA}; Linear issue only."
+            exit 0
+          fi
+          gh pr comment "${pr}" --body "$(printf '%s failed on this PR ([run](%s)). Triage: [%s](%s).' \
+            "${WORKFLOW}" "${RUN_URL}" "${IDENTIFIER}" "${URL}")"
