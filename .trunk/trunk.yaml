@@ -267,13 +267,23 @@ actions:
   disabled:
     # git-hook-triggered actions disabled so trunk releases core.hooksPath to
     # Entire (checkpoints). trunk-check-pre-push is redundant with roborev + the
-    # merge queue's required "Trunk Check"; git-lfs is unused (no LFS-tracked files).
+    # merge queue's required "Lint and type check with Trunk"; git-lfs is unused.
     - trunk-fmt-pre-commit
     - git-lfs
     - trunk-announce
     - trunk-check-pre-push
 
 merge:
+  # These MUST be the live GitHub check-run names, which are the workflow job
+  # `name:` values -- not workflow filenames, not step names. The previous entries
+  # ("Trunk Check", "pytest (Dagger)") were left behind by job renames in 4292087 /
+  # a21195c and matched nothing, so the queue gated on nothing and a red Trunk Check
+  # reached main in eb815f9. Re-verify after any job rename with:
+  #   gh api repos/<owner>/<repo>/commits/<sha>/check-runs --jq '.check_runs[].name'
+  #
+  # Do NOT add path-filtered workflows here (e.g. "Docs checks") -- they do not report
+  # on every PR, so requiring them deadlocks the queue. Same for the workflow_run-
+  # triggered "Triage CI failure", which by design only runs after a failure.
   required_statuses:
-    - Trunk Check
-    - pytest (Dagger)
+    - Lint and type check with Trunk
+    - Unit tests

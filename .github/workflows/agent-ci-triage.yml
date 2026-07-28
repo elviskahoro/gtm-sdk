@@ -1,0 +1,205 @@
+name: CI failure triage
+
+# Diagnoses a failed CI run and files (or updates) a GitHub issue explaining why.
+#
+# Why this exists: nothing closed the loop between "a check went red" and "here is
+# the cause". The nightly Integration tests were red for 13 consecutive nights
+# (2026-07-15 .. 2026-07-27) with no in-repo reaction, and a red Trunk Check landed
+# on main in eb815f9. Scheduled and non-required checks have no reviewer by
+# construction, so a PR-scoped tool cannot cover them.
+#
+# Deliberately DIAGNOSIS-ONLY -- it never commits. Two reasons:
+#   1. GITHUB_TOKEN cannot push to .github/workflows/**, and no `permissions:` value
+#      grants that (there is no `workflows` permission; even write-all is rejected).
+#      Workflow YAML is a large share of this repo's failures, so the auto-fix path
+#      would be unavailable exactly where it is needed most.
+#   2. An agent with `contents: write` on a public repo is a much bigger blast radius
+#      than the problem justifies.
+#
+# This is a hand-written workflow, NOT warpdotdev/oz-agent-action's reusable
+# `fix-failing-checks.yml`. That upstream file cannot be used as-is: its guard is
+# `if:\n  ${{ ... }} && !startsWith(...)`, which puts literal text outside the
+# replacement token so GitHub compiles it to a truthy string -- it fires on
+# SUCCESSFUL runs and its recursion guard never engages -- and it then does a
+# `git push --force`. Only the action itself is reused, SHA-pinned below.
+
+on:
+  workflow_run:
+    # Matched on workflow NAME, not filename or job name.
+    workflows:
+      - Unit tests
+      - Lint and type check with Trunk
+      - Integration tests
+      - Docs checks
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-ci-triage-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage CI failure
+    runs-on: ubuntu-latest
+    # No ${{ }} wrapper: an `if:` mixing a replacement token with literal text
+    # evaluates to a non-empty string and is therefore always truthy. GitHub warns
+    # on this as of 2026-01-29 and actionlint flags it.
+    #
+    # The head_repository guard is load-bearing: workflow_run executes in the BASE
+    # repo with full access to secrets even when the run it reacts to came from a
+    # fork PR. Without it, a fork's failing CI would reach our WARP_API_KEY.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_repository.full_name == github.repository && !startsWith(github.event.workflow_run.head_branch, 'agent/ci-triage')
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read # download the failed run's logs
+      issues: write # file / update the triage issue
+      pull-requests: write # comment when the failure belongs to a PR
+    steps:
+      # Check out the DEFAULT branch, never the failing run's head. A workflow_run
+      # job holds secrets, so materializing the triggering commit into the workspace
+      # is the classic workflow-run-target-code-checkout weakness -- semgrep flags it
+      # and the fork guard above is not sufficient reason to take the risk. The next
+      # step fetches the failing commit as a bare object so the agent can READ it
+      # via `git show` without it ever becoming the working tree. This mirrors the
+      # trusted-asset pattern tests-unit.yml already uses for its CI pipeline files.
+      - name: Checkout the default branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the failing commit as a read-only object
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Already present when the failure was on the default branch (the common
+          # case: nightly schedule runs and pushes to main).
+          git fetch --no-tags --depth=1 origin "${HEAD_SHA}" 2>/dev/null \
+            || echo "::notice::Could not fetch ${HEAD_SHA}; diagnosis will rely on logs alone."
+
+      # `secrets` is not available in a job-level `if:`, so gate on a step output.
+      # Without this, merging the workflow before WARP_API_KEY exists would turn
+      # every red check into two red checks.
+      - name: Preflight WARP_API_KEY
+        id: preflight
+        env:
+          WARP_API_KEY: ${{ secrets.WARP_API_KEY }}
+        run: |
+          if [ -z "${WARP_API_KEY}" ]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::WARP_API_KEY is not configured; skipping agent triage.'
+          else
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect failure logs
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          mkdir -p tmp
+          # --log-failed exits non-zero when the run has no failed-step logs
+          # (cancellation, startup_failure); a partial log still beats aborting.
+          gh run view "${RUN_ID}" --log-failed > tmp/ci-failure.log 2>&1 || true
+          # Bound the prompt: keep the tail, where the actual error lives.
+          tail -c 100000 tmp/ci-failure.log > tmp/ci-failure-tail.log
+          wc -l tmp/ci-failure-tail.log
+
+      - name: Diagnose with Oz
+        if: steps.preflight.outputs.configured == 'true'
+        uses: warpdotdev/oz-agent-action@851b4af8e23dbc2c9558ab0e240c589b0f59e490 # v1.0.26
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          warp_api_key: ${{ secrets.WARP_API_KEY }}
+          output_format: text
+          name: ci-triage-${{ github.event.workflow_run.id }}
+          prompt: |
+            A CI run in ${{ github.repository }} just failed. Diagnose it and report
+            the cause as a GitHub issue.
+
+            Your working tree is the DEFAULT branch, not the failing commit. The
+            failing commit is fetched but deliberately not checked out. Read it with
+            `git show <sha>:<path>` and `git diff origin/HEAD <sha> -- <path>`. Do NOT
+            run `git checkout`/`git switch` onto it and do not execute code from it --
+            this job holds repository secrets.
+
+            Failing run:
+              workflow:  ${{ github.event.workflow_run.name }}
+              run URL:   ${{ github.event.workflow_run.html_url }}
+              run ID:    ${{ github.event.workflow_run.id }}
+              branch:    ${{ github.event.workflow_run.head_branch }}
+              commit:    ${{ github.event.workflow_run.head_sha }}
+              triggered: ${{ github.event.workflow_run.event }}
+
+            The failed-step log tail is already saved at tmp/ci-failure-tail.log.
+            Read it first. Use `gh` for all GitHub operations.
+
+            ## What to produce
+
+            Identify the single root cause. Quote the exact failing assertion, lint
+            code, or error line. Name the file and line when the log points at one.
+            State the concrete fix, but DO NOT apply it and DO NOT commit, push, or
+            open a pull request -- you have no write access to the repository
+            contents and any push would be rejected.
+
+            ## Deduplicate before filing -- this matters
+
+            Recurring failures must not file one issue per occurrence. The nightly
+            Integration tests were red 13 nights running; that is one issue, not 13.
+
+            1. Search open issues for the marker line, which is exactly:
+                 `<!-- ci-triage: ${{ github.event.workflow_run.name }} -->`
+               e.g. `gh issue list --state open --search "ci-triage" --limit 50`
+               then inspect candidates for that marker.
+            2. If an open issue carries the marker AND describes the same root cause,
+               add a brief comment with the new run URL, the date, and anything the
+               new log adds. Do not restate the diagnosis. Then stop.
+            3. Otherwise file a new issue whose body BEGINS with that exact marker
+               line, so future runs can find it.
+
+            Title format: `ci: <workflow name> failing -- <one-line cause>`
+            Label it `bug` if the label exists; skip labelling rather than creating
+            labels.
+
+            If the failing run belongs to a pull request, also leave one short
+            comment on that PR linking the issue. Find it with
+            `gh pr list --search "${{ github.event.workflow_run.head_sha }}" --state open`.
+            If there is no PR, skip this -- do not invent one.
+
+            ## Repository context (saves you a lot of log-reading)
+
+            - Linters and formatters run ONLY through trunk. Reproduce a finding with
+              `trunk check --filter=<tool> <path>`; the bare binaries are not on PATH
+              and will report differently. Active tools include ruff, mypy, pyright,
+              actionlint, checkov, yamllint, taplo, shellcheck, semgrep, and tach.
+            - `tach` enforces module boundaries: `libs/<x>` must never import from
+              `libs/<y>`. Cross-lib coordination belongs in `src/`.
+            - Package manager is `uv`, never pip. `uv sync --frozen` respects uv.lock;
+              a lockfile/​manifest mismatch surfaces here first.
+            - Unit and Integration tests run pytest inside a Dagger container on a
+              Namespace ARM runner. A failure may be infrastructure, not code: stale
+              Namespace cache generations, registry.dagger.io pull brownouts, or
+              engine-readiness races have all caused red runs before. Say so plainly
+              when the log points that way instead of inventing a code cause.
+            - Integration tests are scheduled nightly and read live credentials from
+              the environment. Note that `schedule` runs have been failing while
+              manual `workflow_dispatch` runs of the same suite pass -- if this is
+              that failure, the trigger difference is the most important clue.
+            - `docs/cli/` is generated. Never hand-edit it; it is regenerated by
+              `uv run scripts/docs-cli_reference-generate.py`.
+
+            ## Hard constraints
+
+            - NEVER add a `Co-Authored-By:` trailer anywhere, including in issue or
+              comment text. This repo's git hooks reject known agent identities
+              (including oz-agent@warp.dev) and the policy applies to prose too.
+            - Do not modify any tracked file. Write scratch files only under `tmp/`.
+            - Be concise. A maintainer reading the issue wants the cause and the fix,
+              not a narration of your search.
