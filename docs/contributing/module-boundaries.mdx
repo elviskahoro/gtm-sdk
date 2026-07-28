@@ -44,7 +44,7 @@ tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alo
    uv run tach show                  # Visualize the dependency graph
    ```
 
-2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs tach (via `lint.enabled: [tach@0.35.0, ...]`) on every PR. Violations block merges.
+2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs the normal hold-the-line checks, followed by an explicit full-graph `trunk check --filter=tach --all` step. This ensures module boundaries are checked even when a change does not touch a Python file. Violations block merges.
 
 ## Common violations and fixes
 
