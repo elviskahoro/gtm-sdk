@@ -33,6 +33,8 @@ lint:
       commands:
         - name: format
           enabled: true
+        - name: lint
+          enabled: true
 
     # Vale is scoped exclusively to docs/** (see .vale.ini). There's no
     # first-class "restrict this linter to a directory" field on `enabled`
