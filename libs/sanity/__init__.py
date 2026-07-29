@@ -1,6 +1,6 @@
 """Sanity Query API adapter — typed wrapper around the GROQ Query API."""
 
-from .blog import BLOG_POST_GROQ, fetch_blog_posts, fetch_blog_posts_raw
+from .blog import BLOG_POST_GROQ, fetch_blog_posts_raw
 from .client import (
     DEFAULT_API_VERSION,
     DEFAULT_DATASET,
@@ -25,7 +25,6 @@ __all__ = [
     "SanityError",
     "SanityQueryError",
     "api_key_scope",
-    "fetch_blog_posts",
     "fetch_blog_posts_raw",
     "query",
     "to_markdown",
