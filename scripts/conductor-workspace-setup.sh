@@ -211,6 +211,9 @@ git config --global alias.roborev '!roborev'
 # isn't enough: bogus dirs like a stray $HOME/.beads from a global bd install
 # pass the -e check but aren't a real project), otherwise seed a fresh local
 # DB from the shared DoltHub remote so the sandbox sees real issue history.
+if [[ "${REPO_ROOT}" == "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ ! -e .beads ]]; then
+  unlink .beads
+fi
 if [[ "${REPO_ROOT}" != "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
   unlink .beads
 fi

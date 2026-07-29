@@ -260,3 +260,18 @@ def test_primary_checkout_preserves_its_existing_beads_symlink(tmp_path: Path) -
     assert result.returncode == 0, result.stderr
     assert (primary / ".beads").is_symlink()
     assert (primary / ".beads").resolve() == shared_beads.resolve()
+
+
+def test_primary_checkout_removes_dangling_beads_symlink(tmp_path: Path) -> None:
+    primary = tmp_path / "repo"
+    missing_beads = tmp_path / "missing-beads"
+
+    result, _ = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        git_common_dir=primary / ".git",
+        stale_beads_target=missing_beads,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not (primary / ".beads").is_symlink()
