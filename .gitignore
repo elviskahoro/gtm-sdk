@@ -40,7 +40,7 @@ api/samples/**/evt_*.json
 
 # External tools
 # Beads / Dolt files (added by bd init)
-# .beads is a symlink to ../.beads so this repo shares the parent ai/ beads DB
+# .beads is a worktree symlink to the primary gtm-sdk checkout's .beads DB
 .beads 
 .dolt/
 *.db
