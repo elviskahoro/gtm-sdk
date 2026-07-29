@@ -106,7 +106,7 @@ this review path.
 
 `gh` (GitHub CLI, provisioned via the Flox environment) reads `GH_TOKEN` (or `GITHUB_TOKEN`) straight from the environment — no `gh auth login` needed, and no interactive browser flow works in a headless sandbox anyway. This is a personal PAT (classic PAT with `repo` scope, or a fine-grained PAT scoped to this repo with **Issues: Read and write**), not a shared team secret, so it does not go through Infisical/`secrets_bootstrap.py`:
 
-- **Conductor**: set `GH_TOKEN` under `[environment_variables]` in your own `.conductor/settings.local.toml` (excluded from git via `.git/info/exclude` — never commit it). Conductor injects `[environment_variables]` directly into the agent's shell, so `gh` picks it up on every invocation without a manual `source` step.
+- **Conductor**: set `GH_TOKEN` under `[environment_variables]` in user-level Conductor settings or another ignored local configuration file. The tracked `.conductor/settings.local.toml` is a reviewed repository baseline and must not contain credentials or machine-specific secrets. Conductor injects `[environment_variables]` directly into the agent's shell, so `gh` picks it up on every invocation without a manual `source` step.
 
 ## Script Entrypoints
 
