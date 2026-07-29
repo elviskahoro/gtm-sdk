@@ -169,6 +169,31 @@ All linters/formatters run via **trunk**, not as bare binaries. `yamllint`, `ruf
 
 `uv run pytest`. Importlib mode is already configured. Mirror the source layout when adding tests.
 
+### Adding a pytest plugin
+
+The unit CI container runs with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, so a plugin that is merely installed is **silently inert** — the suite still passes, minus whatever the plugin provided. It has to be named explicitly. Two traps, both learned by burning a CI run:
+
+- **Put the `-p` flag in `addopts` (`pyproject.toml`), not in `PYTEST_CMD`.** On a pull request, `tests-unit.yml` deliberately executes the **base branch's** copy of `.github/workflows/ci/pytest_dagger.py` — PR-authored CI code must never run with trusted Namespace/registry credentials. A flag added there is therefore ignored until it lands on `main`, and the required `pytest (Dagger)` gate blocks that merge. `addopts` is read from the source tree, so it applies to PR, `main` and local runs alike.
+- **Use the plugin's entry-point name, not its module name.** Where autoload is on (local runs, the integration job) the plugin is already registered under its entry-point name; naming the module registers the same module twice and pytest aborts with `ValueError: Plugin already registered under a different name`. For Hypothesis that means `-p hypothesispytest`, not `-p _hypothesis_pytestplugin`.
+
+Back the result with a test rather than a comment — `tests/test_hypothesis_plugin.py` fails loudly if the plugin stops loading, in any environment.
+
+### Property-based tests (Hypothesis)
+
+Files are named `test_<module>_properties.py` and sit beside the example tests they complement — they do not replace them. Profiles live in `tests/conftest.py`, selected with `HYPOTHESIS_PROFILE` (our env var, not a Hypothesis feature — Hypothesis autodetects `CI`, which `dlt`/`modal`/`logfire`/`rich` also read, so setting that would change unrelated behavior):
+
+```shell
+uv run pytest --hypothesis-show-statistics    # dev: 50 examples, 400ms deadline
+HYPOTHESIS_PROFILE=nightly uv run pytest      # 1000 examples, randomized
+```
+
+CI uses the `ci` profile: `derandomize=True` and `database=None`, both inherited from Hypothesis's built-in `ci` profile. Derandomizing is not optional here — CI has no `pytest-timeout`, no `--maxfail` and no job `timeout-minutes`, and Trunk.io reports any intermittent failure as a flake under a stable test ID. Seeding from a hash of the test function means a green run stays green and a failure reproduces exactly.
+
+Reach for a property when the claim is *universal* ("never raises", "idempotent", "round-trips", "output is always lowercase"). Two rules worth knowing before you write one:
+
+- **Finite, enumerable domain → check it exhaustively with a loop, not `st.sampled_from`.** `max_examples` caps the draws below the domain size, and under `derandomize=True` the same subset is drawn forever, leaving the rest permanently untested. Hypothesis earns its place on *unbounded* domains.
+- **Watch for vacuous properties.** If the interesting branch only runs on a successful parse, bare `st.text()` will miss it nearly every time. Generate realistic inputs, and use `hypothesis.event()` so the branch split appears in `--hypothesis-show-statistics` instead of being assumed.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 
