@@ -135,10 +135,16 @@ def test_recovers_symbols_used_through_a_module_alias(consumer: Path) -> None:
     }
 
 
-def test_recovers_symbols_used_through_a_from_imported_submodule(
+def test_from_imported_submodule_is_not_recorded_as_a_package_symbol(
     consumer: Path,
 ) -> None:
-    """`from libs.attio import people` binds a submodule, not a callable."""
+    """`from libs.attio import people` binds a submodule, not a callable.
+
+    Recording `people` as a symbol of `libs.attio` would make the generated
+    contract fail its own guard: submodules are deliberately absent from a
+    package's `__all__`, so `test_public_symbols_stay_in_package_all` would
+    report it as a dropped export forever.
+    """
     _write(
         consumer,
         "app/entry.py",
@@ -148,14 +154,32 @@ def test_recovers_symbols_used_through_a_from_imported_submodule(
         "    people.stub_create_person()\n",
     )
 
-    scanned = sync.scan_consumer(consumer)
-    # The submodule name itself is consumed from the package...
-    assert "people" in scanned["libs.attio"]
-    # ...and the symbol reached through it is pinned on the submodule.
-    assert scanned["libs.attio.people"] == {"stub_create_person"}
+    assert sync.scan_consumer(consumer) == {
+        "libs.attio.people": {"stub_create_person"},
+    }
 
 
-def test_bare_import_pins_the_module_without_symbols(consumer: Path) -> None:
+def test_bare_qualified_import_recovers_symbols_from_the_dotted_chain(
+    consumer: Path,
+) -> None:
+    """`import libs.attio.notes` + `libs.attio.notes.create_note()`.
+
+    The import node names no symbols and binds only `libs`, so the consumed
+    symbol is reachable only by flattening the attribute chain.
+    """
+    _write(
+        consumer,
+        "app/entry.py",
+        "import libs.attio.notes\n"
+        "\n"
+        "def run() -> None:\n"
+        "    libs.attio.notes.create_note(None)\n",
+    )
+
+    assert sync.scan_consumer(consumer) == {"libs.attio.notes": {"create_note"}}
+
+
+def test_bare_import_with_no_usage_still_pins_the_module(consumer: Path) -> None:
     _write(consumer, "app/entry.py", "import libs.attio.notes\n")
 
     assert sync.scan_consumer(consumer) == {"libs.attio.notes": set()}
@@ -185,15 +209,26 @@ def test_skips_vendored_trees(consumer: Path) -> None:
     assert sync.scan_consumer(consumer) == {"libs.attio": {"get_client"}}
 
 
-def test_unparseable_file_does_not_truncate_the_scan(
-    consumer: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_unparseable_file_aborts_the_scan(consumer: Path) -> None:
+    """A skipped file means `--write` can silently drop protected symbols.
+
+    The scan's output overwrites the committed contract wholesale, so a file the
+    scanner could not read must fail the run rather than quietly shrink the
+    contract by however many imports that file held.
+    """
     _write(consumer, "app/broken.py", "def (:\n")
     _write(consumer, "app/entry.py", "from libs.attio import get_client\n")
 
-    assert sync.scan_consumer(consumer) == {"libs.attio": {"get_client"}}
-    assert "skipping unparseable" in capsys.readouterr().err
+    with pytest.raises(sync.ConsumerScanError, match="cannot parse"):
+        sync.scan_consumer(consumer)
+
+
+def test_star_import_aborts_the_scan(consumer: Path) -> None:
+    """`from libs.attio import *` has no honest symbol list to record."""
+    _write(consumer, "app/entry.py", "from libs.attio import *\n")
+
+    with pytest.raises(sync.ConsumerScanError, match="star-imports"):
+        sync.scan_consumer(consumer)
 
 
 def test_raises_when_no_sdk_imports_are_found(consumer: Path) -> None:
