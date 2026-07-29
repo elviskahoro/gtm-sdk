@@ -312,10 +312,7 @@ def _preflight_infisical_keys(
                 "run",
                 "python",
                 "-c",
-                (
-                    f"from {module} import Webhook\n"
-                    f"{keys_program}"
-                ),
+                (f"from {module} import Webhook\n{keys_program}"),
             ],
             cwd=REPO_ROOT,
             capture_output=True,
