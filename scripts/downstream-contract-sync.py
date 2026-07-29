@@ -52,6 +52,10 @@ CONTRACT_PATH = REPO_ROOT / "contracts" / "downstream_api.toml"
 # gtm-sdk, so it belongs in the contract.
 SDK_ROOTS = ("libs", "src", "cli")
 
+# Column at which trunk's TOML formatter breaks an inline array onto its own
+# lines. Rendering must match it exactly — see render_contract.
+TOML_FORMATTER_WIDTH = 80
+
 # Consumers vendor their own venvs and caches; those trees are full of imports
 # that are not the consumer's own code.
 SKIP_DIRS = frozenset(
@@ -193,7 +197,10 @@ def render_contract(
 
             rendered = ", ".join(_quote(symbol) for symbol in symbols)
             line = f"{_quote(module)} = [{rendered}]\n"
-            if len(line) <= 88:
+            # Wrap at the same column trunk's TOML formatter does. If these two
+            # disagree, `trunk fmt` rewrites the generated file and this script
+            # then reports the contract as permanently stale.
+            if len(line.rstrip("\n")) <= TOML_FORMATTER_WIDTH:
                 chunks.append(line)
                 continue
 
@@ -216,8 +223,7 @@ def load_existing() -> tuple[dict[str, dict[str, set[str]]], dict[str, str]]:
     descriptions: dict[str, str] = {}
     for consumer, entry in data.get("consumers", {}).items():
         consumers[consumer] = {
-            module: set(symbols)
-            for module, symbols in entry.get("modules", {}).items()
+            module: set(symbols) for module, symbols in entry.get("modules", {}).items()
         }
         description = entry.get("description")
         if description:
