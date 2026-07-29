@@ -20,7 +20,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from libs.attio import people as attio_people
 from libs.attio.models import PersonInput
 from libs.harvest import client as harvest_client
 from libs.logging.structured import log
@@ -97,15 +96,6 @@ class EnrichmentTask(BaseModel):
     target_fields: list[str]
 
 
-class EnrichmentResult(BaseModel):
-    """Result of enriching a single record."""
-
-    task: EnrichmentTask
-    success: bool
-    error: str | None = None
-    attio_record_id: str | None = None
-
-
 def load_enrichment_config(config_path: Path | str) -> dict[str, Any]:
     """Load enrichment config mapping filters to Harvest fields and CRM targets."""
     path = Path(config_path)
@@ -180,52 +170,6 @@ def harvest_profile_from_task(task: EnrichmentTask) -> HarvestProfile | None:
     return profile
 
 
-def enrich_record(task: EnrichmentTask) -> EnrichmentResult:
-    """Enrich a single record: fetch from Harvest, update in Attio.
-
-    Args:
-        task: EnrichmentTask specifying record, LinkedIn URL, and target fields
-
-    Returns:
-        EnrichmentResult with success/error and Attio record ID if successful.
-    """
-    profile = harvest_profile_from_task(task)
-    if not profile or not profile.model_dump_non_none():
-        return EnrichmentResult(
-            task=task,
-            success=False,
-            error="Harvest API returned no data or no target fields populated",
-        )
-
-    try:
-        person_input = profile_to_person_input(profile, task.email)
-        attio_people.update_person(
-            record_id=task.record_id,
-            email=task.email,
-            input=person_input,
-        )
-
-        return EnrichmentResult(
-            task=task,
-            success=True,
-            attio_record_id=task.record_id,
-        )
-
-    except Exception as e:  # noqa: BLE001 — record the failure on the result; let caller continue
-        log(
-            "enrichment.failed",
-            record_id=task.record_id,
-            enrichment_type=task.enrichment_type,
-            error_type=type(e).__name__,
-            error_msg=str(e),
-        )
-        return EnrichmentResult(
-            task=task,
-            success=False,
-            error=str(e),
-        )
-
-
 def profile_to_person_input(profile: HarvestProfile, email: str) -> PersonInput:
     """Convert selective HarvestProfile to Attio PersonInput.
 
@@ -272,33 +216,3 @@ def profile_to_person_input(profile: HarvestProfile, email: str) -> PersonInput:
         person_input.notes = data["headline"]
 
     return person_input
-
-
-async def enrich_batch(
-    records: list[dict[str, Any]],
-    enrichment_type: str,
-    target_fields: list[str],
-) -> list[EnrichmentResult]:
-    """Enrich a batch of records.
-
-    Args:
-        records: List of records to enrich
-        enrichment_type: Enrichment profile label
-        target_fields: Target fields from Harvest to populate
-
-    Returns:
-        List of enrichment results (one per record, with success/error).
-    """
-    tasks = build_enrichment_tasks(records, enrichment_type, target_fields)
-    results = []
-
-    for task in tasks:
-        result = enrich_record(task)
-        results.append(result)
-        log(
-            "enrichment.completed",
-            record_id=task.record_id,
-            success=result.success,
-        )
-
-    return results
