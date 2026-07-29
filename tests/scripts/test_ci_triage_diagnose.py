@@ -466,3 +466,67 @@ def test_run_start_failure_is_reported_as_exit_one(
 
     client = _Obj(agent=_Failing())
     assert script.main(_args(tmp_path / "d.md"), client=client) == 1
+
+
+# ------------------------------------------------------------------- normalization
+
+
+def test_normalization_strips_warp_prose_escaping(script: Any) -> None:
+    """Warp's plan renderer escapes prose punctuation; Linear renders it literally.
+
+    Verified against a live run, which emitted `taplo \\(invoked by ...\\)` and
+    `high\\-severity`.
+    """
+    got = script.normalize_agent_markdown(
+        r"taplo \(invoked by trunk\) is high\-severity\.",
+    )
+    assert got == "taplo (invoked by trunk) is high-severity."
+
+
+def test_normalization_never_touches_fenced_blocks(script: Any) -> None:
+    """The whole point of one real diagnosis was an invalid `\\d` escape -- mangling
+    code would destroy the very detail that matters."""
+    text = "prose \\(x\\)\n```text\nregex `[A-Z]+-\\d+` \\(kept\\)\n```\nmore \\(y\\)"
+    got = script.normalize_agent_markdown(text)
+    assert r"[A-Z]+-\d+" in got, "backslash inside a fence must survive"
+    assert r"\(kept\)" in got, "fence content is byte-for-byte"
+    assert "prose (x)" in got
+    assert "more (y)" in got
+
+
+def test_normalization_never_touches_inline_code_spans(script: Any) -> None:
+    got = script.normalize_agent_markdown(r"prose \(x\) and `a\-b` and \-dash")
+    assert got == r"prose (x) and `a\-b` and -dash"
+
+
+def test_normalization_leaves_emphasis_escapes_alone(script: Any) -> None:
+    """A backslash before * or _ is usually load-bearing, so it is not in the set."""
+    text = r"a \*not bold\* b \_u\_"
+    assert script.normalize_agent_markdown(text) == text
+
+
+def test_normalization_rewrites_the_warp_fence_language(script: Any) -> None:
+    """`warp-runnable-command` is Warp-specific and renders as an unknown language."""
+    got = script.normalize_agent_markdown("```warp-runnable-command\nls -l\n```")
+    assert "warp-runnable-command" not in got
+    assert got.startswith("```text")
+    assert "ls -l" in got
+
+
+def test_normalization_preserves_other_fence_languages(script: Any) -> None:
+    got = script.normalize_agent_markdown("```diff\n-a\n+b\n```")
+    assert got.startswith("```diff")
+
+
+def test_extraction_normalizes_plan_content(script: Any) -> None:
+    """Normalization must be wired into the extraction path, not just available."""
+    client = _FakeClient(
+        artifact_responses={"plan-1": _Obj(data=_Obj(content=r"root cause \(taplo\)"))},
+    )
+    got = script.extract_diagnosis(
+        client,
+        _Obj(artifacts=[_plan_artifact("plan-1")]),
+        want_filename="diagnosis.md",
+        fetch_url=_echo_url,
+    )
+    assert got == "root cause (taplo)"

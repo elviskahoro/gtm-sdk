@@ -136,6 +136,67 @@ repository yourself.
 """
 
 
+# Punctuation Warp's plan renderer backslash-escapes in prose. Verified against a
+# live run: it emits `taplo \(invoked by `trunk check`\)` and `high\-severity`, which
+# renders literally in Linear. Only characters that never need escaping in markdown
+# prose are listed -- `*`, `_`, and `` ` `` are deliberately absent, since a backslash
+# before those is usually load-bearing.
+_GRATUITOUS_ESCAPES = "()-.!<>=,:;~+{}"
+
+# Warp tags shell blocks with its own runnable-command language, which no other
+# markdown renderer understands.
+_WARP_FENCE_LANGS = ("warp-runnable-command",)
+
+
+def normalize_agent_markdown(text: str) -> str:
+    """Undo Warp plan-renderer escaping so the text reads correctly in Linear.
+
+    Fenced blocks and inline code spans are left byte-for-byte alone: a backslash
+    inside them is content, and this diagnosis is *about* an invalid `\\d` escape, so
+    mangling code would destroy the very detail that matters.
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            if not in_fence:
+                lang = stripped[3:].strip()
+                if lang in _WARP_FENCE_LANGS:
+                    line = line[: len(line) - len(stripped)] + "```text"
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        out.append(line if in_fence else _unescape_outside_code_spans(line))
+    return "\n".join(out)
+
+
+def _unescape_outside_code_spans(line: str) -> str:
+    """Strip gratuitous backslashes, skipping `inline code` spans."""
+    result: list[str] = []
+    in_code = False
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if char == "`":
+            in_code = not in_code
+            result.append(char)
+            index += 1
+            continue
+        if (
+            not in_code
+            and char == "\\"
+            and index + 1 < len(line)
+            and line[index + 1] in _GRATUITOUS_ESCAPES
+        ):
+            result.append(line[index + 1])
+            index += 2
+            continue
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
 def _read_capped(path: Path | None, budget: int) -> str:
     """Return the tail of a file, or '' when absent/empty.
 
@@ -232,7 +293,7 @@ def extract_diagnosis(
             sys.stderr.write(f"warning: could not read plan artifact {uid}: {exc}\n")
             continue
         if content.strip():
-            return content.strip()
+            return normalize_agent_markdown(content.strip())
 
     # Prefer an exact filename match, but accept any markdown file the agent left.
     def _rank(artifact: Any) -> int:
@@ -257,7 +318,7 @@ def extract_diagnosis(
             sys.stderr.write(f"warning: could not read file artifact {uid}: {exc}\n")
             continue
         if content.strip():
-            return content.strip()
+            return normalize_agent_markdown(content.strip())
 
     return ""
 
