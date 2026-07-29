@@ -102,6 +102,13 @@ venvPath = "."
 venv = ".venv"
 pythonPath = ".venv/bin/python"
 
+[tool.ruff]
+# Root ruff.toml previously shadowed this plugin config for bare `ruff`
+# invocations (ruff.toml at repo root always wins over pyproject.toml, so
+# trunk's exported ruleset never applied outside `trunk check`). Extending
+# the tracked copy keeps direct `ruff`/editor runs in sync with CI.
+extend = ".trunk/configs/ruff.toml"
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
 
