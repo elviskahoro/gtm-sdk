@@ -16,17 +16,34 @@ name: CI failure triage
 #   2. An agent with `contents: write` on a public repo is a far larger blast radius
 #      than the problem justifies.
 #
-# The agent holds NO credentials. It reads a log and writes tmp/diagnosis.md; a
-# separate deterministic step turns that file into a Linear issue. So the Linear key
-# is never in the agent's environment, and dedupe logic lives in reviewable Python
-# rather than depending on the model following an instruction.
+# Fully containerized: every step that runs logic runs in Dagger. The agent is
+# invoked through `oz-agent-sdk` (plain Python, Apache-2.0) rather than
+# `warpdotdev/oz-agent-action`, which is what makes that possible -- a `uses:` action
+# cannot run inside a container. It submits a CLOUD run, matching this repo's
+# guidance to prefer cloud agent runs over local execution.
 #
-# This is hand-written, NOT warpdotdev/oz-agent-action's reusable
-# `fix-failing-checks.yml`. That file cannot be used as shipped: its guard is
+# Because the agent executes in Warp's sandbox it cannot read this checkout, so all
+# evidence is extracted here and embedded in the prompt: the failed-step log tail and
+# the diff between the default branch and the failing commit. Handing a cloud agent a
+# repo path would be actively worse than giving it nothing -- `git show` would still
+# succeed against whatever its sandbox cloned, and it would diagnose confidently
+# against the wrong bytes.
+#
+# The agent never holds a credential that can change anything. Its only output is
+# tmp/diagnosis.md; a separate container turns that into a Linear issue. So the Linear
+# key is never in the agent's environment, and dedupe lives in reviewable, tested
+# Python rather than depending on a model following an instruction.
+#
+# Reporting does not depend on the agent working: if no diagnosis comes back, a
+# log-only stub is filed instead. Thirteen consecutive silent red nights is the
+# problem being solved, and it would recur if a broken agent meant no ticket.
+#
+# None of warpdotdev/oz-agent-action's reusable workflows are used. `fix-failing-
+# checks.yml` in particular cannot be: its guard is
 # `if:\n  ${{ ... }} && !startsWith(...)`, which leaves literal text outside the
 # replacement token, so GitHub compiles it to a non-empty (therefore truthy) string
 # -- it fires on SUCCESSFUL runs, its recursion guard never engages, and it then
-# runs `git push --force`. Only the action itself is reused, SHA-pinned below.
+# runs `git push --force`.
 
 on:
   workflow_run:
@@ -67,9 +84,9 @@ jobs:
       # Check out the DEFAULT branch, never the failing run's head. A workflow_run
       # job holds secrets, so materializing the triggering commit into the workspace
       # is the classic workflow-run-target-code-checkout weakness that semgrep flags.
-      # The next step fetches the failing commit as a bare object so the agent can
-      # READ it via `git show` without it becoming the working tree -- the same
-      # trusted-asset pattern tests-unit.yml uses for its CI pipeline files.
+      # The next step fetches the failing commit as a bare object instead, so the
+      # diff can be read out of it without it ever becoming the working tree -- the
+      # same trusted-asset pattern tests-unit.yml uses for its CI pipeline files.
       - name: Checkout the default branch
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -122,93 +139,34 @@ jobs:
           tail -c 100000 tmp/ci-failure.log > tmp/ci-failure-tail.log
           wc -l tmp/ci-failure-tail.log
 
-      # No GH_TOKEN and no Linear key in this step's environment -- on purpose. The
-      # agent's only output is a file.
-      - name: Diagnose with Oz
+      # The agent runs in Warp's cloud and cannot read this checkout, so the diff
+      # has to be extracted here, where the failing commit actually exists. This is
+      # not a convenience: pointing a cloud agent at a repo path would let `git show`
+      # succeed against whatever its sandbox cloned, and it would then diagnose
+      # confidently against the wrong bytes. Wrong-and-plausible beats missing.
+      - name: Extract the diff that introduced the failure
         if: steps.preflight.outputs.configured == 'true'
-        continue-on-error: true
-        uses: warpdotdev/oz-agent-action@851b4af8e23dbc2c9558ab0e240c589b0f59e490 # v1.0.26
-        with:
-          warp_api_key: ${{ secrets.WARP_API_KEY }}
-          output_format: text
-          name: ci-triage-${{ github.event.workflow_run.id }}
-          prompt: |
-            A CI run in ${{ github.repository }} just failed. Diagnose the root cause
-            and write your findings to `tmp/diagnosis.md`. That file is the ONLY
-            output that matters -- a later step turns it into a Linear issue. If you
-            do not write it, nothing gets filed.
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          mkdir -p tmp
+          : > tmp/failing-diff.patch
+          if git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            # Empty for a failure already on the default branch, which is fine --
+            # the log carries the signal there.
+            git diff origin/HEAD "${HEAD_SHA}" > tmp/failing-diff.patch 2>/dev/null || true
+          else
+            echo "::notice::${HEAD_SHA} is not available locally; diagnosing from logs alone."
+          fi
+          wc -c tmp/failing-diff.patch
 
-            Your working tree is the DEFAULT branch, not the failing commit. The
-            failing commit is fetched but deliberately not checked out. Read it with
-            `git show <sha>:<path>` and `git diff origin/HEAD <sha> -- <path>`. Do NOT
-            `git checkout`/`git switch` onto it and do not execute code from it.
-
-            Failing run:
-              workflow:  ${{ github.event.workflow_run.name }}
-              run URL:   ${{ github.event.workflow_run.html_url }}
-              branch:    ${{ github.event.workflow_run.head_branch }}
-              commit:    ${{ github.event.workflow_run.head_sha }}
-              triggered: ${{ github.event.workflow_run.event }}
-
-            The failed-step log tail is already saved at `tmp/ci-failure-tail.log`.
-            Read it first.
-
-            ## What tmp/diagnosis.md must contain
-
-            Markdown, no top-level heading, under roughly 400 words:
-
-            1. **Root cause** -- one paragraph. Quote the exact failing assertion,
-               lint code, or error line. Name the file and line when the log points
-               at one.
-            2. **Fix** -- the concrete change you would make. Describe it; do NOT
-               apply it. You have no write access and any push would be rejected.
-            3. **Confidence** -- one line: high, medium, or low, and what would
-               raise it. Say plainly when the log is inconclusive rather than
-               guessing at a cause.
-
-            Do not restate the run metadata; the filing step adds it. Do not include
-            a title line -- the title is generated.
-
-            ## You have no network credentials
-
-            Do not attempt to use `gh`, open issues, comment, push, or call any API.
-            You have no tokens. Write the file and stop.
-
-            ## Repository context (saves you a lot of log-reading)
-
-            - Linters and formatters run ONLY through trunk. Reproduce a finding with
-              `trunk check --filter=<tool> <path>`; the bare binaries are not on PATH
-              and report differently. Active tools include ruff, mypy, pyright,
-              actionlint, checkov, yamllint, taplo, shellcheck, semgrep, and tach.
-            - `tach` enforces module boundaries: `libs/<x>` must never import from
-              `libs/<y>`. Cross-lib coordination belongs in `src/`.
-            - Package manager is `uv`, never pip. `uv sync --frozen` respects uv.lock;
-              a lockfile/manifest mismatch surfaces here first.
-            - Unit and Integration tests run pytest inside a Dagger container on a
-              Namespace ARM runner. A failure may be infrastructure rather than code:
-              stale Namespace cache generations, registry.dagger.io pull brownouts,
-              and engine-readiness races have all produced red runs. Say so when the
-              log points that way instead of inventing a code cause.
-            - Integration tests are scheduled nightly and read live credentials from
-              the environment. `schedule` runs have been failing while manual
-              `workflow_dispatch` runs of the same suite pass -- if this is that
-              failure, the trigger difference is the most important clue.
-            - `docs/cli/` is generated; it is rebuilt by
-              `uv run scripts/docs-cli_reference-generate.py`, never hand-edited.
-
-            ## Hard constraints
-
-            - NEVER write a `Co-Authored-By:` trailer anywhere, including in prose.
-              This repo's git hooks reject known agent identities and the policy
-              applies to issue text too.
-            - Do not modify any tracked file. Write only under `tmp/`.
-
-      # Dagger from here on: the filing step is deterministic, so it belongs in a
-      # pinned container rather than running against whatever the runner happens to
-      # ship. `version` is pinned deliberately -- without it the action installs the
-      # latest CLI at run time, so an upstream release silently changes the engine
-      # and forces a cold image pull with no diff in this repo. Keep in lockstep
-      # with the dagger-io pin below and with tests-*.yml.
+      # Dagger from here on. Both agent invocation and Linear filing run in pinned
+      # containers, so no `uses:` step touches this pipeline's logic.
+      #
+      # `version` is pinned deliberately -- unpinned, the action installs the latest
+      # CLI at run time, so an upstream release silently changes the engine and
+      # forces a cold image pull with no diff in this repo. Keep in lockstep with the
+      # dagger-io pin below and with tests-*.yml.
       - name: Setup Dagger
         if: steps.preflight.outputs.configured == 'true'
         continue-on-error: true
@@ -218,10 +176,9 @@ jobs:
 
       # ubuntu-latest, so a plain venv works -- unlike the Namespace runners in
       # tests-*.yml, which are PEP 668 externally-managed and need the root-free
-      # dance. Prepending to $GITHUB_PATH lets the invocation stay a bare
+      # dance. Prepending to $GITHUB_PATH keeps the invocations a bare
       # `dagger run python …`.
       - name: Install Dagger Python SDK
-        id: dagger_sdk
         if: steps.preflight.outputs.configured == 'true'
         continue-on-error: true
         run: |
@@ -232,13 +189,65 @@ jobs:
             "dagger-io==0.21.7" "anyio==4.13.0"
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
-      # Primary path. Dedupe and filing are plain Python inside the container, not
-      # prompt-dependent -- see .github/workflows/ci/triage_dagger.py.
+      # Runs the Oz agent through oz-agent-sdk inside a container instead of the
+      # `warpdotdev/oz-agent-action` runner action. The SDK is plain Python, which is
+      # what makes a fully containerized pipeline possible, and it submits a CLOUD
+      # run -- this repo's guidance prefers cloud runs over local execution.
       #
-      # continue-on-error because registry.dagger.io brownouts (dagger/dagger#7548)
-      # stall the first-use engine pull, and tests-integration.yml already needs six
-      # retries to survive them. A reporter that dies when the registry is flaky is
-      # useless precisely when CI is unhappy, so the next step falls back to the host.
+      # continue-on-error: a failed or slow agent must not fail the job. The next
+      # step substitutes a log-only stub so a red check still produces a ticket.
+      - name: Diagnose with Oz (Dagger)
+        id: diagnose
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        env:
+          WARP_API_KEY: ${{ secrets.WARP_API_KEY }}
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          OZ_ENVIRONMENT_ID: ${{ secrets.OZ_ENVIRONMENT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
+        run: |
+          dagger run python .github/workflows/ci/triage_diagnose_dagger.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow "${WORKFLOW}" \
+            --run-url "${RUN_URL}" \
+            --branch "${HEAD_BRANCH}" \
+            --commit "${HEAD_SHA}" \
+            --event "${TRIGGER_EVENT}" \
+            --log-file tmp/ci-failure-tail.log \
+            --diff-file tmp/failing-diff.patch \
+            --output tmp/diagnosis.md
+
+      # The reporting guarantee must not depend on the agent. Thirteen consecutive
+      # silent red nights is the problem being solved, and it would recur if a
+      # broken agent meant no ticket. A log-only issue is worse than a diagnosis and
+      # far better than silence.
+      - name: Ensure a diagnosis exists
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ -s tmp/diagnosis.md ]; then
+            echo "Agent produced a diagnosis."
+            exit 0
+          fi
+          echo "::warning::No agent diagnosis; filing a log-only issue."
+          {
+            printf 'Automated diagnosis was unavailable for this failure, so this\n'
+            printf 'issue records the failure itself. See the run log for detail.\n\n'
+            printf '**Root cause** — not determined automatically.\n\n'
+            printf '**Fix** — needs a human look at [the failing run](%s).\n\n' "${RUN_URL}"
+            printf '**Confidence** — none; no analysis was produced.\n\n'
+            printf 'Tail of the failed step:\n\n```\n'
+            tail -c 3000 tmp/ci-failure-tail.log 2>/dev/null || true
+            printf '\n```\n'
+          } > tmp/diagnosis.md
+
       - name: File or bump the Linear issue (Dagger)
         id: linear_dagger
         if: steps.preflight.outputs.configured == 'true'

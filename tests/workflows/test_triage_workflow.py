@@ -124,16 +124,61 @@ def test_checkout_never_materializes_the_failing_head(
         assert with_block.get("persist-credentials") is False
 
 
-def test_agent_step_holds_no_credentials(steps: list[dict[str, Any]]) -> None:
-    """The agent's only output is a file, so it needs no token at all.
-
-    This is what makes a prompt-injected diagnosis unable to spend or exfiltrate
-    the Linear key or act on GitHub.
-    """
+def test_agent_step_holds_no_credential_that_can_change_anything(
+    steps: list[dict[str, Any]],
+) -> None:
+    """The agent may hold WARP_API_KEY (it is the thing being called) but must never
+    hold a Linear key or a GitHub token -- that is what keeps a prompt-injected
+    diagnosis from acting on either system."""
     agent = _step(steps, "Diagnose with Oz")
     env = agent.get("env") or {}
-    leaked = [k for k in env if any(t in k for t in ("TOKEN", "API_KEY", "GH_"))]
-    assert leaked == [], f"agent step must hold no credentials, found {leaked}"
+    assert "LINEAR_API_KEY" not in env, "the agent must not be able to write Linear"
+    assert "GH_TOKEN" not in env, "the agent must not be able to act on GitHub"
+    assert "WARP_API_KEY" in env, "the agent call needs its own key"
+
+
+def test_no_uses_action_runs_pipeline_logic(steps: list[dict[str, Any]]) -> None:
+    """Fully containerized: the only `uses:` steps may be checkout and Dagger setup.
+
+    An agent invoked via `uses:` cannot run inside a container, which is the whole
+    reason this moved to oz-agent-sdk.
+    """
+    allowed = ("actions/checkout", "dagger/dagger-for-github")
+    for step in steps:
+        uses = str(step.get("uses", ""))
+        if not uses:
+            continue
+        assert uses.startswith(allowed), f"unexpected action step: {uses}"
+    assert not any("oz-agent-action" in str(step.get("uses", "")) for step in steps), (
+        "the agent must be invoked through the SDK in a container, not the action"
+    )
+
+
+def test_agent_context_is_extracted_on_the_runner(
+    steps: list[dict[str, Any]],
+) -> None:
+    """A cloud agent cannot read our checkout, so the diff must be extracted here.
+
+    Without this the agent would have neither the failing tree nor its diff, and a
+    log-only diagnosis is materially weaker.
+    """
+    extract = _step(steps, "Extract the diff")
+    assert "git diff origin/HEAD" in extract["run"]
+    diagnose = _step(steps, "Diagnose with Oz")
+    assert "--diff-file" in diagnose["run"]
+    assert "--log-file" in diagnose["run"]
+
+
+def test_reporting_does_not_depend_on_the_agent(steps: list[dict[str, Any]]) -> None:
+    """13 silent red nights is the motivating failure; a broken agent must not
+    reproduce it. A log-only stub is filed when no diagnosis comes back."""
+    diagnose = _step(steps, "Diagnose with Oz")
+    assert diagnose.get("continue-on-error") is True, (
+        "a failed agent must not fail the job"
+    )
+    ensure = _step(steps, "Ensure a diagnosis exists")
+    assert "tmp/diagnosis.md" in ensure["run"]
+    assert ensure.get("if") is not None
 
 
 def test_no_github_context_interpolated_into_shell(steps: list[dict[str, Any]]) -> None:
@@ -156,9 +201,13 @@ def test_dagger_is_the_primary_filing_path(steps: list[dict[str, Any]]) -> None:
     assert f"dagger-io=={DAGGER_VERSION}" in sdk["run"], (
         "the SDK pin must match the CLI pin"
     )
-    dagger_step = _step(steps, "File or bump the Linear issue (Dagger)")
-    assert "dagger run python" in dagger_step["run"]
-    assert ".github/workflows/ci/triage_dagger.py" in dagger_step["run"]
+    for name, module in (
+        ("Diagnose with Oz (Dagger)", "triage_diagnose_dagger.py"),
+        ("File or bump the Linear issue (Dagger)", "triage_dagger.py"),
+    ):
+        step = _step(steps, name)
+        assert "dagger run python" in step["run"], name
+        assert f".github/workflows/ci/{module}" in step["run"], name
 
 
 def test_host_fallback_exists_and_only_runs_when_dagger_failed(
@@ -196,7 +245,9 @@ def test_preflight_gates_on_both_credentials(steps: list[dict[str, Any]]) -> Non
     assert "LINEAR_API_KEY" in run
     for step in steps:
         name = str(step.get("name", ""))
-        if name.startswith(("Diagnose", "File or bump", "Setup Dagger")):
+        if name.startswith(
+            ("Diagnose", "File or bump", "Setup Dagger", "Extract the diff"),
+        ):
             assert "steps.preflight.outputs.configured" in str(step.get("if", "")), (
                 f"{name} must be gated on the preflight"
             )
