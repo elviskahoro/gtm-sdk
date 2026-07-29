@@ -274,12 +274,26 @@ actions:
     - trunk-check-pre-push
 
 merge:
-  # These MUST be the live GitHub check-run names, which are the workflow job
-  # `name:` values -- not workflow filenames, not step names. The previous entries
-  # ("Trunk Check", "pytest (Dagger)") were left behind by job renames in 4292087 /
-  # a21195c and matched nothing, so the queue gated on nothing and a red Trunk Check
-  # reached main in eb815f9. Re-verify after any job rename with:
-  #   gh api repos/<owner>/<repo>/commits/<sha>/check-runs --jq '.check_runs[].name'
+  # These MUST be live GitHub check-run names. Usually that is a workflow job's
+  # `name:`, but not always -- an action can post its own check, which is why
+  # trunk-io/trunk-action contributes a check literally called "Trunk Check" that is
+  # distinct from this repo's job name "Lint and type check with Trunk".
+  #
+  # Of the two entries this replaced, only one was stale:
+  #
+  #   "pytest (Dagger)"  -- matches nothing, anywhere. Orphaned by the job renames in
+  #                         4292087 / a21195c.
+  #   "Trunk Check"      -- real, but PULL-REQUEST ONLY. trunk-action posts it on a
+  #                         `pull_request` event and not on a push to main.
+  #
+  # So the queue was not "gating on nothing" -- it was waiting forever on a status
+  # that never arrives, which is worse: it pushed merges onto the manual path (#372
+  # was merged by hand), and that is how a red Trunk Check reached main in eb815f9.
+  #
+  # The names below are deliberately ones that report in BOTH contexts, so a
+  # main-branch push and a PR agree. Re-verify after any job rename -- and check a PR,
+  # not just a main commit, or you will miss action-posted checks like "Trunk Check":
+  #   gh pr checks <pr-number> --json name --jq '.[].name'
   #
   # Do NOT add path-filtered workflows here (e.g. "Docs checks") -- they do not report
   # on every PR, so requiring them deadlocks the queue. Same for the workflow_run-
