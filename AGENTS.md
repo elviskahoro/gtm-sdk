@@ -169,7 +169,14 @@ All linters/formatters run via **trunk**, not as bare binaries. `yamllint`, `ruf
 
 `uv run pytest`. Importlib mode is already configured. Mirror the source layout when adding tests.
 
-**Any new pytest plugin must be named in the `-p` allowlist in `PYTEST_CMD`** (`.github/workflows/ci/pytest_dagger.py`). The unit CI container runs with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, so an installed-but-unlisted plugin is silently inert — the suite still passes, minus whatever the plugin provided. `tests/test_hypothesis_plugin.py` guards this for Hypothesis; add an equivalent guard for anything else.
+### Adding a pytest plugin
+
+The unit CI container runs with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, so a plugin that is merely installed is **silently inert** — the suite still passes, minus whatever the plugin provided. It has to be named explicitly. Two traps, both learned by burning a CI run:
+
+- **Put the `-p` flag in `addopts` (`pyproject.toml`), not in `PYTEST_CMD`.** On a pull request, `tests-unit.yml` deliberately executes the **base branch's** copy of `.github/workflows/ci/pytest_dagger.py` — PR-authored CI code must never run with trusted Namespace/registry credentials. A flag added there is therefore ignored until it lands on `main`, and the required `pytest (Dagger)` gate blocks that merge. `addopts` is read from the source tree, so it applies to PR, `main` and local runs alike.
+- **Use the plugin's entry-point name, not its module name.** Where autoload is on (local runs, the integration job) the plugin is already registered under its entry-point name; naming the module registers the same module twice and pytest aborts with `ValueError: Plugin already registered under a different name`. For Hypothesis that means `-p hypothesispytest`, not `-p _hypothesis_pytestplugin`.
+
+Back the result with a test rather than a comment — `tests/test_hypothesis_plugin.py` fails loudly if the plugin stops loading, in any environment.
 
 ### Property-based tests (Hypothesis)
 

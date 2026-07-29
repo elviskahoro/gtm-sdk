@@ -49,14 +49,15 @@ PYTEST_CMD = (
     "/usr/bin/time -v -o /tmp/pytest-time "
     '"/opt/venv/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
-    # PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 (set below) means every plugin must be
-    # named here. Hypothesis's core `@given` runs fine WITHOUT its pytest plugin,
-    # so dropping this flag would not fail a single property test -- it would
-    # silently remove --hypothesis-seed (leaving no way to replay a CI failure),
-    # --hypothesis-profile, --hypothesis-show-statistics, the
-    # function_scoped_fixture health check, and counterexample reporting into
-    # junit.xml. tests/test_hypothesis_plugin.py fails loudly if it goes missing.
-    "-p _hypothesis_pytestplugin "
+    # Hypothesis's plugin is deliberately NOT listed here -- do not "fix" that by
+    # adding it. It is enabled via `-p hypothesispytest` in addopts
+    # (pyproject.toml) instead, for two reasons. (1) On a pull request this file
+    # is not the one that runs: tests-unit.yml executes the BASE branch's copy,
+    # so a flag added here stays inert until it lands on main -- and the required
+    # gate would block that merge. addopts is read from the source tree, so it
+    # applies to PR, main and local runs alike. (2) A second `-p` naming the same
+    # plugin under a different name aborts pytest with "Plugin already registered
+    # under a different name". tests/test_hypothesis_plugin.py guards the result.
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
     "rc=$?; "
