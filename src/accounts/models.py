@@ -4,36 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-# --- Input models ---
-
-
-class ResearchInput(BaseModel):
-    objective: str
-
-
-class EnrichInput(BaseModel):
-    url: str
-    objective: str
-
-
-class FindPeopleInput(BaseModel):
-    query: str
-
-
-class MapAccountHierarchyInput(BaseModel):
-    account: str
-
-
-class BatchAddPeopleInput(BaseModel):
-    records: list[dict[str, Any]]
-    apply: bool = False
-
-
-class BatchAddCompaniesInput(BaseModel):
-    records: list[dict[str, Any]]
-    apply: bool = False
-
-
 # --- Result models ---
 
 
