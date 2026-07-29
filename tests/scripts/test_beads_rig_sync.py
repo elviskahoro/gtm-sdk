@@ -101,6 +101,18 @@ def fake_rig(tmp_path: Path) -> Path:
     return rig_beads
 
 
+@pytest.fixture
+def fake_source_beads(tmp_path: Path) -> Path:
+    """A synthetic source ``.beads`` dir, standing in for the real (gitignored,
+    symlinked) one that only exists on a developer's primary checkout — not in
+    a fresh CI clone. Passed via ``--source-beads`` so tests never depend on
+    the real filesystem walk-up.
+    """
+    source_beads = tmp_path / "src" / ".beads"
+    source_beads.mkdir(parents=True)
+    return source_beads
+
+
 def _run_script(
     args: list[str],
     *,
@@ -176,6 +188,7 @@ def test_resolve_rig_beads_override_beats_env(
 def test_export_passes_output_path_and_includes_memories(
     tmp_path: Path,
     fake_rig: Path,
+    fake_source_beads: Path,
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -183,7 +196,13 @@ def test_export_passes_output_path_and_includes_memories(
     _write_bd_stub(bin_dir, call_log)
 
     result = _run_script(
-        ["--dry-run", "--rig-beads", str(fake_rig)],
+        [
+            "--dry-run",
+            "--rig-beads",
+            str(fake_rig),
+            "--source-beads",
+            str(fake_source_beads),
+        ],
         bin_dir=bin_dir,
     )
 
@@ -216,6 +235,7 @@ def test_export_lands_in_gitignored_tmp_not_beads(tmp_path: Path) -> None:
 def test_dry_run_does_not_write_rig_config(
     tmp_path: Path,
     fake_rig: Path,
+    fake_source_beads: Path,
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -223,7 +243,13 @@ def test_dry_run_does_not_write_rig_config(
     _write_bd_stub(bin_dir, call_log)
 
     _run_script(
-        ["--dry-run", "--rig-beads", str(fake_rig)],
+        [
+            "--dry-run",
+            "--rig-beads",
+            str(fake_rig),
+            "--source-beads",
+            str(fake_source_beads),
+        ],
         bin_dir=bin_dir,
     )
 
@@ -233,13 +259,20 @@ def test_dry_run_does_not_write_rig_config(
 def test_bd_failure_surfaces_diagnostic_without_traceback(
     tmp_path: Path,
     fake_rig: Path,
+    fake_source_beads: Path,
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_failing_bd_stub(bin_dir)
 
     result = _run_script(
-        ["--dry-run", "--rig-beads", str(fake_rig)],
+        [
+            "--dry-run",
+            "--rig-beads",
+            str(fake_rig),
+            "--source-beads",
+            str(fake_source_beads),
+        ],
         bin_dir=bin_dir,
     )
 
@@ -254,6 +287,7 @@ def test_bd_failure_surfaces_diagnostic_without_traceback(
 
 def test_missing_rig_dir_names_the_path_and_the_listing_command(
     tmp_path: Path,
+    fake_source_beads: Path,
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -261,7 +295,7 @@ def test_missing_rig_dir_names_the_path_and_the_listing_command(
     missing = tmp_path / "town" / "gtm_sdk" / ".beads"
 
     result = _run_script(
-        ["--rig-beads", str(missing)],
+        ["--rig-beads", str(missing), "--source-beads", str(fake_source_beads)],
         bin_dir=bin_dir,
     )
 

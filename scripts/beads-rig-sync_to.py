@@ -43,6 +43,7 @@ Usage:
     scripts/beads-rig-sync_to.py                 # export here, import into rig
     scripts/beads-rig-sync_to.py --dry-run       # show counts, change nothing
     scripts/beads-rig-sync_to.py --rig-beads <dir>   # override rig .beads path
+    scripts/beads-rig-sync_to.py --source-beads <dir>   # override source .beads path
 
 The rig location comes from ``$GT_TOWN_ROOT/gtm_sdk/.beads`` when
 ``GT_TOWN_ROOT`` is set (Gas Town's shell integration exports it — but note
@@ -82,7 +83,7 @@ DEFAULT_RIG_NAME = "gtm_sdk"
 EXPORT_PATH = REPO_ROOT / "tmp" / "beads-rig-sync-export.jsonl"
 
 
-def resolve_source_beads() -> Path | None:
+def resolve_source_beads(override: str | None) -> Path | None:
     """Find the source ``.beads`` dir the same way ``bd`` itself resolves it.
 
     In the primary gtm-sdk checkout, ``.beads`` is a symlink that sits directly
@@ -91,7 +92,15 @@ def resolve_source_beads() -> Path | None:
     the directory tree (e.g. to ``ai/.beads``). Hard-coding ``REPO_ROOT/.beads``
     breaks in every worktree, so we mirror ``bd``'s walk-up here. Starting from
     ``REPO_ROOT`` also covers the symlink case, since ``is_dir()`` follows links.
+
+    An explicit ``--source-beads`` is honored verbatim, even if it does not
+    exist, mirroring ``resolve_rig_beads``'s override contract — this is also
+    what lets tests point the script at a synthetic directory instead of the
+    real (gitignored) ``.beads`` walk-up, which doesn't exist at all in a
+    fresh CI checkout.
     """
+    if override:
+        return Path(override).expanduser().resolve()
     for base in (REPO_ROOT, *REPO_ROOT.parents):
         candidate = base / ".beads"
         if candidate.is_dir():
@@ -199,6 +208,10 @@ def main() -> int:
         help="Path to the rig's .beads directory (overrides $GT_TOWN_ROOT / default).",
     )
     parser.add_argument(
+        "--source-beads",
+        help="Path to this repo's .beads directory (overrides the walk-up default).",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Refresh the export and report what would import, but change nothing.",
@@ -214,7 +227,7 @@ def main() -> int:
 
 def run_sync(opts: argparse.Namespace) -> int:
     """Export here, import into the rig. Raises BdCommandError if bd fails."""
-    source_beads = resolve_source_beads()
+    source_beads = resolve_source_beads(opts.source_beads)
     if source_beads is None:
         print(
             f"error: no .beads dir found at or above {REPO_ROOT}",
