@@ -29,14 +29,14 @@ ensure_primary_symlink() {
 
   # The primary checkout owns its own links. Only linked worktrees should
   # inherit or repair links into that checkout.
-  [[ "${REPO_ROOT}" == "${PRIMARY_REPO_ROOT}" ]] && return 0
+  [[ ${REPO_ROOT} == "${PRIMARY_REPO_ROOT}" ]] && return 0
 
   # Repair stale links from older setup versions, but never replace a regular
   # file or directory that an operator created in the workspace.
-  if [[ -L "${link_path}" ]] && [[ "$(readlink "${link_path}")" != "${target_path}" ]]; then
+  if [[ -L ${link_path} ]] && [[ "$(readlink "${link_path}")" != "${target_path}" ]]; then
     unlink "${link_path}"
   fi
-  [[ ! -e "${link_path}" ]] && [[ -e "${target_path}" ]] && ln -s "${target_path}" "${link_path}"
+  [[ ! -e ${link_path} ]] && [[ -e ${target_path} ]] && ln -s "${target_path}" "${link_path}"
   return 0
 }
 
@@ -104,15 +104,15 @@ verify_flox_tool() {
 
   tool_path="$(command -v "${tool}" || true)"
   case "${tool_path}" in
-    "${FLOX_BIN}"/*) ;;
-    "")
-      echo "error: Flox tool '${tool}' is missing from ${FLOX_BIN}" >&2
-      return 1
-      ;;
-    *)
-      echo "error: Flox tool '${tool}' resolved outside ${FLOX_BIN}: ${tool_path}" >&2
-      return 1
-      ;;
+  "${FLOX_BIN}"/*) ;;
+  "")
+    echo "error: Flox tool '${tool}' is missing from ${FLOX_BIN}" >&2
+    return 1
+    ;;
+  *)
+    echo "error: Flox tool '${tool}' resolved outside ${FLOX_BIN}: ${tool_path}" >&2
+    return 1
+    ;;
   esac
 
   if ! "${tool}" "$@"; then
@@ -162,7 +162,7 @@ if command -v flox >/dev/null 2>&1 && provision_flox_tools; then
 else
   if command -v flox >/dev/null 2>&1; then
     echo "warning: Flox ${FLOX_FAILURE_STAGE:-provisioning} failed; using fallback installers"
-    [[ -n ${FLOX_BIN:-} ]] && PATH="${PATH#"${FLOX_BIN}:"}"
+    [[ -n ${FLOX_BIN-} ]] && PATH="${PATH#"${FLOX_BIN}:"}"
   fi
   echo "info: provisioning source: fallback installers"
   # Non-Flox fallback (macOS Conductor workspaces): original installers.
@@ -211,10 +211,10 @@ git config --global alias.roborev '!roborev'
 # isn't enough: bogus dirs like a stray $HOME/.beads from a global bd install
 # pass the -e check but aren't a real project), otherwise seed a fresh local
 # DB from the shared DoltHub remote so the sandbox sees real issue history.
-if [[ "${REPO_ROOT}" == "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ ! -e .beads ]]; then
+if [[ ${REPO_ROOT} == "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ ! -e .beads ]]; then
   unlink .beads
 fi
-if [[ "${REPO_ROOT}" != "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
+if [[ ${REPO_ROOT} != "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
   unlink .beads
 fi
 if [[ ! -e .beads ]] && [[ -e "${PRIMARY_REPO_ROOT}/.beads" ]] && bd -C "${PRIMARY_REPO_ROOT}" status >/dev/null 2>&1; then
