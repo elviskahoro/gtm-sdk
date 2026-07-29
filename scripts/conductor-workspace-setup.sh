@@ -27,6 +27,10 @@ ensure_primary_symlink() {
   local link_path="$1"
   local target_path="$2"
 
+  # The primary checkout owns its own links. Only linked worktrees should
+  # inherit or repair links into that checkout.
+  [[ "${REPO_ROOT}" == "${PRIMARY_REPO_ROOT}" ]] && return 0
+
   # Repair stale links from older setup versions, but never replace a regular
   # file or directory that an operator created in the workspace.
   if [[ -L "${link_path}" ]] && [[ "$(readlink "${link_path}")" != "${target_path}" ]]; then
@@ -207,7 +211,7 @@ git config --global alias.roborev '!roborev'
 # isn't enough: bogus dirs like a stray $HOME/.beads from a global bd install
 # pass the -e check but aren't a real project), otherwise seed a fresh local
 # DB from the shared DoltHub remote so the sandbox sees real issue history.
-if [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
+if [[ "${REPO_ROOT}" != "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
   unlink .beads
 fi
 if [[ ! -e .beads ]] && [[ -e "${PRIMARY_REPO_ROOT}/.beads" ]] && bd -C "${PRIMARY_REPO_ROOT}" status >/dev/null 2>&1; then
