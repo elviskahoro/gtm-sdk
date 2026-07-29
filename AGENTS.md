@@ -19,6 +19,25 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 - **Module boundaries are enforced by tach**, run via trunk (like every other linter — see "Linting" below). Reproduce a finding with `trunk check --filter=tach`; CI runs a full-graph `trunk check --filter=tach --all` step on every push and PR. The `dev`-group `tach>=0.35.0` pin in `pyproject.toml` stays (for `tach show`/`tach sync` ergonomics) — bump it in lockstep with the `tach@` version in `.trunk/trunk.yaml`'s `lint.enabled` and the plugin `ref` in `oss-linter-trunk-tach`'s `plugin.yaml` `known_good_version`.
 - **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `libs*`, `src*`).
 
+## Public API and downstream consumers
+
+**This repo is a library. Unreferenced here ≠ dead.** Other repos install gtm-sdk as a dependency (`ai/pyproject.toml` and `ai/projects/crm-uploader/pyproject.toml` both take it as an editable path dep), so their call sites are invisible to this repo's tests, to `ruff`, and to any dead-code scanner. Eight bot-authored "remove unused code" PRs (#362–#371) reached the wrong conclusion from exactly this blind spot and proposed deleting seven symbols `crm-uploader` calls in production.
+
+Two mechanisms make the real surface visible. Both are cheap to check and neither is optional:
+
+- **`libs/<x>/__init__.py`'s `__all__` is the public-API declaration.** Dead-code tooling treats an `__all__` re-export as an entrypoint — the bot's PR bodies say so verbatim ("`libs/attio/__init__.py` is empty, so the symbol was not re-exported as part of a public API"). Removing a name from an `__all__` is a breaking change, not cleanup.
+- **`contracts/downstream_api.toml` records what consumers actually import**, enforced by `tests/test_downstream_contract.py` in the required `Unit tests` gate. It also pins the few private helpers consumers reach into (e.g. `libs.attio.people._search_people_raw`), which stay out of `__all__` on purpose.
+
+**Before merging any dead-code PR**, grep both. If the symbol appears in either, close the PR. If it is genuinely consumed but absent from the contract, that is a contract bug — fix it first.
+
+Consumer imports changed, or you added a consumer? Regenerate rather than hand-edit:
+
+```shell
+scripts/downstream-contract-sync.py ~/Documents/ai/projects/crm-uploader --write
+```
+
+That script is deliberately **not** in CI: this repo is public and `ai/` is private, so public CI can never read the consumer tree. The contract travels as committed data instead.
+
 ## Modal gotchas
 
 - `deploy.py` stays at the repo root. Moving it under `src/` causes `src/attio/` to shadow the `attio` pip package.
