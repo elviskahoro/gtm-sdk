@@ -1,7 +1,9 @@
+# ruff: noqa: I001, S101
 from __future__ import annotations
 
-import orjson
 from pathlib import Path
+
+import orjson
 
 from src.rb2b.webhook.visit import Webhook
 
@@ -23,6 +25,9 @@ def test_clay_row_includes_identified_person_and_company() -> None:
 
 
 def test_clay_rejects_company_only_and_anonymous_visits() -> None:
-    for name in ("rb2b.visit.company_only.redacted.json", "rb2b.visit.anonymous.redacted.json"):
+    for name in (
+        "rb2b.visit.company_only.redacted.json",
+        "rb2b.visit.anonymous.redacted.json",
+    ):
         payload = orjson.loads((SAMPLES_DIR / name).read_bytes())
         assert not Webhook.model_validate(payload).clay_is_valid_webhook()

@@ -1,4 +1,5 @@
 # trunk-ignore-all(pyright/reportPrivateUsage,pyright/reportUnusedFunction): test helpers legitimately reach into the structured logger's contextvars
+# ruff: noqa: S101, S105, SLF001
 """Webhook event-sequence tests.
 
 The webhook handler files contain a `WebhookModelToReplace` placeholder that

@@ -9,6 +9,10 @@ from typing import Any
 from libs.clay_http import post_row
 
 
+class ClayRowEventIdError(TypeError):
+    """Raised when a source row violates Clay's stable-ID contract."""
+
+
 @dataclass(frozen=True)
 class ExecuteResult:
     event_id: str
@@ -38,5 +42,6 @@ def execute(
         row=row,
     )
     event_id = row["event_id"]
-    assert isinstance(event_id, str)
+    if not isinstance(event_id, str):
+        raise ClayRowEventIdError
     return ExecuteResult(event_id=event_id, status_code=result.status_code)
