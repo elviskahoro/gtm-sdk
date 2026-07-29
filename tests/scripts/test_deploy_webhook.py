@@ -120,6 +120,11 @@ def _write_default_stubs(bin_dir: Path) -> None:
                     echo "ATTIO_API_KEY"
                     exit 0
                 fi
+                if [[ "${snippet}" == *clay_get_webhook* ]]; then
+                    echo "CLAY_WEBHOOK_URL_TEST"
+                    echo "CLAY_WEBHOOK_AUTH_TOKEN_TEST"
+                    exit 0
+                fi
                 if [[ "${snippet}" == *_get_bucket_name* ]]; then
                     echo "stub-bucket-name"
                     exit 0
@@ -279,6 +284,22 @@ def test_all_flag_deploys_every_source(stub_bin: Path) -> None:
         f"Expected 5 per-source deploy headers (one for each Webhook import). "
         f"Got:\n{result.stdout}"
     )
+
+
+def test_clay_handler_preflights_its_source_specific_secrets(
+    stub_bin: Path,
+) -> None:
+    """Clay deploys discover only their URL/token keys, never ATTIO_API_KEY."""
+    result = _run_deploy(
+        stub_bin,
+        args=("export_to_clay", "--all"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("=== Deploying ") == 2
+    assert "CLAY_WEBHOOK_URL_TEST" in result.stdout
+    assert "CLAY_WEBHOOK_AUTH_TOKEN_TEST" in result.stdout
+    assert "ATTIO_API_KEY" not in result.stdout
 
 
 def test_restore_on_deploy_failure(stub_bin: Path) -> None:

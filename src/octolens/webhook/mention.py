@@ -219,6 +219,61 @@ class Webhook(OctolensMentionWebhook):
     def slack_get_messages(self) -> list[Any]:
         return []
 
+    # --- Clay webhook-table export contract ---
+
+    @staticmethod
+    def clay_get_app_name() -> str:
+        return "export-to-clay-from-octolens-mentions"
+
+    @staticmethod
+    def clay_get_webhook_url_secret_name() -> str:
+        return "CLAY_WEBHOOK_URL_OCTOLENS"
+
+    @staticmethod
+    def clay_get_webhook_auth_token_secret_name() -> str:
+        return "CLAY_WEBHOOK_AUTH_TOKEN_OCTOLENS"
+
+    def clay_is_valid_webhook(self) -> bool:
+        return self.action == "mention_created" and self.data.relevance_score in {
+            "medium",
+            "high",
+        }
+
+    def clay_get_invalid_webhook_error_msg(self) -> str:
+        return (
+            "Octolens Clay export accepts only medium/high mention_created events "
+            f"(got action={self.action!r}, relevance={self.data.relevance_score!r})"
+        )
+
+    def clay_get_row(self) -> dict[str, Any]:
+        data = self.data.model_dump(mode="json")
+        return {
+            "event_id": f"octolens:{data['source']}:{data['source_id']}",
+            "action": self.action,
+            "occurred_at": data["timestamp"],
+            "platform": data["source"],
+            "source_id": data["source_id"],
+            "mention_url": data["url"],
+            "title": data["title"],
+            "body": data["body"],
+            "author": data["author"],
+            "author_profile_url": data["author_profile_link"],
+            "author_avatar_url": data["author_avatar_url"],
+            "relevance_score": data["relevance_score"],
+            "relevance_comment": data["relevance_comment"],
+            "keyword": data["keyword"],
+            "keywords": data["keywords"],
+            "tags": data["tags"],
+            "sentiment": data["sentiment_label"],
+            "language": data["language"],
+            "subreddit": data["subreddit"],
+            "view_id": data["view_id"],
+            "view_name": data["view_name"],
+            "view_keywords": data["view_keywords"],
+            "bookmarked": data["bookmarked"],
+            "image_url": data["image_url"],
+        }
+
     def attio_is_valid_webhook(self) -> bool:
         if self.action not in self.VALID_ACTIONS:
             return False

@@ -731,6 +731,29 @@ class Webhook(CalcomWebhook):
             calcom_client_factory=self._calcom_client,
         )
 
+    # --- Clay webhook-table export contract (not implemented for this source) ---
+
+    @staticmethod
+    def clay_get_app_name() -> str:
+        return "export-to-clay-from-calcom-bookings"
+
+    @staticmethod
+    def clay_get_webhook_url_secret_name() -> str:
+        return "UNSUPPORTED_CLAY_WEBHOOK_URL"
+
+    @staticmethod
+    def clay_get_webhook_auth_token_secret_name() -> str:
+        return "UNSUPPORTED_CLAY_WEBHOOK_AUTH_TOKEN"
+
+    def clay_is_valid_webhook(self) -> bool:
+        return False
+
+    def clay_get_invalid_webhook_error_msg(self) -> str:
+        return "Clay export is not supported for Cal.com bookings"
+
+    def clay_get_row(self) -> dict[str, Any]:
+        return {}
+
 
 # Keep the legacy import path working for callers that still reference
 # ``BookingAttendee`` / ``BookingHost`` directly. They're re-exported from
