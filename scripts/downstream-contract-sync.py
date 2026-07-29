@@ -172,10 +172,18 @@ def _collect_symbols_via_attribute_access(
     Without this pass the contract records the module and leaves every symbol
     reached through it unprotected — precisely the gap the contract exists to
     close. ``bound_modules`` maps the local dotted prefix to the SDK module it
-    refers to; the component that follows the longest matching prefix is the
-    consumed symbol.
+    refers to.
+
+    The chain can be deeper than the bound prefix plus one component: ``import
+    libs.attio`` followed by ``libs.attio.companies.find_company_by_domain()``
+    binds only ``libs.attio``, so the intermediate ``companies`` has to be walked
+    as a submodule before the trailing name is recognised as the symbol. Matching
+    only ``prefix.rpartition(".")`` misses that call entirely *and* records
+    ``companies`` as a symbol of ``libs.attio`` — which, being a submodule, is
+    absent from ``__all__`` and would fail the contract's own guard.
     """
     found: dict[str, set[str]] = {}
+    prefixes = sorted(bound_modules, key=len, reverse=True)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Attribute):
             continue
@@ -184,9 +192,29 @@ def _collect_symbols_via_attribute_access(
         if dotted is None:
             continue
 
-        prefix, _, symbol = dotted.rpartition(".")
-        module = bound_modules.get(prefix)
-        if module is None or not symbol:
+        # Longest match first: a consumer can bind both `libs.attio` and
+        # `libs.attio.people` in the same file.
+        prefix = next(
+            (candidate for candidate in prefixes if dotted.startswith(f"{candidate}.")),
+            None,
+        )
+        if prefix is None:
+            continue
+
+        module = bound_modules[prefix]
+        rest = dotted[len(prefix) + 1 :].split(".")
+        # Consume leading components that name submodules, so the remainder is
+        # an attribute of the deepest real module.
+        while len(rest) > 1 and _module_exists_in(REPO_ROOT, f"{module}.{rest[0]}"):
+            module = f"{module}.{rest[0]}"
+            rest.pop(0)
+
+        symbol = rest[0]
+        if _module_exists_in(REPO_ROOT, f"{module}.{symbol}"):
+            # An intermediate node of a longer chain (`libs.attio.companies` on
+            # the way to `...find_company_by_domain`). The full chain's own node
+            # records the symbol; recording the submodule name here would put a
+            # non-``__all__`` name into the contract.
             continue
 
         found.setdefault(module, set()).add(symbol)

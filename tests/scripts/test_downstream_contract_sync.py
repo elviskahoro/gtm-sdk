@@ -179,6 +179,50 @@ def test_bare_qualified_import_recovers_symbols_from_the_dotted_chain(
     assert sync.scan_consumer(consumer) == {"libs.attio.notes": {"create_note"}}
 
 
+def test_resolves_a_chain_deeper_than_the_bound_prefix(consumer: Path) -> None:
+    """`import libs.attio` + `libs.attio.companies.find_company_by_domain()`.
+
+    Only `libs.attio` is bound, so the intermediate `companies` must be walked
+    as a submodule before the trailing name counts as the symbol. Two bugs live
+    here if it isn't: the symbol is missed entirely, and `companies` gets
+    recorded as a symbol of `libs.attio` — a submodule name, absent from
+    `__all__`, which would fail the contract's own guard.
+    """
+    _write(
+        consumer,
+        "app/entry.py",
+        "import libs.attio\n"
+        "\n"
+        "def run() -> None:\n"
+        '    libs.attio.companies.find_company_by_domain("x")\n'
+        "    libs.attio.get_client()\n",
+    )
+
+    assert sync.scan_consumer(consumer) == {
+        "libs.attio": {"get_client"},
+        "libs.attio.companies": {"find_company_by_domain"},
+    }
+
+
+def test_prefers_the_longest_bound_prefix(consumer: Path) -> None:
+    """A file can bind both a package and one of its submodules."""
+    _write(
+        consumer,
+        "app/entry.py",
+        "import libs.attio\n"
+        "import libs.attio.people as people\n"
+        "\n"
+        "def run() -> None:\n"
+        "    people.upsert_person(None)\n"
+        "    libs.attio.get_client()\n",
+    )
+
+    assert sync.scan_consumer(consumer) == {
+        "libs.attio": {"get_client"},
+        "libs.attio.people": {"upsert_person"},
+    }
+
+
 def test_bare_import_with_no_usage_still_pins_the_module(consumer: Path) -> None:
     _write(consumer, "app/entry.py", "import libs.attio.notes\n")
 
