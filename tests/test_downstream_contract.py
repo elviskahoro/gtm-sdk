@@ -104,6 +104,12 @@ def test_public_symbols_stay_in_package_all() -> None:
     Only applies to package roots (``libs.attio``, not ``libs.attio.companies``)
     and only to public names — consumers reach into a few private helpers, which
     stay out of ``__all__`` on purpose.
+
+    Membership is asserted directly, *not* gated on
+    ``hasattr(package, symbol)``. Gating on the re-export would let a PR delete
+    both the re-export and the ``__all__`` entry while leaving the definition in
+    its submodule: every import still resolves, the guard skips the symbol, and
+    the public-API declaration quietly disappears.
     """
     failures: list[str] = []
     for consumer, module_path, symbols in _iter_entries():
@@ -122,9 +128,7 @@ def test_public_symbols_stay_in_package_all() -> None:
             f"{consumer}: {symbol} (consumed via {module_path}) is missing from "
             f"{package_root}.__all__"
             for symbol in sorted(symbols)
-            if not symbol.startswith("_")
-            and hasattr(package, symbol)
-            and symbol not in declared
+            if not symbol.startswith("_") and symbol not in declared
         )
 
     assert not failures, (
