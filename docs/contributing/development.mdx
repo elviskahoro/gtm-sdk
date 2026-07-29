@@ -42,7 +42,7 @@ trunk fmt                        # format changed files
 ```
 
 <Note>
-`uv run pytest` uses `--import-mode=importlib` and excludes integration tests by default — both are configured in `pyproject.toml` under `[tool.pytest.ini_options]` via `addopts = "--import-mode=importlib -m 'not integration'"`.
+`uv run pytest` uses `--import-mode=importlib` and excludes integration tests by default — both are configured in `pyproject.toml` under `[tool.pytest.ini_options]` via `addopts = "--import-mode=importlib -m 'not integration' -p hypothesispytest"`.
 </Note>
 
 ## Linting
