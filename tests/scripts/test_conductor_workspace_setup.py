@@ -243,3 +243,20 @@ def test_worktree_repairs_stale_beads_symlink(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     workspace_beads = tmp_path / "repo" / ".beads"
     assert workspace_beads.resolve() == (primary / ".beads").resolve()
+
+
+def test_primary_checkout_preserves_its_existing_beads_symlink(tmp_path: Path) -> None:
+    primary = tmp_path / "repo"
+    shared_beads = tmp_path / "shared-beads"
+    shared_beads.mkdir()
+
+    result, _ = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        git_common_dir=primary / ".git",
+        stale_beads_target=shared_beads,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (primary / ".beads").is_symlink()
+    assert (primary / ".beads").resolve() == shared_beads.resolve()
