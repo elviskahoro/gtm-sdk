@@ -1,7 +1,9 @@
+# ruff: noqa: I001, INP001, S101
 from __future__ import annotations
 
-import orjson
 from pathlib import Path
+
+import orjson
 
 from src.octolens.webhook.mention import Webhook
 

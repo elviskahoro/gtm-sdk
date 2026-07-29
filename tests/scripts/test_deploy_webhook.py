@@ -13,6 +13,7 @@ credentials.
 BD: gtm-sdk-43z (epic gtm-sdk-yol). Each test maps to one acceptance criterion.
 """
 # trunk-ignore-all(bandit/B105): test fixtures, not real credentials
+# ruff: noqa: PLR2004, S101
 # trunk-ignore-all(bandit/B607): bash/git invoked by name on purpose so PATH wins
 
 from __future__ import annotations
