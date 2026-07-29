@@ -124,6 +124,29 @@ class Webhook(FathomWebhook):
     def slack_get_messages(self) -> list[Any]:
         return []
 
+    # --- Clay webhook-table export contract (not implemented for this source) ---
+
+    @staticmethod
+    def clay_get_app_name() -> str:
+        return "export-to-clay-from-fathom-recordings"
+
+    @staticmethod
+    def clay_get_webhook_url_secret_name() -> str:
+        return "UNSUPPORTED_CLAY_WEBHOOK_URL"
+
+    @staticmethod
+    def clay_get_webhook_auth_token_secret_name() -> str:
+        return "UNSUPPORTED_CLAY_WEBHOOK_AUTH_TOKEN"
+
+    def clay_is_valid_webhook(self) -> bool:
+        return False
+
+    def clay_get_invalid_webhook_error_msg(self) -> str:
+        return "Clay export is not supported for Fathom recordings"
+
+    def clay_get_row(self) -> dict[str, Any]:
+        return {}
+
     def attio_is_valid_webhook(self) -> bool:
         # Ad-hoc Fathom recordings have no calendar invitees but still carry a
         # recorder we can attribute the meeting to. Only reject payloads we
