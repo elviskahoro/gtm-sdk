@@ -16,7 +16,7 @@ Rules for working in this repo. `CLAUDE.md` and `WARP.md` symlink here. The repo
 
 - **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`. Exceptions: utilities (`libs.telemetry`, `libs.logging`, `libs.filesystem`) are importable from anywhere.
 - **No orchestration in `libs/`.** Adapter modules must be callable in isolation.
-- **Module boundaries are enforced by tach**, run via trunk (like every other linter — see "Linting" below). Reproduce a finding with `trunk check --filter=tach`; it runs in CI as part of the `Trunk Check` gate on every PR. The `dev`-group `tach>=0.35.0` pin in `pyproject.toml` stays (for `tach show`/`tach sync` ergonomics) — bump it in lockstep with the `tach@` version in `.trunk/trunk.yaml`'s `lint.enabled` and the plugin `ref` in `oss-linter-trunk-tach`'s `plugin.yaml` `known_good_version`.
+- **Module boundaries are enforced by tach**, run via trunk (like every other linter — see "Linting" below). Reproduce a finding with `trunk check --filter=tach`; CI runs a full-graph `trunk check --filter=tach --all` step on every push and PR. The `dev`-group `tach>=0.35.0` pin in `pyproject.toml` stays (for `tach show`/`tach sync` ergonomics) — bump it in lockstep with the `tach@` version in `.trunk/trunk.yaml`'s `lint.enabled` and the plugin `ref` in `oss-linter-trunk-tach`'s `plugin.yaml` `known_good_version`.
 - **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `libs*`, `src*`).
 
 ## Modal gotchas
@@ -106,7 +106,7 @@ this review path.
 
 `gh` (GitHub CLI, provisioned via the Flox environment) reads `GH_TOKEN` (or `GITHUB_TOKEN`) straight from the environment — no `gh auth login` needed, and no interactive browser flow works in a headless sandbox anyway. This is a personal PAT (classic PAT with `repo` scope, or a fine-grained PAT scoped to this repo with **Issues: Read and write**), not a shared team secret, so it does not go through Infisical/`secrets_bootstrap.py`:
 
-- **Conductor**: set `GH_TOKEN` under `[environment_variables]` in your own `.conductor/settings.local.toml` (excluded from git via `.git/info/exclude` — never commit it). Conductor injects `[environment_variables]` directly into the agent's shell, so `gh` picks it up on every invocation without a manual `source` step.
+- **Conductor**: set `GH_TOKEN` under `[environment_variables]` in user-level Conductor settings or another ignored local configuration file. The tracked `.conductor/settings.local.toml` is a reviewed repository baseline and must not contain credentials or machine-specific secrets. Conductor injects `[environment_variables]` directly into the agent's shell, so `gh` picks it up on every invocation without a manual `source` step.
 
 ## Script Entrypoints
 
@@ -168,6 +168,31 @@ All linters/formatters run via **trunk**, not as bare binaries. `yamllint`, `ruf
 ## Testing
 
 `uv run pytest`. Importlib mode is already configured. Mirror the source layout when adding tests.
+
+### Adding a pytest plugin
+
+The unit CI container runs with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, so a plugin that is merely installed is **silently inert** — the suite still passes, minus whatever the plugin provided. It has to be named explicitly. Two traps, both learned by burning a CI run:
+
+- **Put the `-p` flag in `addopts` (`pyproject.toml`), not in `PYTEST_CMD`.** On a pull request, `tests-unit.yml` deliberately executes the **base branch's** copy of `.github/workflows/ci/pytest_dagger.py` — PR-authored CI code must never run with trusted Namespace/registry credentials. A flag added there is therefore ignored until it lands on `main`, and the required `pytest (Dagger)` gate blocks that merge. `addopts` is read from the source tree, so it applies to PR, `main` and local runs alike.
+- **Use the plugin's entry-point name, not its module name.** Where autoload is on (local runs, the integration job) the plugin is already registered under its entry-point name; naming the module registers the same module twice and pytest aborts with `ValueError: Plugin already registered under a different name`. For Hypothesis that means `-p hypothesispytest`, not `-p _hypothesis_pytestplugin`.
+
+Back the result with a test rather than a comment — `tests/test_hypothesis_plugin.py` fails loudly if the plugin stops loading, in any environment.
+
+### Property-based tests (Hypothesis)
+
+Files are named `test_<module>_properties.py` and sit beside the example tests they complement — they do not replace them. Profiles live in `tests/conftest.py`, selected with `HYPOTHESIS_PROFILE` (our env var, not a Hypothesis feature — Hypothesis autodetects `CI`, which `dlt`/`modal`/`logfire`/`rich` also read, so setting that would change unrelated behavior):
+
+```shell
+uv run pytest --hypothesis-show-statistics    # dev: 50 examples, 400ms deadline
+HYPOTHESIS_PROFILE=nightly uv run pytest      # 1000 examples, randomized
+```
+
+CI uses the `ci` profile: `derandomize=True` and `database=None`, both inherited from Hypothesis's built-in `ci` profile. Derandomizing is not optional here — CI has no `pytest-timeout`, no `--maxfail` and no job `timeout-minutes`, and Trunk.io reports any intermittent failure as a flake under a stable test ID. Seeding from a hash of the test function means a green run stays green and a failure reproduces exactly.
+
+Reach for a property when the claim is *universal* ("never raises", "idempotent", "round-trips", "output is always lowercase"). Two rules worth knowing before you write one:
+
+- **Finite, enumerable domain → check it exhaustively with a loop, not `st.sampled_from`.** `max_examples` caps the draws below the domain size, and under `derandomize=True` the same subset is drawn forever, leaving the rest permanently untested. Hypothesis earns its place on *unbounded* domains.
+- **Watch for vacuous properties.** If the interesting branch only runs on a successful parse, bare `st.text()` will miss it nearly every time. Generate realistic inputs, and use `hypothesis.event()` so the branch split appears in `--hypothesis-show-statistics` instead of being assumed.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
