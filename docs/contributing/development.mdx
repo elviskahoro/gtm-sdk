@@ -89,6 +89,26 @@ uv run pytest -m integration     # integration tests (require live credentials)
 - Tests that hit live external APIs carry the `integration` marker, defined in `pyproject.toml`. The default `addopts` filter (`-m 'not integration'`) keeps them out of ordinary runs, so `uv run pytest` never needs credentials.
 - Plain `assert` statements are allowed in tests — ruff's `S101` rule is ignored for `tests/**` via a per-file ignore in `pyproject.toml`.
 
+### Property-based tests
+
+Alongside the example-based suite, some modules carry **property tests** written with [Hypothesis](https://hypothesis.readthedocs.io/). These live in `test_<module>_properties.py` next to the example tests they complement, and they do not replace them: an example test pins a specific known input and output, while a property states a rule that must hold for *every* input and lets Hypothesis search for a counterexample.
+
+```bash
+uv run pytest --hypothesis-show-statistics    # dev profile: 50 examples, 400ms deadline
+HYPOTHESIS_PROFILE=nightly uv run pytest      # 1000 examples, randomized search
+```
+
+Profiles are registered in `tests/conftest.py` and chosen with `HYPOTHESIS_PROFILE` (`dev` by default). CI uses the `ci` profile, which seeds generation from a hash of the test function so a failure reproduces exactly rather than looking like a flaky test.
+
+<Note>
+Reach for a property when the claim you want to make is universal — "never raises on any input", "idempotent", "round-trips through serialization", "output is always lowercase". Reach for an example when you want to pin one specific behavior, or to document a bug that must not come back.
+</Note>
+
+Two things to get right when writing one:
+
+- **If the domain is finite and enumerable, check it exhaustively with a loop instead of `st.sampled_from`.** `max_examples` caps how many values Hypothesis draws, and because the CI profile uses a fixed seed, it draws the same subset on every run — leaving the rest permanently untested. Hypothesis is most valuable on unbounded domains such as arbitrary text.
+- **Make sure the property is not vacuous.** If its interesting branch only runs when a parse succeeds, bare `st.text()` will almost never reach it. Generate realistic inputs, and call `hypothesis.event()` so the branch split shows up under `--hypothesis-show-statistics`.
+
 ## Conventions
 
 - **Temporary files go in `tmp/` only.** The directory is gitignored. Never write scratch output to the repo root or next to source code.

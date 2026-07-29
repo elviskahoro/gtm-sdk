@@ -49,6 +49,14 @@ PYTEST_CMD = (
     "/usr/bin/time -v -o /tmp/pytest-time "
     '"/opt/venv/bin/python" -m pytest '
     "-p xdist.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin "
+    # PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 (set below) means every plugin must be
+    # named here. Hypothesis's core `@given` runs fine WITHOUT its pytest plugin,
+    # so dropping this flag would not fail a single property test -- it would
+    # silently remove --hypothesis-seed (leaving no way to replay a CI failure),
+    # --hypothesis-profile, --hypothesis-show-statistics, the
+    # function_scoped_fixture health check, and counterexample reporting into
+    # junit.xml. tests/test_hypothesis_plugin.py fails loudly if it goes missing.
+    "-p _hypothesis_pytestplugin "
     "-n 4 --dist=loadfile "
     "--junit-xml=junit.xml -o junit_family=xunit1; "
     "rc=$?; "
@@ -99,6 +107,12 @@ SOURCE_EXCLUDES = [
     "tmp",
     ".pytest_cache",
     ".ruff_cache",
+    # Hypothesis's example database, written by local runs. Same reasoning as
+    # `junit.xml` below: it would enter the /src snapshot with fresh timestamps
+    # every run and needlessly invalidate the exec cache. It would also be swept
+    # into GIT_INIT_CMD's `git add -A`. CI runs with database=None regardless
+    # (see the `ci` profile in tests/conftest.py), so nothing here needs it.
+    ".hypothesis",
     "gtm.egg-info",
     "out",
     "data",
@@ -219,6 +233,18 @@ def build_containers() -> tuple[
         .with_env_variable("PYTHONDONTWRITEBYTECODE", "1")
         .with_exec(["bash", "-c", GIT_INIT_CMD])
         .with_env_variable("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+        # Selects the `ci` Hypothesis profile registered in tests/conftest.py:
+        # derandomize=True (seeded from a hash of the test function, so a green
+        # run stays green and a failure reproduces exactly -- this CI has no
+        # pytest-timeout, no --maxfail and no job timeout-minutes, and Trunk.io
+        # would report an intermittent property failure as a flake), plus
+        # database=None (the four --dist=loadfile workers would otherwise share
+        # one example DB, and this container is discarded every run anyway).
+        # HYPOTHESIS_PROFILE is our own env var, not a Hypothesis feature:
+        # Hypothesis autodetects `CI`, but that is also read by
+        # dlt/modal/logfire/rich, so setting it here would change unrelated
+        # behavior in the suite.
+        .with_env_variable("HYPOTHESIS_PROFILE", "ci")
     )
     checked = prepared.with_exec(["bash", "-c", dependency_check_cmd(layout)])
     installed = checked.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
