@@ -36,12 +36,12 @@ def execute(
     row: dict[str, Any],
 ) -> ExecuteResult:
     """Deliver a validated source row to Clay and return a small success body."""
+    event_id = row.get("event_id")
+    if not isinstance(event_id, str):
+        raise ClayRowEventIdError
     result = post_row(
         webhook_url=webhook_url,
         auth_token=auth_token,
         row=row,
     )
-    event_id = row["event_id"]
-    if not isinstance(event_id, str):
-        raise ClayRowEventIdError
     return ExecuteResult(event_id=event_id, status_code=result.status_code)
