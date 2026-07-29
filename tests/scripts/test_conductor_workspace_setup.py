@@ -35,6 +35,10 @@ def _write_common_stubs(bin_dir: Path) -> None:
         "git",
         """\
         #!/usr/bin/env bash
+        if [[ "${1:-}" == "rev-parse" && "${2:-}" == "--git-common-dir" ]]; then
+          printf '%s\\n' "${SETUP_TEST_GIT_COMMON_DIR:-${PWD}/.git}"
+          exit 0
+        fi
         case "${1:-}" in
           rev-parse) printf '%s\n' "${PWD}/.git" ;;
           config) printf '%s\n' "$*" >> "${SETUP_TEST_LOG}" ;;
@@ -119,7 +123,11 @@ def _write_curl_installer(bin_dir: Path) -> None:
 
 
 def _run_setup(
-    tmp_path: Path, *, flox_succeeds: bool
+    tmp_path: Path,
+    *,
+    flox_succeeds: bool,
+    git_common_dir: Path | None = None,
+    stale_beads_target: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     repo = tmp_path / "repo"
     scripts_dir = repo / "scripts"
@@ -129,6 +137,8 @@ def _run_setup(
     setup_copy = scripts_dir / SETUP_SCRIPT.name
     setup_copy.write_text(SETUP_SCRIPT.read_text())
     _make_executable(setup_copy)
+    if stale_beads_target is not None:
+        (repo / ".beads").symlink_to(stale_beads_target)
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -144,6 +154,8 @@ def _run_setup(
         "PATH": f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin",
         "SETUP_TEST_LOG": str(log),
     }
+    if git_common_dir is not None:
+        env["SETUP_TEST_GIT_COMMON_DIR"] = str(git_common_dir)
     return (
         subprocess.run(
             ["bash", str(setup_copy)],
@@ -194,3 +206,40 @@ def test_workspace_setup_does_not_initialize_zsh_completion() -> None:
 
     assert "compinit" not in setup_script
     assert "compaudit" not in setup_script
+
+
+def test_worktree_links_beads_to_primary_checkout(tmp_path: Path) -> None:
+    primary = tmp_path / "primary"
+    (primary / ".git").mkdir(parents=True)
+    (primary / ".beads").mkdir()
+
+    result, _ = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        git_common_dir=primary / ".git",
+    )
+
+    assert result.returncode == 0, result.stderr
+    workspace_beads = tmp_path / "repo" / ".beads"
+    assert workspace_beads.is_symlink()
+    assert workspace_beads.resolve() == (primary / ".beads").resolve()
+
+
+def test_worktree_repairs_stale_beads_symlink(tmp_path: Path) -> None:
+    primary = tmp_path / "primary"
+    (primary / ".git").mkdir(parents=True)
+    (primary / ".beads").mkdir()
+    stale = tmp_path / "wrong" / ".beads"
+    stale.parent.mkdir()
+    stale.mkdir()
+
+    result, _ = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        git_common_dir=primary / ".git",
+        stale_beads_target=stale,
+    )
+
+    assert result.returncode == 0, result.stderr
+    workspace_beads = tmp_path / "repo" / ".beads"
+    assert workspace_beads.resolve() == (primary / ".beads").resolve()
