@@ -53,7 +53,10 @@ description = "downstream consumer: crm-uploader"
   "stub_create_person",
   "upsert_person",
 ]
-"libs.attio.sdk_boundary" = ["build_patch_record_request", "describe_attio_error"]
+"libs.attio.sdk_boundary" = [
+  "build_patch_record_request",
+  "describe_attio_error",
+]
 "libs.attio.values" = [
   "format_company_description",
   "format_company_domains",

@@ -49,9 +49,7 @@ def _load_contract() -> dict[str, dict[str, list[str]]]:
             f"empty contract silently disables this guard.",
         )
 
-    return {
-        consumer: entry.get("modules", {}) for consumer, entry in consumers.items()
-    }
+    return {consumer: entry.get("modules", {}) for consumer, entry in consumers.items()}
 
 
 CONTRACT = _load_contract()
@@ -90,7 +88,7 @@ def test_every_declared_symbol_resolves() -> None:
 
     assert not failures, (
         "Downstream consumers import symbols that this repo no longer "
-        f"provides:\n  " + "\n  ".join(failures) + f"\n\n{SYNC_HINT}"
+        "provides:\n  " + "\n  ".join(failures) + f"\n\n{SYNC_HINT}"
     )
 
 
@@ -131,7 +129,7 @@ def test_public_symbols_stay_in_package_all() -> None:
 
     assert not failures, (
         "Consumed public symbols dropped out of their package's public API "
-        f"declaration:\n  " + "\n  ".join(failures) + f"\n\n{SYNC_HINT}"
+        "declaration:\n  " + "\n  ".join(failures) + f"\n\n{SYNC_HINT}"
     )
 
 
