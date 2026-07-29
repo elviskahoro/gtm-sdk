@@ -136,35 +136,60 @@ def _resolves_into_sdk(module: str, consumer_root: Path) -> bool:
     return not _module_exists_in(consumer_root, module)
 
 
-def _collect_symbols_via_alias(
-    tree: ast.AST,
-    alias_to_module: dict[str, str],
-) -> dict[
-    str,
-    set[str],
-]:
-    """Recover symbols used through a module alias.
+def _dotted_name(node: ast.expr) -> str | None:
+    """Flatten an attribute chain into ``"a.b.c"``, or ``None`` if not a chain.
 
-    ``import libs.attio.people as people`` followed by ``people.upsert_person()``
-    consumes ``upsert_person`` just as surely as a ``from``-import does, but the
-    import node names no symbols. Without this pass the contract records the
-    module and silently leaves every symbol reached through it unprotected —
-    which is the exact failure mode the contract exists to prevent.
+    ``libs.attio.people.upsert_person`` parses as nested ``Attribute`` nodes over
+    a ``Name``; recovering the dotted string is what lets a bare qualified import
+    be matched against the modules this repo publishes.
+    """
+    parts: list[str] = []
+    current: ast.expr = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+
+    if not isinstance(current, ast.Name):
+        return None
+
+    parts.append(current.id)
+    return ".".join(reversed(parts))
+
+
+def _collect_symbols_via_attribute_access(
+    tree: ast.AST,
+    bound_modules: dict[str, str],
+) -> dict[str, set[str]]:
+    """Recover symbols reached by attribute access on a bound module.
+
+    Three import styles bind a module rather than a symbol, and none of them
+    names the consumed symbols on the import node itself::
+
+        import libs.attio.people as people   # people.upsert_person()
+        from libs.attio import people        # people.upsert_person()
+        import libs.attio.people             # libs.attio.people.upsert_person()
+
+    Without this pass the contract records the module and leaves every symbol
+    reached through it unprotected — precisely the gap the contract exists to
+    close. ``bound_modules`` maps the local dotted prefix to the SDK module it
+    refers to; the component that follows the longest matching prefix is the
+    consumed symbol.
     """
     found: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.Attribute):
             continue
 
-        base = node.value
-        if not isinstance(base, ast.Name):
+        dotted = _dotted_name(node)
+        if dotted is None:
             continue
 
-        module = alias_to_module.get(base.id)
-        if module is None:
+        prefix, _, symbol = dotted.rpartition(".")
+        module = bound_modules.get(prefix)
+        if module is None or not symbol:
             continue
 
-        found.setdefault(module, set()).add(node.attr)
+        found.setdefault(module, set()).add(symbol)
 
     return found
 
@@ -172,10 +197,16 @@ def _collect_symbols_via_alias(
 def scan_consumer(root: Path) -> dict[str, set[str]]:
     """Map each imported gtm-sdk module to the symbol names taken from it.
 
-    Handles all three import styles a consumer can use: ``from X import a, b``,
-    ``import X.Y`` (module pinned, no symbols), and ``import X.Y as z`` followed
-    by ``z.symbol`` (symbols recovered from attribute access). Relative imports
-    are consumer-local and ignored.
+    Covers every import style that can consume SDK surface: ``from X import a``,
+    ``import X.Y``, ``import X.Y as z``, and ``from X import submodule`` — the
+    last three bind a module, so their symbols are recovered from attribute
+    access (see ``_collect_symbols_via_attribute_access``). Relative imports are
+    consumer-local and ignored.
+
+    A submodule imported via ``from libs.attio import people`` is recorded as its
+    own module entry, *not* as a symbol of ``libs.attio``. Submodules are
+    deliberately absent from a package's ``__all__``, so recording one as a
+    symbol would make the contract fail its own ``__all__`` guard.
     """
     if not root.is_dir():
         msg = f"consumer checkout is not a directory: {root}"
@@ -187,14 +218,14 @@ def scan_consumer(root: Path) -> dict[str, set[str]]:
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except (SyntaxError, UnicodeDecodeError) as error:
-            # A consumer may hold intentionally-broken fixtures; one unparseable
-            # file must not silently truncate the whole contract.
-            print(f"warning: skipping unparseable {path}: {error}", file=sys.stderr)
-            continue
+            # Hard error, not a warning: this scan's output is written over the
+            # committed contract, so tolerating a skipped file means `--write`
+            # can silently drop the protection that file's imports established.
+            msg = f"cannot parse {path}: {error}"
+            raise ConsumerScanError(msg) from error
 
-        # Local name -> SDK module, for the alias pass below. Populated from both
-        # `import X as y` and `from pkg import submodule as y`.
-        alias_to_module: dict[str, str] = {}
+        # Local dotted prefix -> SDK module, for the attribute-access pass below.
+        bound_modules: dict[str, str] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 # `node.level > 0` is a relative import: consumer-local.
@@ -204,15 +235,26 @@ def scan_consumer(root: Path) -> dict[str, set[str]]:
                 if not _resolves_into_sdk(node.module, root):
                     continue
 
-                imports.setdefault(node.module, set()).update(
-                    alias.name for alias in node.names if alias.name != "*"
-                )
-                # `from libs.attio import people` binds a submodule, not a
-                # function, so `people.upsert_person` must be tracked too.
                 for alias in node.names:
+                    if alias.name == "*":
+                        # A star import consumes whatever the module exports, so
+                        # there is no honest symbol list to record. Refuse rather
+                        # than silently pin nothing.
+                        msg = (
+                            f"{path} star-imports {node.module}; the contract "
+                            f"cannot record which symbols that consumes. Replace "
+                            f"it with explicit imports in the consumer."
+                        )
+                        raise ConsumerScanError(msg)
+
                     submodule = f"{node.module}.{alias.name}"
                     if _module_exists_in(REPO_ROOT, submodule):
-                        alias_to_module[alias.asname or alias.name] = submodule
+                        # Binds a module, not a symbol.
+                        imports.setdefault(submodule, set())
+                        bound_modules[alias.asname or alias.name] = submodule
+                        continue
+
+                    imports.setdefault(node.module, set()).add(alias.name)
 
             elif isinstance(node, ast.Import):
                 for alias in node.names:
@@ -220,18 +262,13 @@ def scan_consumer(root: Path) -> dict[str, set[str]]:
                         continue
 
                     imports.setdefault(alias.name, set())
-                    if alias.asname:
-                        alias_to_module[alias.asname] = alias.name
-                    else:
-                        # Bare `import libs.attio.people` binds only the root
-                        # name, so usage reads `libs.attio.people.symbol` — an
-                        # Attribute chain the alias pass does not model. Such
-                        # usage is rare and the module stays pinned regardless.
-                        pass
+                    # `import X.Y as z` binds `z`; bare `import X.Y` binds `X`,
+                    # and usage reads through the full dotted path.
+                    bound_modules[alias.asname or alias.name] = alias.name
 
-        for module, symbols in _collect_symbols_via_alias(
+        for module, symbols in _collect_symbols_via_attribute_access(
             tree,
-            alias_to_module,
+            bound_modules,
         ).items():
             imports.setdefault(module, set()).update(symbols)
 
