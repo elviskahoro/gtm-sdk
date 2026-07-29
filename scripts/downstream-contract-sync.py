@@ -48,8 +48,13 @@ REPO_ROOT = SCRIPT_DIR.parent
 CONTRACT_PATH = REPO_ROOT / "contracts" / "downstream_api.toml"
 
 # Top-level packages this repo publishes (see `[tool.setuptools.packages.find]`
-# in pyproject.toml). An import whose root is one of these resolves into
-# gtm-sdk, so it belongs in the contract.
+# in pyproject.toml).
+#
+# `src` and `cli` are dangerously generic: consumers routinely have their own
+# top-level `src/` and `cli/` (crm-uploader does, and so does dlt-hub/gtm-os),
+# so matching on the root name alone would record a consumer's *own* modules as
+# SDK dependencies and pin surface this repo never had. Every candidate is
+# therefore resolved against both trees — see `_resolves_into_sdk`.
 SDK_ROOTS = ("libs", "src", "cli")
 
 # Column at which trunk's TOML formatter breaks an inline array onto its own
@@ -105,23 +110,78 @@ def _iter_python_files(root: Path) -> list[Path]:
     return found
 
 
-def _sdk_root(module: str) -> str | None:
-    """Return the gtm-sdk top-level package ``module`` resolves into, if any."""
+def _module_exists_in(tree_root: Path, module: str) -> bool:
+    """Does ``module`` correspond to a file or package under ``tree_root``?"""
+    relative = Path(*module.split("."))
+    return (tree_root / relative).is_dir() or (
+        tree_root / relative.with_suffix(".py")
+    ).is_file()
+
+
+def _resolves_into_sdk(module: str, consumer_root: Path) -> bool:
+    """Decide whether ``module`` names a gtm-sdk module rather than a local one.
+
+    Root-name matching alone is not enough: ``src`` and ``cli`` exist in both
+    trees. A module counts as SDK surface only if it exists here *and* not in
+    the consumer, so an ambiguous name resolves the way Python would at runtime
+    with the consumer's own package on the path first.
+    """
     root, _, _ = module.partition(".")
-    return root if root in SDK_ROOTS else None
+    if root not in SDK_ROOTS:
+        return False
+
+    if not _module_exists_in(REPO_ROOT, module):
+        return False
+
+    return not _module_exists_in(consumer_root, module)
+
+
+def _collect_symbols_via_alias(
+    tree: ast.AST,
+    alias_to_module: dict[str, str],
+) -> dict[
+    str,
+    set[str],
+]:
+    """Recover symbols used through a module alias.
+
+    ``import libs.attio.people as people`` followed by ``people.upsert_person()``
+    consumes ``upsert_person`` just as surely as a ``from``-import does, but the
+    import node names no symbols. Without this pass the contract records the
+    module and silently leaves every symbol reached through it unprotected —
+    which is the exact failure mode the contract exists to prevent.
+    """
+    found: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+
+        base = node.value
+        if not isinstance(base, ast.Name):
+            continue
+
+        module = alias_to_module.get(base.id)
+        if module is None:
+            continue
+
+        found.setdefault(module, set()).add(node.attr)
+
+    return found
 
 
 def scan_consumer(root: Path) -> dict[str, set[str]]:
     """Map each imported gtm-sdk module to the symbol names taken from it.
 
-    A bare ``import libs.attio.people`` contributes the module with no symbols,
-    which still pins the module's importability. ``from libs.attio import x``
-    contributes ``x``. Relative imports are the consumer's own and ignored.
+    Handles all three import styles a consumer can use: ``from X import a, b``,
+    ``import X.Y`` (module pinned, no symbols), and ``import X.Y as z`` followed
+    by ``z.symbol`` (symbols recovered from attribute access). Relative imports
+    are consumer-local and ignored.
     """
     if not root.is_dir():
         msg = f"consumer checkout is not a directory: {root}"
         raise ConsumerScanError(msg)
 
+    root = root.resolve()
     imports: dict[str, set[str]] = {}
     for path in _iter_python_files(root):
         try:
@@ -132,23 +192,48 @@ def scan_consumer(root: Path) -> dict[str, set[str]]:
             print(f"warning: skipping unparseable {path}: {error}", file=sys.stderr)
             continue
 
+        # Local name -> SDK module, for the alias pass below. Populated from both
+        # `import X as y` and `from pkg import submodule as y`.
+        alias_to_module: dict[str, str] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 # `node.level > 0` is a relative import: consumer-local.
                 if node.level or node.module is None:
                     continue
 
-                if _sdk_root(node.module) is None:
+                if not _resolves_into_sdk(node.module, root):
                     continue
 
                 imports.setdefault(node.module, set()).update(
                     alias.name for alias in node.names if alias.name != "*"
                 )
+                # `from libs.attio import people` binds a submodule, not a
+                # function, so `people.upsert_person` must be tracked too.
+                for alias in node.names:
+                    submodule = f"{node.module}.{alias.name}"
+                    if _module_exists_in(REPO_ROOT, submodule):
+                        alias_to_module[alias.asname or alias.name] = submodule
 
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if _sdk_root(alias.name) is not None:
-                        imports.setdefault(alias.name, set())
+                    if not _resolves_into_sdk(alias.name, root):
+                        continue
+
+                    imports.setdefault(alias.name, set())
+                    if alias.asname:
+                        alias_to_module[alias.asname] = alias.name
+                    else:
+                        # Bare `import libs.attio.people` binds only the root
+                        # name, so usage reads `libs.attio.people.symbol` — an
+                        # Attribute chain the alias pass does not model. Such
+                        # usage is rare and the module stays pinned regardless.
+                        pass
+
+        for module, symbols in _collect_symbols_via_alias(
+            tree,
+            alias_to_module,
+        ).items():
+            imports.setdefault(module, set()).update(symbols)
 
     if not imports:
         msg = (
