@@ -27,13 +27,13 @@ Snippets are curated by hand; the generator only wires them in.
 
 from __future__ import annotations
 
-import argparse
 import difflib
 import json
 import sys
 from pathlib import Path
 
 import click
+import typer
 import typer.main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -319,17 +319,9 @@ def _check(generated: dict[str, str]) -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="verify committed pages match a fresh generation (CI drift gate)",
-    )
-    args = parser.parse_args()
-
+def main(*, check: bool = False) -> int:
     generated = _generate()
-    if args.check:
+    if check:
         return _check(generated)
 
     DOCS_CLI_DIR.mkdir(parents=True, exist_ok=True)
@@ -340,5 +332,13 @@ def main() -> int:
     return 0
 
 
+def _cli(
+    check: bool = typer.Option(
+        False, "--check", help="Verify committed pages match a fresh generation."
+    ),
+) -> None:
+    raise typer.Exit(main(check=check))
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)

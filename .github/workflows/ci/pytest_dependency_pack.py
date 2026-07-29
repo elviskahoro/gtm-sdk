@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import argparse
 import csv
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path
+import typer
 
 
 ARCHIVE_NAME = "pytest-deps.zip"
@@ -118,15 +118,8 @@ def _site_packages(venv: Path) -> Path:
     return candidates[0]
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("venv", type=Path)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    site_packages = _site_packages(args.venv)
+def main(venv: Path) -> None:
+    site_packages = _site_packages(venv)
     stats = pack_site_packages(site_packages)
     archive = site_packages / ARCHIVE_NAME
     print(
@@ -136,5 +129,9 @@ def main() -> None:
     )
 
 
+def _cli(venv: Path = typer.Argument(...)) -> None:
+    main(venv)
+
+
 if __name__ == "__main__":
-    main()
+    typer.run(_cli)

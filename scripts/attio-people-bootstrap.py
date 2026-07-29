@@ -28,11 +28,11 @@ in system-attribute noise) and only ever acts on ``github_handle`` /
 
 from __future__ import annotations
 
-import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+import typer
 
 # Anchor on the script's own directory so the script runs correctly regardless
 # of CWD (per repo CLAUDE.md path-anchoring rule). `uv run path/to/script.py`
@@ -197,28 +197,13 @@ def run_diff() -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "--preview",
-        action="store_true",
-        help="Print what would happen; no writes.",
-    )
-    mode.add_argument(
-        "--apply",
-        action="store_true",
-        help="Create missing attributes on the people object.",
-    )
-    mode.add_argument(
-        "--diff",
-        action="store_true",
-        help="Read-only: compare the live people schema against ATTRIBUTES.",
-    )
-    args = parser.parse_args()
-    if args.diff:
+def main(*, preview: bool = False, apply: bool = False, diff: bool = False) -> int:
+    if sum((preview, apply, diff)) != 1:
+        raise typer.BadParameter(
+            "exactly one of --preview, --apply, or --diff is required"
+        )
+    if diff:
         return run_diff()
-    apply = bool(args.apply)
 
     print(f"[object]      {OBJECT_API_SLUG} (system object — attributes only)")
 
@@ -274,5 +259,17 @@ def main() -> int:
     return 0
 
 
+def _cli(
+    preview: bool = typer.Option(
+        False, "--preview", help="Print what would happen; no writes."
+    ),
+    apply: bool = typer.Option(False, "--apply", help="Create missing attributes."),
+    diff: bool = typer.Option(
+        False, "--diff", help="Compare live schema against ATTRIBUTES."
+    ),
+) -> None:
+    raise typer.Exit(main(preview=preview, apply=apply, diff=diff))
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)

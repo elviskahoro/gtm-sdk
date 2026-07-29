@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import tomllib
 from pathlib import Path
+import typer
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -70,40 +70,56 @@ def dependency_image_key(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--architecture", required=True)
-    parser.add_argument("--python-version", default="3.13")
-    parser.add_argument("--pyproject", type=Path, default=DEFAULT_PYPROJECT)
-    parser.add_argument("--uv-lock", type=Path, default=DEFAULT_UV_LOCK)
-    parser.add_argument("--dockerfile", type=Path, default=DEFAULT_DOCKERFILE)
-    parser.add_argument("--packer", type=Path, default=DEFAULT_PACKER)
-    parser.add_argument("--layout", default="minimal-compiled")
-    parser.add_argument("--compression", default="zstd:3")
-    parser.add_argument(
-        "--dockerignore",
-        type=Path,
-        default=DEFAULT_DOCKERIGNORE,
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
+def main(
+    *,
+    architecture: str,
+    python_version: str = "3.13",
+    pyproject: Path = DEFAULT_PYPROJECT,
+    uv_lock: Path = DEFAULT_UV_LOCK,
+    dockerfile: Path = DEFAULT_DOCKERFILE,
+    packer: Path = DEFAULT_PACKER,
+    layout: str = "minimal-compiled",
+    compression: str = "zstd:3",
+    dockerignore: Path = DEFAULT_DOCKERIGNORE,
+) -> None:
     print(
         dependency_image_key(
-            pyproject=args.pyproject,
-            uv_lock=args.uv_lock,
-            dockerfile=args.dockerfile,
-            dockerignore=args.dockerignore,
-            packer=args.packer,
-            layout=args.layout,
-            compression=args.compression,
-            python_version=args.python_version,
-            architecture=args.architecture,
+            pyproject=pyproject,
+            uv_lock=uv_lock,
+            dockerfile=dockerfile,
+            dockerignore=dockerignore,
+            packer=packer,
+            layout=layout,
+            compression=compression,
+            python_version=python_version,
+            architecture=architecture,
         ),
     )
 
 
+def _cli(
+    architecture: str = typer.Option(..., "--architecture"),
+    python_version: str = typer.Option("3.13", "--python-version"),
+    pyproject: Path = typer.Option(DEFAULT_PYPROJECT, "--pyproject"),
+    uv_lock: Path = typer.Option(DEFAULT_UV_LOCK, "--uv-lock"),
+    dockerfile: Path = typer.Option(DEFAULT_DOCKERFILE, "--dockerfile"),
+    packer: Path = typer.Option(DEFAULT_PACKER, "--packer"),
+    layout: str = typer.Option("minimal-compiled", "--layout"),
+    compression: str = typer.Option("zstd:3", "--compression"),
+    dockerignore: Path = typer.Option(DEFAULT_DOCKERIGNORE, "--dockerignore"),
+) -> None:
+    main(
+        architecture=architecture,
+        python_version=python_version,
+        pyproject=pyproject,
+        uv_lock=uv_lock,
+        dockerfile=dockerfile,
+        packer=packer,
+        layout=layout,
+        compression=compression,
+        dockerignore=dockerignore,
+    )
+
+
 if __name__ == "__main__":
-    main()
+    typer.run(_cli)

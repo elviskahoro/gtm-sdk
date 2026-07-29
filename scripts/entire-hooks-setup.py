@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["typer>=0.15"]
 # ///
 """One-shot git-hook wiring for a fresh clone / new device.
 
@@ -30,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import typer
 from pathlib import Path
 
 # Anchor on the script's location, never the CWD (see AGENTS.md path anchoring).
@@ -77,8 +78,7 @@ def git(*args: str) -> str:
     return run("git", "-C", str(REPO_ROOT), *args).stdout.strip()
 
 
-def main() -> None:
-    force = "--force" in sys.argv[1:]
+def main(*, force: bool = False) -> None:
 
     # 1. Entire CLI present and authenticated.
     if shutil.which("entire") is None:
@@ -238,5 +238,13 @@ def main() -> None:
     info("Your next commit + push will publish a checkpoint to the Entire console.")
 
 
+def _cli(
+    force: bool = typer.Option(
+        False, "--force", help="Replace pre-existing custom hooks."
+    ),
+) -> None:
+    main(force=force)
+
+
 if __name__ == "__main__":
-    main()
+    typer.run(_cli)

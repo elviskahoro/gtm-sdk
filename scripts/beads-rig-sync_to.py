@@ -39,10 +39,10 @@ The rig location defaults to ``$GT_TOWN_ROOT/gtm_sdk/.beads`` when
 
 from __future__ import annotations
 
-import argparse
 import os
 import subprocess
 import sys
+import typer
 from pathlib import Path
 
 # This script lives in <repo>/scripts/, so the repo root is its parent's
@@ -114,19 +114,7 @@ def ensure_rig_export_git_add_disabled(rig_repo: Path) -> None:
     run_bd(["config", "set", "export.git-add", "false"], cwd=rig_repo)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--rig-beads",
-        help="Path to the rig's .beads directory (overrides $GT_TOWN_ROOT / default).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Refresh the export and report what would import, but change nothing.",
-    )
-    opts = parser.parse_args()
-
+def main(*, rig_beads: str | None = None, dry_run: bool = False) -> int:
     source_beads = resolve_source_beads()
     if source_beads is None:
         print(
@@ -135,7 +123,7 @@ def main() -> int:
         )
         return 1
     source_export = source_beads / "issues.jsonl"
-    rig_beads = resolve_rig_beads(opts.rig_beads)
+    rig_beads = resolve_rig_beads(rig_beads)
 
     if not rig_beads.is_dir():
         print(
@@ -158,24 +146,35 @@ def main() -> int:
     # A real import writes, which triggers the rig's auto-export git-add warning;
     # disable it first. --dry-run writes nothing, so it never warns — skip the
     # config write there to keep the dry run truly read-only.
-    if not opts.dry_run:
+    if not dry_run:
         ensure_rig_export_git_add_disabled(rig_repo)
     import_args = ["import", str(source_export)]
-    if opts.dry_run:
+    if dry_run:
         import_args.append("--dry-run")
-    print(f"→ {'dry-run import into' if opts.dry_run else 'importing into'} {rig_repo}")
+    print(f"→ {'dry-run import into' if dry_run else 'importing into'} {rig_repo}")
     result = run_bd(import_args, cwd=rig_repo)
     # bd routes the import summary ("Would import N issues") to stderr.
     summary = (result.stdout + result.stderr).strip()
     if summary:
         print(summary)
 
-    if opts.dry_run:
+    if dry_run:
         print("✓ dry run complete — no changes written")
     else:
         print("✓ sync complete")
     return 0
 
 
+def _cli(
+    rig_beads: str | None = typer.Option(
+        None, "--rig-beads", help="Path to the rig's .beads directory."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Report what would import, but change nothing."
+    ),
+) -> None:
+    raise typer.Exit(main(rig_beads=rig_beads, dry_run=dry_run))
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    typer.run(_cli)

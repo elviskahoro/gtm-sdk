@@ -73,8 +73,8 @@ Run against dev first, verify the new slugs are visible in Attio, then run again
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
+import typer
 
 from libs.attio.attributes import create_attribute, ensure_select_options
 from libs.attio.preflight import assert_attio_token_scopes
@@ -198,10 +198,14 @@ def main(apply: bool) -> int:
     return 0
 
 
+def _cli(
+    preview: bool = typer.Option(False, "--preview"),
+    apply: bool = typer.Option(False, "--apply"),
+) -> None:
+    if preview == apply:
+        raise typer.BadParameter("exactly one of --preview or --apply is required")
+    raise typer.Exit(main(apply=apply))
+
+
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--preview", action="store_true")
-    g.add_argument("--apply", action="store_true")
-    args = ap.parse_args()
-    raise SystemExit(main(apply=args.apply))
+    typer.run(_cli)

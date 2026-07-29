@@ -27,7 +27,6 @@ non-zero if any job fails.
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import os
 import sys
@@ -35,7 +34,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import anyio
+import click
 import dagger
+import typer
 from dagger import dag
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -261,26 +262,12 @@ async def run_trunk(
         results.append(JobResult("trunk", ok=False, detail=str(exc)))
 
 
-async def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--only",
-        choices=["unit", "integration", "trunk"],
-        help="Run only one job.",
-    )
-    parser.add_argument(
-        "--skip",
-        action="append",
-        choices=["unit", "integration", "trunk"],
-        default=[],
-        help="Skip a job (repeatable).",
-    )
-    args = parser.parse_args()
-
+async def main(*, only: str | None = None, skip: list[str] | None = None) -> None:
+    skip = skip or []
     jobs = {"unit", "integration", "trunk"}
-    if args.only:
-        jobs = {args.only}
-    jobs -= set(args.skip)
+    if only:
+        jobs = {only}
+    jobs -= set(skip)
 
     results: list[JobResult] = []
 
@@ -315,5 +302,19 @@ async def main() -> None:
         sys.exit(1)
 
 
+def _cli(
+    only: str | None = typer.Option(
+        None, "--only", click_type=click.Choice(["unit", "integration", "trunk"])
+    ),
+    skip: list[str] | None = typer.Option(
+        None, "--skip", click_type=click.Choice(["unit", "integration", "trunk"])
+    ),
+) -> None:
+    async def run_selected_jobs() -> None:
+        await main(only=only, skip=skip)
+
+    anyio.run(run_selected_jobs)
+
+
 if __name__ == "__main__":
-    anyio.run(main)
+    typer.run(_cli)

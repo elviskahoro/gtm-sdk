@@ -27,7 +27,6 @@ You can still pre-inject the key yourself if you don't want the self-bootstrap:
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import hashlib
 import json
@@ -36,6 +35,8 @@ import sys
 from pathlib import Path
 
 import dagger
+import click
+import typer
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
@@ -274,35 +275,14 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
     os.execvp(argv[0], argv)  # noqa: S606
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--env",
-        choices=["dev", "prod"],
-        default=None,
-        help=(
-            "Infisical environment to read ATTIO_API_KEY from. "
-            "Required unless INFISICAL_ENV is set. There is no silent default — "
-            "a wrong env returns a different workspace slug with no warning."
-        ),
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Print the full /v2/self JSON payload instead of just the slug.",
-    )
-    args = parser.parse_args()
-
+def main(*, env: str | None = None, json_output: bool = False) -> int:
     api_key = _clean_env(os.environ.get("ATTIO_API_KEY"))
     if not api_key:
         # The Infisical env is only needed when we're going to bootstrap; if
         # the operator pre-injected ATTIO_API_KEY (e.g. via another secret
         # manager or a direct shell export), we should run with that key as
         # documented.
-        env = args.env or _clean_env(os.environ.get("INFISICAL_ENV"))
+        env = env or _clean_env(os.environ.get("INFISICAL_ENV"))
         if env not in {"dev", "prod"}:
             print(
                 "Infisical environment is required to bootstrap ATTIO_API_KEY. "
@@ -313,12 +293,12 @@ def main() -> int:
             )
             return 2
         forward = [f"--env={env}"]
-        if args.json:
+        if json_output:
             forward.append("--json")
         return _bootstrap_via_infisical(env, forward)
 
     try:
-        output = asyncio.run(probe(api_key=api_key, json_output=args.json))
+        output = asyncio.run(probe(api_key=api_key, json_output=json_output))
     except (AttioProbeError, ValueError) as exc:
         # ValueError covers extract_workspace_slug raising on inactive tokens
         # where Attio omits workspace_slug entirely.
@@ -331,5 +311,16 @@ def main() -> int:
     return 0
 
 
+def _cli(
+    env: str | None = typer.Option(
+        None, "--env", click_type=click.Choice(["dev", "prod"])
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Print the full /v2/self JSON payload."
+    ),
+) -> None:
+    raise typer.Exit(main(env=env, json_output=json_output))
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)

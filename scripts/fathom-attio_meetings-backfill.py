@@ -48,52 +48,16 @@ environment — inject via Infisical.
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 from pathlib import Path
 from typing import Any
+import typer
 
 from libs.fathom import iter_meetings, webhook_from_sdk_meeting
-from scripts.lib.env import infisical_run_example
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 TMP_DIR = REPO_ROOT / "tmp"
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Backfill Attio Meeting records from the Fathom API.",
-        epilog="Example:\n  "
-        + infisical_run_example("scripts/fathom-attio_meetings-backfill.py"),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("--created-after", default=None, help="ISO 8601 lower bound")
-    parser.add_argument("--created-before", default=None, help="ISO 8601 upper bound")
-    parser.add_argument(
-        "--recorded-by",
-        action="append",
-        default=None,
-        help="Filter by recorder email (repeatable)",
-    )
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Write to Attio. Default is a dry run that only prints the planned ops.",
-    )
-    parser.add_argument(
-        "--no-notes",
-        action="store_true",
-        help="Upsert Meetings only; skip summary / action-item notes.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Stop after this many recordings (client-side cap; the API has no "
-        "limit param). Useful for a small test run.",
-    )
-    return parser
 
 
 def _ops_for_meeting(meeting: Any, *, include_notes: bool) -> list[Any]:
@@ -125,8 +89,15 @@ def _describe_op(op: Any) -> str:
     return f"{op.op_type} {op.model_dump()}"
 
 
-def main() -> int:
-    args = _build_parser().parse_args()
+def main(
+    *,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    recorded_by: list[str] | None = None,
+    execute: bool = False,
+    no_notes: bool = False,
+    limit: int | None = None,
+) -> int:
 
     lines: list[str] = []
 
@@ -134,12 +105,12 @@ def main() -> int:
         print(msg)
         lines.append(msg)
 
-    mode = "EXECUTE" if args.execute else "DRY RUN"
+    mode = "EXECUTE" if execute else "DRY RUN"
     emit(f"# Fathom → Attio meeting backfill ({mode})")
 
-    from src.attio.export import execute
+    from src.attio.export import execute as execute_operations
 
-    if args.execute:
+    if execute:
         # Validate the Attio token's scopes once up front so a misconfigured key
         # fails the whole run immediately with an actionable message, rather than
         # failing every row deep inside a write (ai-ica).
@@ -151,20 +122,20 @@ def main() -> int:
     fail_details: list[str] = []
 
     for meeting in iter_meetings(
-        created_after=args.created_after,
-        created_before=args.created_before,
-        recorded_by=args.recorded_by,
+        created_after=created_after,
+        created_before=created_before,
+        recorded_by=recorded_by,
         # Always fetch the summary: it populates the meeting description, not
         # just the separate summary note. --no-notes only drops the UpsertNote
         # ops (filtered in _ops_for_meeting), not the description body.
         include_summary=True,
-        include_action_items=not args.no_notes,
+        include_action_items=not no_notes,
     ):
-        if args.limit is not None and processed >= args.limit:
+        if limit is not None and processed >= limit:
             break
         processed += 1
         try:
-            ops = _ops_for_meeting(meeting, include_notes=not args.no_notes)
+            ops = _ops_for_meeting(meeting, include_notes=not no_notes)
         except Exception as exc:  # noqa: BLE001 — one bad recording must not abort the run
             failed += 1
             detail = (
@@ -178,10 +149,10 @@ def main() -> int:
         for op in ops:
             emit(f"    - {_describe_op(op)}")
 
-        if not args.execute:
+        if not execute:
             continue
 
-        result = execute(ops)
+        result = execute_operations(ops)
         if result.success:
             written += 1
         else:
@@ -194,12 +165,12 @@ def main() -> int:
     emit("")
     emit(
         f"## Summary: processed={processed} "
-        + (f"written={written} " if args.execute else "")
+        + (f"written={written} " if execute else "")
         + f"failed={failed}",
     )
     for detail in fail_details:
         emit(f"- FAIL {detail}")
-    if not args.execute:
+    if not execute:
         emit("\n(dry run — pass --execute to write to Attio)")
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -211,5 +182,25 @@ def main() -> int:
     return 1 if failed else 0
 
 
+def _cli(
+    created_after: str | None = typer.Option(None, "--created-after"),
+    created_before: str | None = typer.Option(None, "--created-before"),
+    recorded_by: list[str] | None = typer.Option(None, "--recorded-by"),
+    execute: bool = typer.Option(False, "--execute"),
+    no_notes: bool = typer.Option(False, "--no-notes"),
+    limit: int | None = typer.Option(None, "--limit"),
+) -> None:
+    raise typer.Exit(
+        main(
+            created_after=created_after,
+            created_before=created_before,
+            recorded_by=recorded_by,
+            execute=execute,
+            no_notes=no_notes,
+            limit=limit,
+        )
+    )
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)

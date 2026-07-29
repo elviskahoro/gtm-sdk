@@ -34,9 +34,9 @@ Requires ATTIO_API_KEY in the environment — inject via Infisical.
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import sys
+import typer
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -53,7 +53,6 @@ from src.attio.orphan_meetings import (  # noqa: E402
     detect_orphans,
     write_orphan_csvs,
 )
-from scripts.lib.env import infisical_run_example  # noqa: E402
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "out" / "orphan-cleanup"
 
@@ -66,7 +65,7 @@ DEFAULT_END = "2026-09-01"
 def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
-        raise argparse.ArgumentTypeError("must be a positive integer")
+        raise ValueError("must be a positive integer")
     return parsed
 
 
@@ -87,54 +86,16 @@ def _parse_date(value: str, *, end_of_day: bool = False) -> dt.datetime:
     return parsed
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Find synthetic duplicate Attio meetings (read-only scan).",
-        epilog="Example:\n  "
-        + infisical_run_example(
-            "scripts/attio-find-orphan-meetings.py",
-            env_placeholder="prod",
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--start",
-        default=DEFAULT_START,
-        help=f"ISO 8601 lower bound on meeting start (default {DEFAULT_START}).",
-    )
-    parser.add_argument(
-        "--end",
-        default=DEFAULT_END,
-        help=f"ISO 8601 upper bound on meeting start (default {DEFAULT_END}).",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help=f"Directory for the orphan CSVs (default {DEFAULT_OUTPUT_DIR}).",
-    )
-    parser.add_argument(
-        "--limit",
-        type=_positive_int,
-        default=None,
-        help="Stop after scanning this many meetings (positive client-side cap "
-        "for a small test run).",
-    )
-    parser.add_argument(
-        "--allow-non-prod",
-        action="store_true",
-        help="Permit running against a non-prod Attio workspace. Meetings are "
-        "only provisioned in prod (dlthub), so without this a non-prod token "
-        "would yield an empty scan that reads as 'no orphans' — the script "
-        "hard-fails instead unless this flag is set.",
-    )
-    return parser
-
-
-def main() -> int:
-    args = _build_parser().parse_args()
-    start = _parse_date(args.start)
-    end = _parse_date(args.end, end_of_day=True)
+def main(
+    *,
+    start: str = DEFAULT_START,
+    end: str = DEFAULT_END,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    limit: int | None = None,
+    allow_non_prod: bool = False,
+) -> int:
+    start = _parse_date(start)
+    end = _parse_date(end, end_of_day=True)
 
     print("# Attio orphan-meeting scan (READ-ONLY)")
     print(f"# range {start.date()} .. {end.date()}")
@@ -168,7 +129,7 @@ def main() -> int:
         return 1
     print(f"# workspace={workspace!r}")
     if "dlthub" not in workspace.lower():
-        if not args.allow_non_prod:
+        if not allow_non_prod:
             print(
                 f"ERROR: workspace {workspace!r} is not the prod workspace "
                 "(dlthub). Meetings are only provisioned in prod, so this scan "
@@ -187,7 +148,7 @@ def main() -> int:
     system_count = api_token_count = other_count = 0
     for candidate in iter_meetings_in_range(start=start, end=end):
         # Check the cap BEFORE consuming so --limit N scans exactly N meetings.
-        if args.limit is not None and len(meetings) >= args.limit:
+        if limit is not None and len(meetings) >= limit:
             break
         meetings.append(candidate)
         if candidate.created_by_type == "system":
@@ -199,7 +160,7 @@ def main() -> int:
 
     rows = detect_orphans(meetings)
     confident, review = classify(rows)
-    paths = write_orphan_csvs(rows, args.output_dir)
+    paths = write_orphan_csvs(rows, output_dir)
 
     print(
         f"# scanned={len(meetings)} system={system_count} "
@@ -216,5 +177,23 @@ def main() -> int:
     return 0
 
 
+def _cli(
+    start: str = typer.Option(DEFAULT_START, "--start"),
+    end: str = typer.Option(DEFAULT_END, "--end"),
+    output_dir: Path = typer.Option(DEFAULT_OUTPUT_DIR, "--output-dir"),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    allow_non_prod: bool = typer.Option(False, "--allow-non-prod"),
+) -> None:
+    raise typer.Exit(
+        main(
+            start=start,
+            end=end,
+            output_dir=output_dir,
+            limit=limit,
+            allow_non_prod=allow_non_prod,
+        )
+    )
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)

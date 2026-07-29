@@ -37,14 +37,14 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+import typer
 
 from libs.fireflies import from_motherduck_row
-from scripts.lib.env import clean_env, infisical_run_example, parse_dotenv
+from scripts.lib.env import clean_env, parse_dotenv
 from src.fireflies import DATABASE, iter_assembled_rows, to_attio_operations
 
 if TYPE_CHECKING:
@@ -72,33 +72,6 @@ def _ensure_motherduck_token() -> None:
         os.environ[_TOKEN_ENV] = value
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Backfill Attio Meeting records from the MotherDuck "
-        "fireflies-backfill database.",
-        epilog="Example:\n  "
-        + infisical_run_example("scripts/fireflies-attio_meetings-backfill.py"),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Write to Attio. Default is a dry run that only prints the planned ops.",
-    )
-    parser.add_argument(
-        "--no-notes",
-        action="store_true",
-        help="Upsert Meetings only; skip the Fireflies summary note.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Stop after this many transcripts. Useful for a small test run.",
-    )
-    return parser
-
-
 def _describe_op(op: Any) -> str:
     from src.attio.ops import UpsertMeeting, UpsertNote
 
@@ -117,8 +90,9 @@ def _describe_op(op: Any) -> str:
     return f"{op.op_type} {op.model_dump()}"
 
 
-def main() -> int:
-    args = _build_parser().parse_args()
+def main(
+    *, execute: bool = False, no_notes: bool = False, limit: int | None = None
+) -> int:
     _ensure_motherduck_token()
 
     lines: list[str] = []
@@ -127,13 +101,13 @@ def main() -> int:
         print(msg)
         lines.append(msg)
 
-    mode = "EXECUTE" if args.execute else "DRY RUN"
+    mode = "EXECUTE" if execute else "DRY RUN"
     emit(f"# Fireflies → Attio meeting backfill ({mode})")
 
     from libs.motherduck import connect
-    from src.attio.export import execute
+    from src.attio.export import execute as execute_operations
 
-    if args.execute:
+    if execute:
         # Fail fast on a misconfigured Attio token instead of failing every row
         # deep inside a write (ai-ica).
         from libs.attio.preflight import assert_attio_token_scopes
@@ -158,7 +132,7 @@ def main() -> int:
     meetings_matched = meetings_via_find_or_create = 0
 
     for raw in iter_assembled_rows(con):
-        if args.limit is not None and processed >= args.limit:
+        if limit is not None and processed >= limit:
             break
         processed += 1
         rec_id = raw.get("id", "?")
@@ -166,7 +140,7 @@ def main() -> int:
             recording = from_motherduck_row(raw)
             ops: list[AttioOp] = to_attio_operations(
                 recording,
-                include_notes=not args.no_notes,
+                include_notes=not no_notes,
             )
         except Exception as exc:  # noqa: BLE001 — one bad row must not abort the run
             failed += 1
@@ -179,10 +153,10 @@ def main() -> int:
         for op in ops:
             emit(f"    - {_describe_op(op)}")
 
-        if not args.execute:
+        if not execute:
             continue
 
-        result = execute(ops)
+        result = execute_operations(ops)
         # Surface what each op actually did — record_id, action, and the
         # matched_existing flag — instead of discarding execute()'s outcomes.
         # This is the empirical dedup proof for the smoke test (ai-av8): a
@@ -226,10 +200,10 @@ def main() -> int:
     emit("")
     emit(
         f"## Summary: processed={processed} "
-        + (f"written={written} " if args.execute else "")
+        + (f"written={written} " if execute else "")
         + f"failed={failed}",
     )
-    if args.execute:
+    if execute:
         # The dedup payoff: matched_existing meetings collapsed onto a
         # pre-existing row (no duplicate); via_find_or_create went through the
         # synthetic-ical_uid path (no participant match found).
@@ -239,7 +213,7 @@ def main() -> int:
         )
     for detail in fail_details:
         emit(f"- FAIL {detail}")
-    if not args.execute:
+    if not execute:
         emit("\n(dry run — pass --execute to write to Attio)")
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,5 +225,13 @@ def main() -> int:
     return 1 if failed else 0
 
 
+def _cli(
+    execute: bool = typer.Option(False, "--execute"),
+    no_notes: bool = typer.Option(False, "--no-notes"),
+    limit: int | None = typer.Option(None, "--limit"),
+) -> None:
+    raise typer.Exit(main(execute=execute, no_notes=no_notes, limit=limit))
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)

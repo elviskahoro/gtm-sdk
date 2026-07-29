@@ -35,10 +35,10 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
+import typer
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -154,35 +154,13 @@ def _render(
     return "\n".join(lines)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--object",
-        dest="object_slug",
-        default=None,
-        help=(
-            "Emit a single object's list-view URL. Pass the PLURAL list slug "
-            "(e.g. companies, people). With --record-id, emits that record's "
-            "URL instead (plural is mapped to singular for standard objects)."
-        ),
-    )
-    parser.add_argument(
-        "--record-id",
-        dest="record_id",
-        default=None,
-        help="Record UUID for a single-record URL. Requires --object.",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit structured JSON instead of human-readable text.",
-    )
-    args = parser.parse_args()
-
-    if args.record_id is not None and args.object_slug is None:
+def main(
+    *,
+    object_slug: str | None = None,
+    record_id: str | None = None,
+    json_output: bool = False,
+) -> int:
+    if record_id is not None and object_slug is None:
         print("--record-id requires --object.", file=sys.stderr)
         return 2
 
@@ -203,9 +181,9 @@ def main() -> int:
 
     output = _render(
         slug,
-        object_slug=args.object_slug,
-        record_id=args.record_id,
-        json_output=args.json,
+        object_slug=object_slug,
+        record_id=record_id,
+        json_output=json_output,
     )
     sys.stdout.write(output)
     if not output.endswith("\n"):
@@ -213,5 +191,15 @@ def main() -> int:
     return 0
 
 
+def _cli(
+    object_slug: str | None = typer.Option(None, "--object", help="Object list slug."),
+    record_id: str | None = typer.Option(None, "--record-id", help="Record UUID."),
+    json_output: bool = typer.Option(False, "--json", help="Emit structured JSON."),
+) -> None:
+    raise typer.Exit(
+        main(object_slug=object_slug, record_id=record_id, json_output=json_output)
+    )
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    typer.run(_cli)
