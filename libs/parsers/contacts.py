@@ -19,8 +19,8 @@ def parse_name_case(
     if not name:
         return None
 
-    # Remove Dr. or Dr prefix (case-insensitive) from individual name fields
-    name = re.sub(r"^Dr\.?\s*", "", name, flags=re.IGNORECASE).strip()
+    # Remove all leading Dr. prefixes (case-insensitive) from individual name fields.
+    name = re.sub(r"^(?:Dr\.?\s*)+", "", name, flags=re.IGNORECASE).strip()
     if not name:
         return None
 
@@ -78,9 +78,16 @@ def parse_first_middle_and_last_name(
 
         full_name = re.sub(r"\s+", " ", full_name).strip()
         # Remove Dr. or Dr prefix (case-insensitive) before parsing
-        full_name = re.sub(r"^Dr\.?\s*", "", full_name, flags=re.IGNORECASE).strip()
+        full_name = re.sub(
+            r"^(?:Dr\.?\s*)+",
+            "",
+            full_name,
+            flags=re.IGNORECASE,
+        ).strip()
         # Remove empty parentheses and any surrounding whitespace
         full_name = full_name.replace("()", "").strip()
+        if not full_name:
+            return None, None, None
         pattern1: Pattern[str] = re.compile(r"^([^,]+),\s*([^\s]+)(?:\s+([^\s.]+))?")
         pattern2: Pattern[str] = re.compile(r"^([^\s]+)\s+([^\s.]+)(?:\s+([^\s.]+))?$")
         match: Match[str] | None = pattern1.match(full_name)
@@ -146,8 +153,13 @@ def parse_year(
     if year is None:
         return None
 
+    if isinstance(year, bool):
+        return None
+
     # If year is already an integer, return it directly
     if isinstance(year, int):
+        if year < 0:
+            return None
         match year < 1900:
             case True:
                 match year <= 30:
@@ -166,6 +178,8 @@ def parse_year(
 
     year = str(year).strip().strip("'\"")
     if not year:
+        return None
+    if year.startswith("-"):
         return None
 
     # Try to extract first digit sequence if it's a string
