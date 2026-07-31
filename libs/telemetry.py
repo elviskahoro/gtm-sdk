@@ -255,6 +255,10 @@ def _build_spawn_log_exporter(collector: tuple[str, str]):
         def shutdown(self) -> None:
             return None
 
+        def force_flush(self, timeout_millis: int = 30000) -> bool:
+            del timeout_millis
+            return True
+
     return _ModalSpawnLogExporter()
 
 

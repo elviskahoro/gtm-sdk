@@ -176,6 +176,29 @@ def _secret_links(
     return out
 
 
+def test_content_addressed_secret_name_is_stable_and_value_sensitive(
+    script_module: ModuleType,
+) -> None:
+    """Same (base, value) is deterministic; a changed value changes the name.
+
+    Guards the actual cache-busting property the helper exists for — a
+    regression that returns the base name unhashed, or hashes something
+    other than ``value``, would leave Dagger's ``with_exec`` cache keyed on
+    a rotated credential's *name* again, silently replaying a stale
+    ``modal deploy`` result (the bug this helper fixes).
+    """
+    mk_name = script_module._content_addressed_secret_name  # trunk-ignore(ruff/SLF001)
+
+    first = mk_name("infisical-token", "token-a")
+    second = mk_name("infisical-token", "token-a")
+    third = mk_name("infisical-token", "token-b")
+
+    assert first == second  # trunk-ignore(ruff/S101)
+    assert first != third  # trunk-ignore(ruff/S101)
+    assert first.startswith("infisical-token-")  # trunk-ignore(ruff/S101)
+    assert first == "infisical-token-a70bf50e531c"  # trunk-ignore(ruff/S101)
+
+
 @pytest.mark.asyncio
 async def test_deploy_via_dagger_with_host(script_module: ModuleType) -> None:
     """All six secrets wire through when INFISICAL_HOST is provided."""
@@ -192,13 +215,17 @@ async def test_deploy_via_dagger_with_host(script_module: ModuleType) -> None:
             infisical_host="https://app.infisical.com",
         )
 
-    expected_secret_calls = [
+    mk_name = script_module._content_addressed_secret_name  # trunk-ignore(ruff/SLF001)
+    base_and_values = [
         ("modal-token-id", "mtok-id"),
         ("modal-token-secret", "mtok-secret"),
         ("infisical-token", "inf-token"),
         ("infisical-project-id", "inf-proj"),
         ("infisical-env", "dev"),
         ("infisical-host", "https://app.infisical.com"),
+    ]
+    expected_secret_calls = [
+        (mk_name(base, value), value) for base, value in base_and_values
     ]
     actual_secret_calls = [
         (call.args[0], call.args[1])
@@ -215,7 +242,8 @@ async def test_deploy_via_dagger_with_host(script_module: ModuleType) -> None:
         for _step, args in _secret_links(steps)
     ]
     expected_env_calls = [
-        (_env_for(name), (name, value)) for name, value in expected_secret_calls
+        (_env_for(base), (mk_name(base, value), value))
+        for base, value in base_and_values
     ]
     assert actual_env_calls == expected_env_calls
 
@@ -294,6 +322,9 @@ async def test_deploy_via_dagger_container_chain(script_module: ModuleType) -> N
     ]
 
     fake_dagger.dag.container.assert_called_once_with()
+    assert script_module.DAGGER_BASE_IMAGE == (  # trunk-ignore(ruff/S101)
+        "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
+    )
 
     # Args fed into each link (root has no producer, so skip it).
     args_by_method: dict[str, list[tuple[object, ...]]] = {

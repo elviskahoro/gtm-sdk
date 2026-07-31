@@ -14,7 +14,7 @@ from libs.telemetry import (
 
 
 @pytest.fixture(autouse=True)
-def _default_to_direct_sink(monkeypatch):  # pyright: ignore[reportUnusedFunction]  # autouse fixture, invoked by name
+def _default_to_direct_sink(monkeypatch) -> None:  # pyright: ignore[reportUnusedFunction]  # autouse fixture, invoked by name
     """Opt every test out of collector mode unless it asks for it explicitly.
 
     Collector fan-out is now the library default — an unset
@@ -28,14 +28,14 @@ def _default_to_direct_sink(monkeypatch):  # pyright: ignore[reportUnusedFunctio
     monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "")
 
 
-def test_init_tracer_noop_without_env(monkeypatch):
+def test_init_tracer_noop_without_env(monkeypatch) -> None:
     monkeypatch.delenv("HYPERDX_API_KEY", raising=False)
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     tracer = init_tracer()
     assert tracer is None
 
 
-def test_init_tracer_degrades_when_opentelemetry_missing(monkeypatch):
+def test_init_tracer_degrades_when_opentelemetry_missing(monkeypatch) -> None:
     """A sink env var must not crash the CLI when ``opentelemetry`` is absent.
 
     Same regression class as the log-exporter case: ``init_tracer`` runs at
@@ -663,6 +663,7 @@ def test_spawn_log_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders)
     from opentelemetry.sdk._logs.export import LogRecordExportResult
 
     exporter = real_spawn_builders.log(("otel-collector", "fan_out"))
+    assert exporter.force_flush() is True  # trunk-ignore(ruff/S101)
     result = exporter.export([])
     assert result == LogRecordExportResult.SUCCESS
     spawn_calls = [s for s in spawned if s and s[0] != "from_name"]
