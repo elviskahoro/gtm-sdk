@@ -9,6 +9,8 @@ bug is fixed.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from hypothesis import (
     example,
@@ -29,11 +31,13 @@ from libs.parsers.contacts import (
 
 
 @given(value=st.one_of(st.integers(), st.text()))
+@example(value="DOB: -5")
 def test_parse_year_returns_none_or_a_year_at_least_1900(value: int | str) -> None:
     result = parse_year(value)
+    text_value = value.strip().strip("'\"") if isinstance(value, str) else ""
     negative = (
         isinstance(value, int) and not isinstance(value, bool) and value < 0
-    ) or (isinstance(value, str) and value.strip().strip("'\"").startswith("-"))
+    ) or bool(re.search(r"-\d+", text_value))
     if negative:
         assert result is None
     else:

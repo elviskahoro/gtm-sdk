@@ -146,8 +146,8 @@ def parse_first_middle_and_last_name(
 def parse_year(
     year: Any,
 ) -> int | None:
-    def extract_first_digit(text: str) -> int | None:
-        match: Match[str] | None = re.search(r"\d+", str(text))
+    def extract_first_number(text: str) -> int | None:
+        match: Match[str] | None = re.search(r"-?\d+", str(text))
         return int(match.group(0)) if match else None
 
     if year is None:
@@ -183,8 +183,10 @@ def parse_year(
         return None
 
     # Try to extract first digit sequence if it's a string
-    year_num: int | None = extract_first_digit(year)
+    year_num: int | None = extract_first_number(year)
     if year_num is None:
+        return None
+    if year_num < 0:
         return None
 
     match year_num < 1900:
