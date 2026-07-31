@@ -35,9 +35,10 @@ from libs.parsers.contacts import (
 def test_parse_year_returns_none_or_a_year_at_least_1900(value: int | str) -> None:
     result = parse_year(value)
     text_value = value.strip().strip("'\"") if isinstance(value, str) else ""
+    first_number = re.search(r"-?\d+", text_value)
     negative = (
         isinstance(value, int) and not isinstance(value, bool) and value < 0
-    ) or bool(re.search(r"-\d+", text_value))
+    ) or bool(first_number and first_number.group(0).startswith("-"))
     if negative:
         assert result is None
     else:
