@@ -22,6 +22,7 @@ guards are covered here directly, at the unit level.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -47,10 +48,13 @@ def script_module() -> Iterator[ModuleType]:
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[_MODULE_NAME] = module
+    saved_environ = os.environ.copy()
     spec.loader.exec_module(module)
     try:
         yield module
     finally:
+        os.environ.clear()
+        os.environ.update(saved_environ)
         sys.modules.pop(_MODULE_NAME, None)
 
 
