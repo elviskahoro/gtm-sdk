@@ -1,11 +1,8 @@
 """Mock-based tests for `_deploy_via_dagger` in scripts/webhooks-handlers-redeploy.py.
 
-Complements `tests/scripts/test_deploy_webhook.py`, which exercises only the
-host-subprocess fallback (DAGGER_DRY_RUN=1). The live Dagger code path —
-secrets wiring, source mount + excludes, and the uv-sync + modal-deploy
-container chain — is otherwise unexercised because spinning up a real Dagger
-engine in CI would also require live Modal credentials. Instead, we patch
-the `dagger` module on the loaded script and assert the SDK call graph.
+Complements the host-side focused tests and the outer-controller real-container
+smoke stage. These tests pin secrets wiring, source mount exclusions, and the
+uv-sync + modal-deploy SDK call graph without deploying live Modal resources.
 
 Each chainable container method (`from_`, `with_directory`, `with_workdir`,
 `with_exec`, `with_secret_variable`) returns a *distinct* mock — not the same

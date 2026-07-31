@@ -405,6 +405,24 @@ def test_unit_dagger_keeps_ci_suite_validator_build_interface() -> None:
     assert "return build_containers()[-1]" in dagger
 
 
+def test_unit_dagger_smokes_the_real_webhook_deploy_container() -> None:
+    dagger = PYTEST_DAGGER.read_text()
+    deploy_script = (
+        Path(__file__).parents[2] / "scripts" / "webhooks-handlers-redeploy.py"
+    ).read_text()
+    deploy_image = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
+    git_install = "apt-get update && apt-get install -y --no-install-recommends git"
+
+    assert "WEBHOOK_DEPLOY_BASE_IMAGE" in dagger  # trunk-ignore(ruff/S101)
+    assert deploy_image in dagger  # trunk-ignore(ruff/S101)
+    assert deploy_image in deploy_script  # trunk-ignore(ruff/S101)
+    assert git_install in dagger  # trunk-ignore(ruff/S101)
+    assert git_install in deploy_script  # trunk-ignore(ruff/S101)
+    assert 'with_exec(["uv", "sync", "--frozen"])' in dagger  # trunk-ignore(ruff/S101)
+    assert "await webhook_deploy_smoke.sync()" in dagger  # trunk-ignore(ruff/S101)
+    assert '"modal", "deploy"' not in dagger  # trunk-ignore(ruff/S101)
+
+
 def test_unit_workflow_no_longer_builds_the_project_environment_on_host() -> None:
     workflow = WORKFLOW.read_text()
 
