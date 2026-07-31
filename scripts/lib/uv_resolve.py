@@ -21,7 +21,31 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = SCRIPT_DIR.parent
+
+
+def _find_repo_root() -> Path:
+    """Find the project root from the helper path or its invocation directory.
+
+    CI mounts this helper under ``/opt/gtm-sdk/scripts`` while the checkout is
+    mounted at ``/src``. Prefer the helper's normal location, then search the
+    current working directory so that copied helper mounts still use the
+    checkout's ``pyproject.toml`` and probe ``uv`` from the checkout root.
+    """
+    search_starts = (SCRIPT_DIR.parent, Path.cwd())
+    seen: set[Path] = set()
+    for start in search_starts:
+        for ancestor in (start, *start.parents):
+            candidate = ancestor.resolve()
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if (candidate / "pyproject.toml").is_file():
+                return candidate
+    msg = "could not locate pyproject.toml from the uv resolver or its cwd"
+    raise FileNotFoundError(msg)
+
+
+REPO_ROOT = _find_repo_root()
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 
 DEFAULT_FALLBACK_LOCATIONS: tuple[str, ...] = (

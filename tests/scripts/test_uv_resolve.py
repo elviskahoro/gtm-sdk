@@ -319,3 +319,34 @@ class TestCli:
         assert result.stdout == ""
         assert "0.11.7" in result.stderr
         assert REQUIRED_RANGE in result.stderr
+
+    def test_uses_cwd_project_when_helper_is_mounted_elsewhere(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "pyproject.toml").write_text(
+            f'[tool.uv]\nrequired-version = "{REQUIRED_RANGE}"\n',
+        )
+        helper = tmp_path / "mounted" / "scripts" / "lib" / "uv_resolve.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text(
+            (uv_resolve.SCRIPT_DIR / "lib" / "uv_resolve.py").read_text(),
+        )
+        stub = _write_uv_stub(tmp_path / "bin", version="0.11.29")
+        env = os.environ.copy()
+        env["PATH"] = str(stub.parent)
+
+        result = subprocess.run(  # noqa: S603 — fixed copied helper path
+            [sys.executable, str(helper)],
+            cwd=project,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        assert result.stdout.strip() == str(stub)
+        assert result.stderr == ""
