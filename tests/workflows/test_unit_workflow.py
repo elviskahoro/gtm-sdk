@@ -55,8 +55,8 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     ) in workflow
     assert "fetch-depth: 0" in workflow
     assert (
-        "namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 "
-        "# v1.6.0"
+        "namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 "
+        "# v1.6.1"
     ) in workflow
     assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
@@ -209,9 +209,9 @@ def test_unit_workflow_only_publishes_dependency_images_from_trusted_main() -> N
     normalized = " ".join(workflow.split())
 
     assert (
-        "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8" in workflow
+        "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a" in workflow
     )
-    assert "# v6.19.2" in workflow
+    assert "# v7.3.0" in workflow
     assert "github.ref == 'refs/heads/main'" in normalized
     assert "github.event_name != 'pull_request'" in normalized
     assert "steps.pytest_dependency_image.outputs.hit != 'true'" in normalized
