@@ -112,6 +112,7 @@ def _otel_secret() -> modal.Secret:
 
 
 image: Image = modal.Image.debian_slim().uv_pip_install(
+    "attio>=0.22.8",
     "fastapi[standard]",
     "flatsplode",
     "gcsfs",  # https://github.com/fsspec/gcsfs

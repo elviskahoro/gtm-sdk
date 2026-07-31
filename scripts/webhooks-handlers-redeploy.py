@@ -132,6 +132,7 @@ if __name__ == "__main__":
 import argparse  # noqa: E402
 import asyncio  # noqa: E402
 import atexit  # noqa: E402
+import hashlib  # noqa: E402
 import re  # noqa: E402
 import shutil  # noqa: E402
 import signal  # noqa: E402
@@ -158,10 +159,12 @@ PLACEHOLDER = "WebhookModelToReplace"
 REQUIRED_MODAL_SECRETS: tuple[str, ...] = ("devx-gcp-202605260000",)
 VALID_INFISICAL_ENVS: tuple[str, ...] = ("dev", "staging", "prod")
 
-# Pinned uv image matching the repo's requires-python (>=3.13,<3.14). The
-# Dagger container does `uv sync --frozen` against the mounted lock file, so
-# the deploy-time interpreter version matches the host venv exactly.
-DAGGER_BASE_IMAGE = "ghcr.io/astral-sh/uv:python3.13-bookworm-slim"
+# Pinned uv image matching the repo's requires-python (>=3.13,<3.14) and
+# required uv version (>=0.11.8,<0.12). The unversioned bookworm tag began
+# resolving to uv 0.9.x, which made `uv sync --frozen` reject this project
+# before the deploy ran. Keep the toolchain pin explicit so registry tag drift
+# cannot silently break guarded deploys.
+DAGGER_BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
 
 # Module-level state read by ``_cleanup`` (registered via ``atexit`` and via
 # SIGINT/SIGTERM handlers). Mirrors the bash trap that captured globals by
@@ -783,6 +786,21 @@ def _fetch_infisical_value(name: str) -> str:
     return proc.stdout.strip()
 
 
+def _content_addressed_secret_name(base: str, value: str) -> str:
+    """Derive a Dagger secret name that changes when ``value`` changes.
+
+    ``dagger.dag.set_secret(name, value)`` caches downstream ``with_exec``
+    steps keyed on the secret's name/ID, not its plaintext — rotating a
+    token (e.g. switching Infisical projects) while keeping the same literal
+    name silently replays a stale cached ``modal deploy`` result against the
+    OLD credentials. Suffixing the name with a hash of the value ties the
+    Dagger secret's identity to its content without leaking the value into
+    logs or the returned name.
+    """
+    digest = hashlib.sha256(value.encode()).hexdigest()[:12]
+    return f"{base}-{digest}"
+
+
 async def _deploy_via_dagger(
     handler_file: Path,
     modal_token_id: str,
@@ -824,29 +842,35 @@ async def _deploy_via_dagger(
     async with dagger.connection(dagger.Config(log_output=sys.stderr)):
         secrets = {
             "MODAL_TOKEN_ID": dagger.dag.set_secret(
-                "modal-token-id",
+                _content_addressed_secret_name("modal-token-id", modal_token_id),
                 modal_token_id,
             ),
             "MODAL_TOKEN_SECRET": dagger.dag.set_secret(
-                "modal-token-secret",
+                _content_addressed_secret_name(
+                    "modal-token-secret",
+                    modal_token_secret,
+                ),
                 modal_token_secret,
             ),
             "INFISICAL_TOKEN": dagger.dag.set_secret(
-                "infisical-token",
+                _content_addressed_secret_name("infisical-token", infisical_token),
                 infisical_token,
             ),
             "INFISICAL_PROJECT_ID": dagger.dag.set_secret(
-                "infisical-project-id",
+                _content_addressed_secret_name(
+                    "infisical-project-id",
+                    infisical_project_id,
+                ),
                 infisical_project_id,
             ),
             "INFISICAL_ENV": dagger.dag.set_secret(
-                "infisical-env",
+                _content_addressed_secret_name("infisical-env", infisical_env),
                 infisical_env,
             ),
         }
         if infisical_host:
             secrets["INFISICAL_HOST"] = dagger.dag.set_secret(
-                "infisical-host",
+                _content_addressed_secret_name("infisical-host", infisical_host),
                 infisical_host,
             )
         src = dagger.dag.host().directory(
