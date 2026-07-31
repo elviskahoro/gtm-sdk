@@ -116,7 +116,70 @@ def test_bootstrap_reexecs_with_the_matching_uv_run_mode(
             "--flag",
         ],
     )
-    assert os.environ[uv_bootstrap.UV_BOOTSTRAP_ENV] == "1"
+    assert os.environ[uv_bootstrap.UV_BOOTSTRAP_ENV] == str(script_path.resolve())
+
+
+def test_bootstrap_skips_when_sentinel_matches_the_current_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script_path = REPO_ROOT / "scripts" / "docs-pages-lint.py"
+    monkeypatch.setenv(uv_bootstrap.UV_BOOTSTRAP_ENV, str(script_path.resolve()))
+    monkeypatch.setattr(uv_bootstrap.sys, "prefix", "/system-python")
+    monkeypatch.setattr(uv_bootstrap.sys, "base_prefix", "/system-python")
+    resolve = MagicMock(side_effect=AssertionError("must not resolve uv"))
+    execv = MagicMock(side_effect=AssertionError("must not exec"))
+    monkeypatch.setattr(uv_bootstrap, "find_compatible_uv_for_repo", resolve)
+    monkeypatch.setattr(uv_bootstrap.os, "execv", execv)
+
+    uv_bootstrap.bootstrap_uv(script_path=str(script_path), mode="script")
+
+    resolve.assert_not_called()
+    execv.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", ["python", "script"])
+def test_bootstrap_reexecs_when_sentinel_belongs_to_another_script(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mode: uv_bootstrap.RunMode,
+) -> None:
+    script_path = tmp_path / "scripts" / "child.py"
+    script_path.parent.mkdir()
+    script_path.touch()
+    parent_script = tmp_path / "scripts" / "parent.py"
+    candidate = uv_resolve.UvCandidate("/fake/compatible/uv", (0, 11, 26), "")
+    monkeypatch.setenv(uv_bootstrap.UV_BOOTSTRAP_ENV, str(parent_script))
+    monkeypatch.setattr(uv_bootstrap.sys, "prefix", "/system-python")
+    monkeypatch.setattr(uv_bootstrap.sys, "base_prefix", "/system-python")
+    resolve = MagicMock(return_value=candidate)
+    monkeypatch.setattr(
+        uv_bootstrap,
+        "find_compatible_uv_for_repo",
+        resolve,
+    )
+    monkeypatch.setattr(uv_bootstrap.sys, "argv", [str(script_path)])
+    monkeypatch.setattr(uv_bootstrap.os, "chdir", MagicMock())
+    execv = MagicMock(side_effect=SystemExit(0))
+    monkeypatch.setattr(uv_bootstrap.os, "execv", execv)
+
+    with pytest.raises(SystemExit):
+        uv_bootstrap.bootstrap_uv(script_path=str(script_path), mode=mode)
+
+    resolve.assert_called_once_with(cwd=str(tmp_path))
+    execv.assert_called_once_with(
+        candidate.path,
+        [
+            candidate.path,
+            "run",
+            *(
+                ("--project", str(tmp_path), "python")
+                if mode == "python"
+                else ("--script",)
+            ),
+            str(script_path.resolve()),
+        ],
+    )
+    assert os.environ[uv_bootstrap.UV_BOOTSTRAP_ENV] == str(script_path.resolve())
 
 
 def test_bootstrap_skips_an_active_virtualenv(monkeypatch: pytest.MonkeyPatch) -> None:
