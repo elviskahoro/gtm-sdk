@@ -261,14 +261,16 @@ def _preflight_uv_version() -> None:
         candidate = find_compatible_uv_for_repo(cwd=str(REPO_ROOT))
     except NoCompatibleUvError as exc:
         _fail(str(exc))
-    assert candidate.version is not None  # find_compatible_uv only returns a match
+    if candidate.version is None:  # defensive: find_compatible_uv only returns a match
+        _fail(f"Resolved uv candidate has no parseable version: {candidate.path}")
     version_text = ".".join(map(str, candidate.version))
     print(f"Preflighting uv version: {candidate.path} (uv {version_text}) ✓")
     _uv_path = candidate.path
 
 
 def _require_uv_path() -> str:
-    assert _uv_path is not None  # set by _preflight_uv_version() before use
+    if _uv_path is None:  # set by _preflight_uv_version() before use
+        _fail("uv path requested before uv preflight completed")
     return _uv_path
 
 
