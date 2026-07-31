@@ -68,10 +68,6 @@ def _format_valid_url(
     return f"{padding}{prefix}{host}{port}{path}{padding}"
 
 
-def _with_lookalike_host(prefix: str, host: str, path: str) -> str:
-    return f"{prefix}{host}{path}"
-
-
 def _with_disallowed_scheme(scheme: str, path: str) -> str:
     return f"{scheme}://linkedin.com{path}"
 
@@ -97,7 +93,7 @@ _CASED_LINKEDIN_HOST = st.one_of(
     _LINKEDIN_HOST.map(str.upper),
     _LINKEDIN_HOST.map(_alternate_case),
 )
-_WEB_PREFIX = st.sampled_from(("", "http://", "https://", "//"))
+_WEB_PREFIXES = ("", "http://", "https://", "//")
 _VALID_PORT = st.one_of(
     st.just(""),
     st.integers(min_value=1, max_value=65535).map(_valid_port),
@@ -106,77 +102,87 @@ _PATH = st.text(
     alphabet=string.ascii_letters + string.digits + "-._~/",
     max_size=40,
 ).map(_path_suffix)
-_PADDING = st.sampled_from(("", " ", "  ", "\t"))
-_VALID_LINKEDIN_URLS = st.builds(
-    _format_valid_url,
+_PADDING_VALUES = ("", " ", "  ", "\t")
+_VALID_LINKEDIN_URL_PARTS = st.tuples(
     _CASED_LINKEDIN_HOST,
-    _WEB_PREFIX,
     _VALID_PORT,
     _PATH,
-    _PADDING,
 )
 
 
-_LOOKALIKE_HOST = st.one_of(
-    _HOST_LABEL.map(_lookalike_prefix),
-    _HOST_LABEL.map(_lookalike_suffix),
+_HOST_CONFUSION = _HOST_LABEL.map(_lookalike_suffix)
+_BRAND_LOOKALIKE = _HOST_LABEL.map(_lookalike_prefix)
+_DISALLOWED_SCHEMES = ("ftp", "javascript", "file", "data", "mailto")
+_MALFORMED_PORTS = ("notaport", "443.evil.tld", "65536")
+_ABSENT_VALUES: tuple[tuple[str, str | None], ...] = (
+    ("absent-value", None),
+    ("absent-value", ""),
+    ("absent-value", "   "),
 )
-_DISALLOWED_SCHEME = st.sampled_from(
-    ("ftp", "javascript", "file", "data", "mailto"),
-)
-_MALFORMED_PORT = st.sampled_from(("notaport", "443.evil.tld", "65536"))
 _NON_LINKEDIN_TEXT = st.text(
     alphabet=string.ascii_letters + string.digits + " -_.",
 ).filter(_contains_no_linkedin_host)
-_UNSAFE_OR_NON_LINKEDIN_VALUES = st.one_of(
-    st.builds(_with_lookalike_host, _WEB_PREFIX, _LOOKALIKE_HOST, _PATH),
-    st.builds(_with_disallowed_scheme, _DISALLOWED_SCHEME, _PATH),
-    st.builds(_with_userinfo, _PATH),
-    st.builds(_with_malformed_port, _WEB_PREFIX, _MALFORMED_PORT, _PATH),
-    _NON_LINKEDIN_TEXT,
+_TAGGED_UNSAFE_VALUES: st.SearchStrategy[tuple[str, str]] = st.one_of(
+    st.tuples(st.just("host"), _HOST_CONFUSION),
+    st.tuples(st.just("lookalike"), _BRAND_LOOKALIKE),
+    st.tuples(st.just("userinfo"), _PATH.map(_with_userinfo)),
+    st.tuples(st.just("plain-text"), _NON_LINKEDIN_TEXT),
 )
 
 
-@given(value=_VALID_LINKEDIN_URLS)
-@example(value="LinkedIn.com")
-@example(value="//linkedin.com/in/foo")
-@example(value="//www.linkedin.com/in/foo")
-@example(value="linkedin.com:443/in/foo")
-@example(value="https://linkedin.com:443/in/foo")
-def test_is_linkedin_url_accepts_canonical_linkedin_hosts(value: str) -> None:
+@given(parts=_VALID_LINKEDIN_URL_PARTS)
+@example(parts=("LinkedIn.com", "", ""))
+@example(parts=("www.linkedin.com", "", "/in/foo"))
+@example(parts=("linkedin.com", ":443", "/in/foo"))
+def test_is_linkedin_url_accepts_canonical_linkedin_hosts(
+    parts: tuple[str, str, str],
+) -> None:
     """Every supported URL spelling that resolves to LinkedIn is accepted."""
-    event("canonical LinkedIn URL")
-    assert is_linkedin_url(value) is True
+    host, port, path = parts
+    for prefix in _WEB_PREFIXES:
+        for padding in _PADDING_VALUES:
+            event("canonical LinkedIn URL")
+            value = _format_valid_url(host, prefix, port, path, padding)
+            assert is_linkedin_url(value) is True
 
 
-@given(value=_UNSAFE_OR_NON_LINKEDIN_VALUES)
-@example(value="evil-linkedin.com")
-@example(value="linkedin.com.attacker.tld")
-@example(value="https://evil.com/linkedin.com")
-@example(value="notlinkedin.com")
-@example(value="linkedincom")
-@example(value="not a url")
-@example(value="ftp://linkedin.com/in/foo")
-@example(value="javascript://linkedin.com/in/foo")
-@example(value="file://linkedin.com/in/foo")
-@example(value="data://linkedin.com/in/foo")
-@example(value="mailto:foo@linkedin.com")
-@example(value="foo@linkedin.com")
-@example(value="https://foo@linkedin.com/in/bar")
-@example(value="https://foo:bar@linkedin.com/in/baz")
-@example(value="linkedin.com:443.evil.tld")
-@example(value="linkedin.com:notaport/in/foo")
-@example(value="https://linkedin.com:443.evil.tld/in/foo")
-def test_is_linkedin_url_rejects_unsafe_or_non_linkedin_values(value: str) -> None:
+@given(case_and_value=_TAGGED_UNSAFE_VALUES)
+@example(case_and_value=("lookalike", "evil-linkedin.com"))
+@example(case_and_value=("host", "linkedin.com.attacker.tld"))
+@example(case_and_value=("plain-text", "https://evil.com/linkedin.com"))
+@example(case_and_value=("plain-text", "notlinkedin.com"))
+@example(case_and_value=("plain-text", "linkedincom"))
+@example(case_and_value=("plain-text", "not a url"))
+@example(case_and_value=("userinfo", "foo@linkedin.com"))
+@example(case_and_value=("userinfo", "https://foo@linkedin.com/in/bar"))
+@example(case_and_value=("userinfo", "https://foo:bar@linkedin.com/in/baz"))
+def test_is_linkedin_url_rejects_unsafe_or_non_linkedin_values(
+    case_and_value: tuple[str, str],
+) -> None:
     """Lookalikes and parser bypasses never become trusted LinkedIn URLs."""
-    event("unsafe or non-LinkedIn input")
+    case, value = case_and_value
+    event(case)
     assert is_linkedin_url(value) is False
 
 
-@example(value=None)
-@example(value="")
-@example(value="   ")
-@given(value=st.one_of(st.none(), st.just(""), st.just("   ")))
-def test_is_linkedin_url_rejects_absent_values(value: str | None) -> None:
+@given(path=_PATH)
+@example(path="/in/foo")
+def test_is_linkedin_url_rejects_exhaustive_unsafe_url_forms(path: str) -> None:
+    """Every finite unsafe scheme and malformed-port form remains rejected."""
+    for scheme in _DISALLOWED_SCHEMES:
+        event("scheme")
+        assert is_linkedin_url(_with_disallowed_scheme(scheme, path)) is False
+    for prefix in _WEB_PREFIXES:
+        for port in _MALFORMED_PORTS:
+            event("malformed-port")
+            assert is_linkedin_url(_with_malformed_port(prefix, port, path)) is False
+
+
+@given(tagged_values=st.just(_ABSENT_VALUES))
+def test_is_linkedin_url_rejects_absent_values(
+    tagged_values: tuple[tuple[str, str | None], ...],
+) -> None:
     """Missing or whitespace-only source fields are never URLs."""
-    assert is_linkedin_url(value) is False
+    for case, value in tagged_values:
+        event(case)
+        assert is_linkedin_url(value) is False
