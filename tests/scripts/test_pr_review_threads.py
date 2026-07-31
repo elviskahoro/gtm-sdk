@@ -481,6 +481,7 @@ def _build_dagger_mock(stdout_value: str) -> tuple[MagicMock, MagicMock]:
 
     dag = MagicMock(name="dag")
     dag.container.return_value.from_.return_value = base_container
+
     def set_secret(name: str, value: str) -> MagicMock:
         return MagicMock(_secret=(name, value))
 
