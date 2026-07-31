@@ -246,7 +246,10 @@ def is_linkedin_url(
     else:
         candidate = f"//{raw}"
 
-    parsed = urlparse(candidate)
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return False
 
     # Restrict to bare-host (no scheme) or explicit http(s). This rejects
     # ftp/javascript/file/data/mailto and any other non-web scheme that
