@@ -37,8 +37,9 @@ def execute(
 ) -> ExecuteResult:
     """Deliver a validated source row to Clay and return a small success body."""
     event_id = row.get("event_id")
-    if not isinstance(event_id, str):
-        raise ClayRowEventIdError
+    if not isinstance(event_id, str) or not event_id.strip():
+        msg = "Clay rows require a non-empty canonical event_id for deduplication"
+        raise ClayRowEventIdError(msg)
     result = post_row(
         webhook_url=webhook_url,
         auth_token=auth_token,
