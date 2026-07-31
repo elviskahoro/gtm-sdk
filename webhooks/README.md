@@ -44,6 +44,8 @@ Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
 ## Files
 
 - `export_to_attio.py` — per-source app, writes to Attio.
+- `export_to_clay.py` — per-source app, posts curated rows to source-specific
+  Clay webhook tables (currently Octolens mentions and identified RB2B visits).
 - `export_to_gcp_etl.py` — per-source app, writes the transformed payload to a
   per-source GCS bucket.
 - `export_to_gcp_raw.py` — per-source app, writes the raw payload to a
@@ -70,6 +72,7 @@ scripts/webhooks-handlers-redeploy.py export_to_gcp_etl Rb2bVisitWebhook
 
 # Deploy every source imported by the handler (one Modal app per source).
 scripts/webhooks-handlers-redeploy.py export_to_attio   --all
+scripts/webhooks-handlers-redeploy.py export_to_clay    --all
 scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
 scripts/webhooks-handlers-redeploy.py export_to_gcp_raw --all
 ```
@@ -146,8 +149,9 @@ Modal workspace.
 ## Rotation procedure
 
 When you redeploy a Modal app, its name (and therefore its URL) stays the same.
-App names are deterministic per handler family: `export_to_attio` uses
-`WebhookModel.attio_get_app_name()` directly, while the GCP handlers
+App names are deterministic per handler family: `export_to_attio` and
+`export_to_clay` use their `WebhookModel.*_get_app_name()` methods directly,
+while the GCP handlers
 (`export_to_gcp_etl`, `export_to_gcp_raw`) derive their app name from
 `CloudGoogle.clean_bucket_name(bucket_name=WebhookModel.<prefix>_get_bucket_name())`.
 Either way, redeploys are name-stable and the registry usually only needs

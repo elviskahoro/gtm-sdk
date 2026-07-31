@@ -57,6 +57,8 @@ class WebhookModelProtocol(Protocol):
       (``webhooks/export_to_attio.py``).
     - ``slack_*`` — Slack export handler
       (``webhooks/export_to_slack.py``).
+    - ``clay_*`` — Clay webhook-table export handler
+      (``webhooks/export_to_clay.py``).
     """
 
     @staticmethod
@@ -137,6 +139,21 @@ class WebhookModelProtocol(Protocol):
 
     def slack_get_messages(self) -> list[Any]: ...
 
+    @staticmethod
+    def clay_get_app_name() -> str: ...
+
+    @staticmethod
+    def clay_get_webhook_url_secret_name() -> str: ...
+
+    @staticmethod
+    def clay_get_webhook_auth_token_secret_name() -> str: ...
+
+    def clay_is_valid_webhook(self) -> bool: ...
+
+    def clay_get_invalid_webhook_error_msg(self) -> str: ...
+
+    def clay_get_row(self) -> dict[str, Any]: ...
+
 
 if TYPE_CHECKING:
 
@@ -213,3 +230,18 @@ if TYPE_CHECKING:
         def slack_get_invalid_webhook_error_msg(self) -> str: ...
 
         def slack_get_messages(self) -> list[Any]: ...
+
+        @staticmethod
+        def clay_get_app_name() -> str: ...
+
+        @staticmethod
+        def clay_get_webhook_url_secret_name() -> str: ...
+
+        @staticmethod
+        def clay_get_webhook_auth_token_secret_name() -> str: ...
+
+        def clay_is_valid_webhook(self) -> bool: ...
+
+        def clay_get_invalid_webhook_error_msg(self) -> str: ...
+
+        def clay_get_row(self) -> dict[str, Any]: ...

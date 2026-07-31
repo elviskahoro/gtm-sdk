@@ -18,7 +18,6 @@ from libs.logging.structured import (
 )
 from libs.telemetry import init_log_exporter, init_tracer, span
 from src.attio.export import execute
-from src.secrets_bootstrap import bootstrap_secret, hydrate
 
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
@@ -37,6 +36,7 @@ from src.octolens.webhook import (
 from src.rb2b.webhook.visit import (
     Webhook as Rb2bVisitWebhook,
 )
+from src.secrets_bootstrap import bootstrap_secret, hydrate
 
 # fmt: on
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)

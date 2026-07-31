@@ -250,19 +250,19 @@ def test_source_url_is_percent_encoded(tmp_path: Path):
 
 
 def test_fetch_raises_on_non_list_result():
-    from libs.sanity.blog import fetch_blog_posts
+    from libs.sanity.blog import fetch_blog_posts_raw
 
     with patch("libs.sanity.blog.query", return_value={"unexpected": "shape"}):
         with pytest.raises(SanityQueryError):
-            fetch_blog_posts(SanityConfig())
+            fetch_blog_posts_raw(SanityConfig())
 
 
 def test_fetch_raises_on_non_dict_row():
-    from libs.sanity.blog import fetch_blog_posts
+    from libs.sanity.blog import fetch_blog_posts_raw
 
     with patch("libs.sanity.blog.query", return_value=[{"slug": "ok"}, "broken"]):
         with pytest.raises(SanityQueryError):
-            fetch_blog_posts(SanityConfig())
+            fetch_blog_posts_raw(SanityConfig())
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,5 @@
 # trunk-ignore-all(pyright/reportPrivateUsage,pyright/reportUnusedFunction): test helpers legitimately reach into the structured logger's contextvars
+# ruff: noqa: S101, S105, SLF001
 """Webhook event-sequence tests.
 
 The webhook handler files contain a `WebhookModelToReplace` placeholder that
@@ -226,6 +227,44 @@ def test_attio_handler_emits_validation_failed_for_invalid_payload(
         line for line in lines if line["event"] == "webhook.validation_failed"
     )
     assert failed["reason"]
+
+
+def test_clay_handler_delivers_source_row_with_source_specific_secrets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handler = _load_substituted_handler(
+        "export_to_clay",
+        "OctolensMentionWebhook",
+        tmp_path,
+    )
+    payload = orjson.loads(
+        (SAMPLES_DIR / "octolens.mention.created.twitter.redacted.json").read_bytes(),
+    )
+    webhook = handler.WebhookModel.model_validate(payload)
+    monkeypatch.setenv("CLAY_WEBHOOK_URL_OCTOLENS", "https://clay.test/octolens")
+    monkeypatch.setenv("CLAY_WEBHOOK_AUTH_TOKEN_OCTOLENS", "octolens-token")
+    captured: dict[str, object] = {}
+
+    class _Result:
+        status_code = 200
+
+        @staticmethod
+        def body() -> str:
+            return "ok"
+
+    def _execute(**kwargs: object) -> _Result:
+        captured.update(kwargs)
+        return _Result()
+
+    monkeypatch.setattr(handler, "execute", _execute)
+
+    assert handler._export(webhook) == "ok"
+    assert captured["webhook_url"] == "https://clay.test/octolens"
+    assert captured["auth_token"] == "octolens-token"
+    row = captured["row"]
+    assert isinstance(row, dict)
+    assert row["event_id"] == "octolens:twitter:0000000000000000000"
 
 
 def test_gcp_raw_error_paths_emit_webhook_error(
@@ -496,6 +535,7 @@ def _call_raw_handler(
 
 _CALLERS: dict[str, Any] = {
     "export_to_attio": _call_typed_handler,
+    "export_to_clay": _call_typed_handler,
     "export_to_gcp_etl": _call_typed_handler,
     "export_to_gcp_raw": _call_raw_handler,
     "export_to_slack": _call_typed_handler,
@@ -512,6 +552,23 @@ def _stub_attio_downstream(
             return "ok-attio"
 
     def _fake_execute(_plan: object) -> _FakeResult:
+        return _FakeResult()
+
+    monkeypatch.setattr(module, "execute", _fake_execute)
+
+
+def _stub_clay_downstream(
+    module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeResult:
+        status_code = 200
+
+        @staticmethod
+        def body() -> str:
+            return "ok-clay"
+
+    def _fake_execute(**_kw: object) -> _FakeResult:
         return _FakeResult()
 
     monkeypatch.setattr(module, "execute", _fake_execute)
@@ -574,6 +631,7 @@ def _stub_slack_downstream(
 
 _STUBS: dict[str, Any] = {
     "export_to_attio": _stub_attio_downstream,
+    "export_to_clay": _stub_clay_downstream,
     "export_to_gcp_etl": _stub_etl_downstream,
     "export_to_gcp_raw": _stub_raw_downstream,
     "export_to_slack": _stub_slack_downstream,

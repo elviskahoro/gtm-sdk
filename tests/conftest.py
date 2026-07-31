@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Iterator
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import settings
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -15,6 +17,62 @@ if str(ROOT) not in sys.path:
 from attio.errors import SDKError  # noqa: E402
 
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
+
+
+# Hypothesis settings profiles.
+#
+# Registered at module scope rather than from a hook: the Hypothesis pytest
+# plugin also implements ``pytest_configure``, and doing this at import time
+# sidesteps any question of whose hook runs first. It deliberately sits
+# alongside — never inside — the ``pytest_configure`` telemetry patchers below,
+# whose ordering relative to collection is load-bearing (see their docstring).
+#
+# ``HYPOTHESIS_PROFILE`` is OUR convention, not a Hypothesis feature. The
+# library offers only the ``--hypothesis-profile`` flag and autodetection of the
+# ``CI`` env var, and neither fits: the flag would have to be threaded through
+# the ``-p`` plugin allowlist in ``PYTEST_CMD``, and ``CI`` is never propagated
+# into the Dagger unit container — it is also read by dlt/modal/logfire/rich, so
+# setting it just to satisfy a test library would change unrelated behavior.
+#
+# ``get_profile("ci")`` is read BEFORE ``register_profile("ci", ...)``
+# overwrites it, so our ``ci`` profile inherits Hypothesis's own CI defaults
+# (``derandomize=True``, ``deadline=None``, ``database=None``,
+# ``print_blob=True``, ``suppress_health_check=[too_slow]``) and only raises
+# ``max_examples``. Keeping the parent link means these track upstream instead
+# of being re-hardcoded here.
+#
+# ``derandomize`` matters for this CI specifically: there is no pytest-timeout,
+# no ``--maxfail`` and no job ``timeout-minutes``, and Trunk.io flags any
+# intermittent failure as a flake under a stable test ID. Seeding from a hash of
+# the test function means a green run stays green and a failure reproduces
+# exactly. ``database=None`` drops the example DB, which the four
+# ``--dist=loadfile`` xdist workers would otherwise share — and which could
+# never persist anyway, since the container is discarded every run.
+_BUILTIN_CI_PROFILE = settings.get_profile("ci")
+
+settings.register_profile(
+    "dev",
+    max_examples=50,
+    # Surfaces accidentally-expensive examples while authoring. CI inherits
+    # deadline=None instead, because a shared 4-vCPU ARM runner with four
+    # workers makes per-example wall-clock a flakiness source rather than a
+    # useful signal.
+    deadline=timedelta(milliseconds=400),
+)
+settings.register_profile(
+    "ci",
+    parent=_BUILTIN_CI_PROFILE,
+    max_examples=200,
+)
+# Registered but deliberately unwired — no scheduled job loads it yet. Keeps
+# randomized search available without putting it in front of the merge gate.
+settings.register_profile(
+    "nightly",
+    parent=_BUILTIN_CI_PROFILE,
+    max_examples=1000,
+    derandomize=False,
+)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 
 _TELEMETRY_PATCHERS: list[Any] = []
