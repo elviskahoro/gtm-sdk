@@ -85,12 +85,21 @@ PYTEST_RC_HOST_PATH = "pytest_rc"
 DEPENDENCY_DOCKERFILE_PATH = ".github/workflows/ci/pytest-deps.Dockerfile"
 DEPENDENCY_PACKER_PATH = ".github/workflows/ci/pytest_dependency_pack.py"
 
-# Tests in tests/scripts/test_deploy_webhook.py shell out to `git status` and
-# scripts/webhooks-handlers-redeploy.py itself runs `git rev-parse --show-toplevel`.
-# The host `.git` metadata stays excluded from the Dagger source snapshot, so we
-# initialize a throwaway repo at /src — with everything staged and committed —
-# to give the script and its tests a valid HEAD to diff against without leaking
-# the host's git state.
+# Keep this image and setup chain in lockstep with
+# scripts/webhooks-handlers-redeploy.py. This outer-controller smoke stage
+# proves the real deploy image can install git and resolve the frozen project
+# environment without opening a nested Dagger session or contacting Modal.
+WEBHOOK_DEPLOY_BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
+WEBHOOK_DEPLOY_GIT_INSTALL = [
+    "sh",
+    "-c",
+    "apt-get update && apt-get install -y --no-install-recommends git",
+]
+
+# Several tests and scripts shell out to git for repository-root and clean-tree
+# checks. The host `.git` metadata stays excluded from the Dagger source
+# snapshot, so initialize a throwaway repo at /src — with everything staged and
+# committed — without leaking the host's git state.
 GIT_INIT_CMD = (
     "git init -q && "
     "git -c user.email=ci@example.com -c user.name=ci "
@@ -218,6 +227,7 @@ def build_containers() -> tuple[
     dagger.Container,
     dagger.Container,
     dagger.Container,
+    dagger.Container,
 ]:
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
     scripts = dag.host().directory("scripts")
@@ -249,11 +259,19 @@ def build_containers() -> tuple[
     )
     checked = prepared.with_exec(["bash", "-c", dependency_check_cmd(layout)])
     installed = checked.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
+    webhook_deploy_smoke = (
+        dag.container()
+        .from_(WEBHOOK_DEPLOY_BASE_IMAGE)
+        .with_exec(WEBHOOK_DEPLOY_GIT_INSTALL)
+        .with_directory("/repo", source)
+        .with_workdir("/repo")
+        .with_exec(["uv", "sync", "--frozen"])
+    )
     nonce = os.environ.get("PYTEST_BENCHMARK_NONCE", "").strip()
     if nonce:
         installed = installed.with_env_variable("PYTEST_BENCHMARK_NONCE", nonce)
     tested = installed.with_exec(["bash", "-c", PYTEST_CMD])
-    return base, checked, installed, tested
+    return base, checked, installed, webhook_deploy_smoke, tested
 
 
 def build_container() -> dagger.Container:
@@ -264,7 +282,7 @@ def build_container() -> dagger.Container:
 async def main() -> None:
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
         pipeline_started = perf_counter()
-        base, checked, installed, ctr = build_containers()
+        base, checked, installed, webhook_deploy_smoke, ctr = build_containers()
 
         phase_started = perf_counter()
         await base.sync()
@@ -292,6 +310,13 @@ async def main() -> None:
         phase_started = perf_counter()
         await installed.sync()
         print(f"Dagger local project install: {perf_counter() - phase_started:.2f}s")
+
+        phase_started = perf_counter()
+        await webhook_deploy_smoke.sync()
+        print(
+            "Webhook deploy image + frozen sync: "
+            f"{perf_counter() - phase_started:.2f}s",
+        )
 
         # Read pytest's real exit code (captured in PYTEST_CMD) first so we know
         # whether a missing report is an expected consequence of a crashed run or
