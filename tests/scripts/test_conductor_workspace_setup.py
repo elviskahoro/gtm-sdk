@@ -91,7 +91,6 @@ def _write_common_stubs(bin_dir: Path, *, kernel: str = "Linux") -> None:
         fi
         """,
     )
-    _write_uv_stub(bin_dir)
     for tool in ("dolt", "infisical", "gh"):
         _write_stub(
             bin_dir,
