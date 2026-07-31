@@ -70,8 +70,10 @@ def _bootstrap_uv() -> None:
       gate, merely importing the module for those tests would trigger
       resolve+``os.execv``, and since ``execv`` replaces the current
       process image, it would replace the entire pytest process.
-    - The ``sys.prefix``-vs-``.venv`` check below skips re-exec when
-      already running under this project's own uv-managed venv.
+    - The active-virtualenv check below skips re-exec when already running
+      under any virtual environment. The caller has already selected a
+      concrete interpreter with its dependencies; later subprocess calls
+      still resolve a version-compatible uv explicitly.
       ``tests/scripts/test_deploy_webhook.py`` deliberately invokes this
       script via ``subprocess.run([sys.executable, str(SCRIPT), *args])``
       (not through the shebang) so its PATH-stubbed ``uv`` intercepts only
@@ -83,7 +85,7 @@ def _bootstrap_uv() -> None:
     """
     if os.environ.get(_UV_BOOTSTRAP_ENV):
         return
-    if Path(sys.prefix).resolve() == (REPO_ROOT / ".venv").resolve():
+    if sys.prefix != sys.base_prefix:
         os.environ[_UV_BOOTSTRAP_ENV] = "1"
         return
     try:

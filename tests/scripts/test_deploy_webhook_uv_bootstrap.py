@@ -11,7 +11,7 @@ instead of replacing the process.
 
 Without the `__name__` guard this module's own collection would have
 replaced the pytest process the first time this file's `script_module`
-fixture ran; without the `sys.prefix`-vs-`.venv` fast path,
+fixture ran; without the active-virtualenv fast path,
 `tests/scripts/test_deploy_webhook.py`'s `sys.executable`-based invocation
 (which deliberately bypasses the shebang so its PATH-stubbed `uv`
 intercepts only internal calls) would trigger a real re-exec instead. Both
@@ -83,6 +83,24 @@ def test_skips_when_already_in_project_venv(
         "prefix",
         str(script_module.REPO_ROOT / ".venv"),
     )
+    monkeypatch.setattr(script_module.sys, "base_prefix", "/usr")
+    execv = MagicMock(side_effect=AssertionError("execv should not be called"))
+    monkeypatch.setattr(script_module.os, "execv", execv)
+
+    script_module._bootstrap_uv()
+
+    execv.assert_not_called()
+    assert script_module.os.environ.get(script_module._UV_BOOTSTRAP_ENV) == "1"
+
+
+def test_skips_when_already_in_any_virtualenv(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv(script_module._UV_BOOTSTRAP_ENV, raising=False)
+    monkeypatch.setattr(script_module.sys, "prefix", str(tmp_path / "venv"))
+    monkeypatch.setattr(script_module.sys, "base_prefix", str(tmp_path / "python"))
     execv = MagicMock(side_effect=AssertionError("execv should not be called"))
     monkeypatch.setattr(script_module.os, "execv", execv)
 
@@ -102,6 +120,11 @@ def test_execs_into_resolved_compatible_uv(
     monkeypatch.setattr(
         script_module.sys,
         "prefix",
+        str(tmp_path / "not-the-real-venv"),
+    )
+    monkeypatch.setattr(
+        script_module.sys,
+        "base_prefix",
         str(tmp_path / "not-the-real-venv"),
     )
 
@@ -157,6 +180,11 @@ def test_fails_clearly_when_no_compatible_uv_found(
     monkeypatch.setattr(
         script_module.sys,
         "prefix",
+        str(tmp_path / "not-the-real-venv"),
+    )
+    monkeypatch.setattr(
+        script_module.sys,
+        "base_prefix",
         str(tmp_path / "not-the-real-venv"),
     )
 
