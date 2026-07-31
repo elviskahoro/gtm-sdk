@@ -1,0 +1,65 @@
+---
+title: "Clay exports"
+description: "Clay webhook ingestion, authentication, API limitations, and the idempotency contract for gtm-sdk exports."
+---
+
+## Write path
+
+gtm-sdk writes to Clay tables through each table's webhook endpoint. The webhook
+accepts JSON and can be protected with a per-table token sent in the
+`x-clay-webhook-auth` header. The implementation keeps that token in Infisical
+and never puts it in a row or log payload.
+
+The Clay Public API is not a replacement for this write path. Clay's current
+developer platform can query known Enterprise tables, but table writes and
+table-building are not supported. The Tables API is therefore useful for
+read-only reconciliation, not for checking-and-creating rows.
+
+## Authentication and API capabilities
+
+| Capability | Authentication | Availability | Use here |
+| --- | --- | --- | --- |
+| Table webhook ingestion | `x-clay-webhook-auth` | Webhook-enabled tables | Primary write path |
+| Public API | `clay-api-key` | API-key-enabled account | Read-only audit/reconciliation |
+| Tables API | `clay-api-key` | Enterprise; table must be enabled for API | Query known table IDs |
+
+Public API keys are server-side credentials. Store them in the secret manager
+if a future reconciliation job needs them. The Tables API has no list-tables
+operation, so table IDs must be configured explicitly.
+
+## Idempotency contract
+
+Every exported row must contain a deterministic, non-empty `event_id`. RB2B
+uses its source event ID and Octolens derives an ID from the source and source
+record ID. The value is intentionally stable across transport retries and is
+the column Clay should use for auto-dedupe.
+
+Configure Clay auto-dedupe on `event_id` and keep the oldest row by default.
+Clay compares exact strings, including case and whitespace, so producers must
+not normalize or reformat an ID between attempts. Auto-dedupe is eventual: a
+retry can still be accepted and processed before Clay removes the duplicate.
+The webhook sender therefore treats a successful HTTP response as delivery,
+not as proof of exactly-once enrichment.
+
+If exactly-once processing becomes a requirement, add a durable idempotency
+store before `post_row`. Do not implement a Public API read-before-write check:
+it is race-prone and the Public API does not provide a table upsert endpoint.
+
+## Capacity and operations
+
+Clay webhook sources have a 50,000-submission limit that persists after rows
+are deleted. Enterprise passthrough/auto-delete tables can process and forward
+rows before deleting them, avoiding that fixed accumulation limit. Confirm the
+selected Clay plan supports auto-dedupe, passthrough, and API-enabled tables
+before production rollout.
+
+The implementation validates `event_id`, propagates HTTP failures for the
+caller to retry, and logs the event ID and response status without logging the
+webhook token. Controlled validation should cover duplicate deliveries,
+distinct IDs, case/whitespace changes, HTTP failures, and retry behavior.
+
+References: [Clay API & CLI](https://university.clay.com/docs/clay-api-cli),
+[Quickstart](https://developers.clay.com/quickstart),
+[Tables API](https://developers.clay.com/tables),
+[Webhooks](https://university.clay.com/docs/webhook-integration-guide), and
+[table management](https://university.clay.com/docs/table-management-settings).

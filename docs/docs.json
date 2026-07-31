@@ -34,7 +34,8 @@
             "group": "Concepts",
             "pages": [
               "concepts/architecture",
-              "concepts/cli-contract"
+              "concepts/cli-contract",
+              "concepts/clay-exports"
             ]
           },
           {
