@@ -131,6 +131,7 @@ def _write_curl_installer(
     bin_dir: Path,
     *,
     installed_uv_version: str = _UV_PINNED_VERSION,
+    failing_tool: str | None = None,
 ) -> None:
     """Fake `curl | sh`-style installers.
 
@@ -143,7 +144,19 @@ def _write_curl_installer(
     matched URL and always drops a stub reporting `installed_uv_version` --
     good enough to prove "the pinned-install path ran and produced a usable
     compatible uv" without parsing version numbers out of URLs in bash.
+
+    `failing_tool` (one of "bd"/"roborev"/"uv") makes that tool's installer
+    exit non-zero without installing anything -- models a flaky upstream
+    download (e.g. a transient GitHub-releases 500) to prove setup survives
+    it instead of dying under `set -e`.
     """
+    fail_case = ""
+    if failing_tool is not None:
+        fail_case = f"""
+        if [[ "${{tool}}" == "{failing_tool}" ]]; then
+          exit 1
+        fi
+        """
     _write_stub(
         bin_dir,
         "curl",
@@ -163,6 +176,7 @@ def _write_curl_installer(
             exit 1
             ;;
         esac
+        {fail_case}
         target="${{HOME}}/.local/bin/${{tool}}"
         mkdir -p "${{HOME}}/.local/bin"
         if [[ "${{tool}}" == "uv" ]]; then
@@ -187,6 +201,8 @@ def _run_setup(
     stale_beads_target: Path | None = None,
     uv_version: str | None = _UV_PINNED_VERSION,
     later_uv_version: str | None = None,
+    failing_curl_tool: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     repo = tmp_path / "repo"
     scripts_dir = repo / "scripts"
@@ -215,7 +231,7 @@ def _run_setup(
     if uv_version is not None:
         _write_uv_stub(bin_dir, version=uv_version)
     _write_flox(bin_dir, flox_bin, succeeds=flox_succeeds)
-    _write_curl_installer(bin_dir)
+    _write_curl_installer(bin_dir, failing_tool=failing_curl_tool)
 
     # Optional second `uv`-only bin dir, placed *later* on PATH than
     # `bin_dir` -- simulates a compatible install (e.g. Homebrew) sitting
@@ -241,6 +257,8 @@ def _run_setup(
     }
     if git_common_dir is not None:
         env["SETUP_TEST_GIT_COMMON_DIR"] = str(git_common_dir)
+    if extra_env is not None:
+        env.update(extra_env)
     return (
         subprocess.run(
             ["bash", str(setup_copy)],
@@ -433,3 +451,83 @@ def test_macos_fallback_skips_reinstall_when_a_later_path_entry_is_compatible(
     assert "pinned-uv-install" not in log_text, (
         "a compatible uv existed later on PATH; nothing should have been installed"
     )
+
+
+# ---------------------------------------------------------------------------
+# Beads DB bootstrap (DoltHub seeding)
+#
+# A flaky fallback installer (roborev/bd) used to be able to kill the whole
+# `set -e` script before it ever reached the Beads bootstrap block below it,
+# and a `DOLTHUB_API_KEY` that simply never resolved fell back to an empty
+# local database with no log output at all. Both are regression targets.
+# ---------------------------------------------------------------------------
+
+
+def test_failed_roborev_install_does_not_abort_setup(tmp_path: Path) -> None:
+    result, _log = _run_setup(
+        tmp_path,
+        flox_succeeds=False,
+        kernel="Darwin",
+        failing_curl_tool="roborev",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "warning: roborev fallback install failed, continuing without roborev" in (
+        result.stdout
+    )
+    # Setup must still reach the Beads bootstrap block after the failure.
+    assert (
+        "warning: DOLTHUB_API_KEY not available from .env.local or Infisical"
+        in result.stdout
+    )
+
+
+def test_failed_bd_install_reports_a_clear_warning_before_bd_is_needed(
+    tmp_path: Path,
+) -> None:
+    """A failed `bd` install can't be papered over -- bootstrap genuinely needs `bd`.
+
+    Unlike roborev, nothing downstream can substitute for a missing `bd`, so
+    this case still ends in failure. What changed is *where* and *how*: before
+    this fix, the unguarded `curl | bash` pipeline died under `set -e` right
+    there with no diagnostic; now the install failure is reported explicitly,
+    and the script proceeds into the Beads bootstrap block (reaching the
+    DOLTHUB_API_KEY warning) before failing later for the obvious reason
+    (`bd: command not found`) instead of an opaque curl/pipe abort.
+    """
+    result, _log = _run_setup(
+        tmp_path,
+        flox_succeeds=False,
+        kernel="Darwin",
+        failing_curl_tool="bd",
+    )
+
+    assert "warning: bd fallback install failed, continuing without bd" in result.stdout
+    assert (
+        "warning: DOLTHUB_API_KEY not available from .env.local or Infisical"
+        in result.stdout
+    )
+    assert "bd: command not found" in result.stderr
+
+
+def test_missing_dolthub_api_key_reports_explicit_warning(tmp_path: Path) -> None:
+    result, _log = _run_setup(tmp_path, flox_succeeds=False, kernel="Darwin")
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "warning: DOLTHUB_API_KEY not available from .env.local or Infisical; "
+        "falling back to a fresh local Beads database instead of "
+        "https://doltremoteapi.dolthub.com/elviskahoro/gtm-sdk" in result.stdout
+    )
+
+
+def test_available_dolthub_api_key_skips_missing_key_warning(tmp_path: Path) -> None:
+    result, _log = _run_setup(
+        tmp_path,
+        flox_succeeds=False,
+        kernel="Darwin",
+        extra_env={"DOLTHUB_API_KEY": "test-token"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "warning: DOLTHUB_API_KEY not available" not in result.stdout
