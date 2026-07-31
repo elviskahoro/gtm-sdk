@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 # trunk-ignore-all(bandit/B607): list-arg subprocess only; tool names resolved via PATH on purpose.
 """Substitute, deploy, and restore a webhook handler in one safe step.
 
@@ -21,33 +21,126 @@ Usage:
 The ``DAGGER_DRY_RUN=1`` env var swaps the Dagger deploy for a direct
 ``infisical run -- uv run modal deploy`` invocation on the host. Used by the
 test suite so CI does not need a Dagger engine running.
+
+The shebang is a plain ``python3``, not ``uv run python``: ``[tool.uv]
+required-version`` in pyproject.toml makes *any* incompatible ``uv`` binary
+refuse to run before Python even starts, so a ``uv run python`` shebang can't
+survive a pyenv shim shadowing a compatible Homebrew/Flox install ahead of it
+on PATH. ``_bootstrap_uv()`` below resolves a version-compatible ``uv`` via
+``scripts/lib/uv_resolve.py`` (which scans *all* of PATH, not just the first
+match) and re-execs into it. This does **not** protect an explicitly-typed
+``uv run scripts/webhooks-handlers-redeploy.py ...`` against an already
+incompatible shell ``uv`` — that binary refuses before any of our code runs.
 """
 
 from __future__ import annotations
 
-import argparse
-import asyncio
-import atexit
 import os
-import re
-import shutil
-import signal
-import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
 
-import dagger
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+sys.path.insert(0, str(REPO_ROOT))
+from scripts.lib.uv_resolve import (  # noqa: E402
+    NoCompatibleUvError,
+    find_compatible_uv_for_repo,
+)
+
+
+def _fail(msg: str) -> NoReturn:
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+_UV_BOOTSTRAP_ENV = "_GTM_UV_BOOTSTRAPPED"
+
+
+def _bootstrap_uv() -> None:
+    """Re-exec into a version-compatible ``uv`` before any third-party import.
+
+    Required for correctness, not just direct execution: two independent
+    guards must both hold, or existing tests break in different ways.
+
+    - ``if __name__ == "__main__":`` gates the call below.
+      ``tests/scripts/test_deploy_webhook_dagger.py`` and
+      ``test_deploy_webhook_dagger_real.py`` load this module via
+      ``importlib.util.spec_from_file_location`` for white-box testing,
+      under a synthetic module name -- never ``"__main__"``. Without this
+      gate, merely importing the module for those tests would trigger
+      resolve+``os.execv``, and since ``execv`` replaces the current
+      process image, it would replace the entire pytest process.
+    - The ``sys.prefix``-vs-``.venv`` check below skips re-exec when
+      already running under this project's own uv-managed venv.
+      ``tests/scripts/test_deploy_webhook.py`` deliberately invokes this
+      script via ``subprocess.run([sys.executable, str(SCRIPT), *args])``
+      (not through the shebang) so its PATH-stubbed ``uv`` intercepts only
+      the script's *internal* calls -- verified empirically that
+      ``sys.executable`` there already *is* ``REPO_ROOT/.venv``'s
+      interpreter (the suite runs via ``uv run pytest``), so this check
+      makes the bootstrap correctly inert for that harness with no
+      test-specific special-casing.
+    """
+    if os.environ.get(_UV_BOOTSTRAP_ENV):
+        return
+    if Path(sys.prefix).resolve() == (REPO_ROOT / ".venv").resolve():
+        os.environ[_UV_BOOTSTRAP_ENV] = "1"
+        return
+    try:
+        candidate = find_compatible_uv_for_repo(cwd=str(REPO_ROOT))
+    except NoCompatibleUvError as exc:
+        _fail(str(exc))
+    os.environ[_UV_BOOTSTRAP_ENV] = "1"
+    script_path = str(Path(__file__).resolve())
+    # Unlike subprocess.run(cwd=...), os.execv has no cwd parameter -- the
+    # re-exec'd process always inherits whatever cwd this process actually
+    # has right now. The probe above used cwd=REPO_ROOT (a pyenv shim
+    # resolves a different real binary depending on directory), so without
+    # actually chdir'ing here first, a script invoked from some other
+    # directory could dispatch through the shim differently once re-exec'd
+    # than what was just verified compatible.
+    os.chdir(REPO_ROOT)
+    # execv replaces the process image in place (same PID) -- exit codes and
+    # signals propagate for free, no wrapper process needed. Use the literal
+    # "python", not sys.executable, which pre-bootstrap is the wrong, ambient
+    # interpreter. --project pins project discovery to REPO_ROOT regardless
+    # of the caller's cwd -- without it, invoking this script via an absolute
+    # path from outside the repo makes `uv run` resolve the wrong (or no)
+    # project and `import dagger` fails with ModuleNotFoundError.
+    # trunk-ignore(bandit/B606): argv is the resolved uv binary + this script's own path
+    os.execv(  # noqa: S606
+        candidate.path,
+        [
+            candidate.path,
+            "run",
+            "--project",
+            str(REPO_ROOT),
+            "python",
+            script_path,
+            *sys.argv[1:],
+        ],
+    )
+    msg = "os.execv() returned unexpectedly"
+    raise AssertionError(msg)  # pragma: no cover
+
+
+if __name__ == "__main__":
+    _bootstrap_uv()
+
+import argparse  # noqa: E402
+import asyncio  # noqa: E402
+import atexit  # noqa: E402
+import re  # noqa: E402
+import shutil  # noqa: E402
+import signal  # noqa: E402
+import subprocess  # noqa: E402
+from typing import TYPE_CHECKING, NoReturn  # noqa: E402
+
+import dagger  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-REPO_ROOT = Path(
-    subprocess.check_output(
-        ["git", "rev-parse", "--show-toplevel"],
-        text=True,
-    ).strip(),
-)
 WEBHOOKS_DIR = REPO_ROOT / "webhooks"
 BACKUP_DIR = REPO_ROOT / "tmp" / "webhook-deploy-bak"
 LOCK_DIR = REPO_ROOT / "tmp" / "webhook-deploy.lock"
@@ -77,6 +170,12 @@ _handler: str | None = None
 _handler_file: Path | None = None
 _lock_acquired = False
 _backup_freshly_written = False
+
+# Populated once by _preflight_uv_version(); read by every internal `uv`
+# subprocess call below so a child's own PATH lookup can't re-discover an
+# incompatible shim even though this process is already running under a good
+# one (the bootstrap re-exec only guarantees *this* process is compatible).
+_uv_path: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +243,33 @@ def _source_module_for(handler_file: Path, source: str) -> str:
 # ---------------------------------------------------------------------------
 # Preflights (all host-side)
 # ---------------------------------------------------------------------------
+
+
+def _preflight_uv_version() -> None:
+    """Resolve a version-compatible `uv` once; every later preflight needs it.
+
+    `_bootstrap_uv()` (top of file) already established that *this process*
+    is running under a compatible `uv`, but that doesn't guarantee a fresh
+    child subprocess's own PATH lookup for a bare "uv" will find the same
+    one -- this preflight resolves again (cheap; also serves as
+    defense-in-depth reporting) and caches the absolute path in `_uv_path`
+    for every internal `uv` subprocess call below to use instead of the
+    bare string.
+    """
+    global _uv_path  # noqa: PLW0603 — module state read by later preflights
+    try:
+        candidate = find_compatible_uv_for_repo(cwd=str(REPO_ROOT))
+    except NoCompatibleUvError as exc:
+        _fail(str(exc))
+    assert candidate.version is not None  # find_compatible_uv only returns a match
+    version_text = ".".join(map(str, candidate.version))
+    print(f"Preflighting uv version: {candidate.path} (uv {version_text}) ✓")
+    _uv_path = candidate.path
+
+
+def _require_uv_path() -> str:
+    assert _uv_path is not None  # set by _preflight_uv_version() before use
+    return _uv_path
 
 
 def _preflight_env() -> None:
@@ -218,7 +344,7 @@ def _preflight_modal_secrets() -> None:
     """
     print(f"Preflighting Modal secrets ({len(REQUIRED_MODAL_SECRETS)} required)")
     proc = _infisical_run(
-        ["uv", "run", "modal", "secret", "list", "--json"],
+        [_require_uv_path(), "run", "modal", "secret", "list", "--json"],
         env_slug="dev",
         capture_output=True,
     )
@@ -308,7 +434,7 @@ def _preflight_infisical_keys(
             )
         keys_text = subprocess.run(
             [
-                "uv",
+                _require_uv_path(),
                 "run",
                 "python",
                 "-c",
@@ -476,7 +602,7 @@ def _preflight_gcs_buckets(
         module = _source_module_for(handler_file, source)
         bucket_proc = subprocess.run(
             [
-                "uv",
+                _require_uv_path(),
                 "run",
                 "python",
                 "-c",
@@ -784,7 +910,7 @@ def _deploy_via_host_subprocess(handler_file: Path) -> None:
             os.environ["INFISICAL_TOKEN"],
             "--env=dev",
             "--",
-            "uv",
+            _require_uv_path(),
             "run",
             "modal",
             "deploy",
@@ -908,11 +1034,6 @@ def _infisical_run(
     )
 
 
-def _fail(msg: str) -> NoReturn:
-    print(f"ERROR: {msg}", file=sys.stderr)
-    sys.exit(1)
-
-
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -1009,6 +1130,7 @@ def main() -> int:
         )
         return 1
 
+    _preflight_uv_version()
     _preflight_env()
 
     # Acquire lock *before* the working-tree preflight so the snapshot below

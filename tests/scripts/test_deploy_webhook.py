@@ -104,6 +104,15 @@ def _write_default_stubs(bin_dir: Path) -> None:
         textwrap.dedent(
             """\
             #!/usr/bin/env bash
+            # _preflight_uv_version() probes every candidate on PATH with
+            # `--version` before anything else runs. Without this branch the
+            # stub would look unparseable/incompatible and the preflight
+            # would fall through to a real uv further down the outer PATH,
+            # silently escaping this stub sandbox for every test in this file.
+            if [[ "${1:-}" == "--version" ]]; then
+                echo "uv 0.11.29 (stub)"
+                exit 0
+            fi
             if [[ "${1:-}" == "run" && "${2:-}" == "modal" ]]; then
                 shift 2
                 exec modal "$@"
