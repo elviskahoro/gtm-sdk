@@ -14,52 +14,41 @@
 description = "downstream consumer: crm-uploader"
 
 [consumers."crm-uploader".modules]
-"libs.attio.attributes" = [
-  "create_attribute",
-  "ensure_select_options",
-  "is_select_attribute_writable",
-  "list_select_options",
-]
-"libs.attio.client" = ["get_client"]
-"libs.attio.companies" = [
-  "find_company_by_domain",
-  "find_company_by_name",
-  "set_company_owner",
-  "stub_create_company",
-]
-"libs.attio.contracts" = ["ReliabilityEnvelope"]
-"libs.attio.ext_tam" = [
-  "EXT_TAM_OBJECT",
-  "find_by_person_and_account",
-  "upsert_ext_tam",
-]
-"libs.attio.gtm_content" = ["GTM_CONTENT_OBJECT", "upsert_gtm_content"]
-"libs.attio.models" = [
+"libs.attio" = [
   "AttributeCreateResult",
   "CompanyInput",
+  "EXT_TAM_OBJECT",
   "ExtTamInput",
+  "GTM_CONTENT_OBJECT",
   "GtmContentInput",
   "NoteInput",
   "PersonInput",
-]
-"libs.attio.notes" = ["create_note"]
-"libs.attio.objects" = ["create_object"]
-"libs.attio.people" = [
-  "_search_people_raw",
+  "ReliabilityEnvelope",
+  "build_patch_record_request",
+  "create_attribute",
+  "create_note",
+  "create_object",
+  "describe_attio_error",
+  "ensure_select_options",
+  "find_by_person_and_account",
+  "find_company_by_domain",
+  "find_company_by_name",
   "find_person_by_name_at_company",
   "find_person_by_sanity_author_id",
-  "search_people",
-  "set_person_sanity_author_id",
-  "stub_create_person",
-  "upsert_person",
-]
-"libs.attio.sdk_boundary" = [
-  "build_patch_record_request",
-  "describe_attio_error",
-]
-"libs.attio.values" = [
   "format_company_description",
   "format_company_domains",
   "format_company_linkedin",
   "format_location_from_parts",
+  "get_client",
+  "is_select_attribute_writable",
+  "list_select_options",
+  "search_people",
+  "set_company_owner",
+  "set_person_sanity_author_id",
+  "stub_create_company",
+  "stub_create_person",
+  "upsert_ext_tam",
+  "upsert_gtm_content",
+  "upsert_person",
 ]
+"libs.attio.people" = ["_search_people_raw"]
