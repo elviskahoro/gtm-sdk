@@ -55,8 +55,8 @@ def test_unit_workflow_uses_namespace_checkout_and_host_cache() -> None:
     ) in workflow
     assert "fetch-depth: 0" in workflow
     assert (
-        "namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 "
-        "# v1.6.0"
+        "namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 "
+        "# v1.6.1"
     ) in workflow
     assert "~/.dagger-sdk" in workflow
     assert "cache: uv" in workflow
