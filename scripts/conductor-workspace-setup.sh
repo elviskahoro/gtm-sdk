@@ -208,17 +208,19 @@ fi
 # curl-installing the unpinned latest release, same as dolt/infisical/uv above.
 if ! command -v bd >/dev/null 2>&1; then
   echo "info: installing bd with fallback installer"
-  curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash ||
+    echo "warning: bd fallback install failed, continuing without bd"
 fi
-if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
+if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]] && command -v bd >/dev/null 2>&1; then
   bd version
 fi
 
 if ! command -v roborev >/dev/null 2>&1; then
   echo "info: installing roborev with fallback installer"
-  curl -fsSL https://roborev.io/install.sh | bash
+  curl -fsSL https://roborev.io/install.sh | bash ||
+    echo "warning: roborev fallback install failed, continuing without roborev"
 fi
-if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
+if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]] && command -v roborev >/dev/null 2>&1; then
   roborev version
 fi
 git config --global alias.roborev '!roborev'
@@ -253,6 +255,8 @@ if [[ ! -e .beads ]]; then
     DOLT_REMOTE_USER="elviskahoro" DOLT_REMOTE_PASSWORD="${DOLTHUB_API_KEY}" \
       bd init --non-interactive --remote "${DOLT_REMOTE_URL}" ||
       echo "warning: could not seed beads DB from ${DOLT_REMOTE_URL}, falling back to a fresh local database"
+  else
+    echo "warning: DOLTHUB_API_KEY not available from .env.local or Infisical; falling back to a fresh local Beads database instead of ${DOLT_REMOTE_URL}"
   fi
   [[ ! -e .beads ]] && bd init --non-interactive --init-if-missing
 fi
