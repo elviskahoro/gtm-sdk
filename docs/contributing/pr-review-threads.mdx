@@ -1,0 +1,33 @@
+---
+title: "PR review-thread utility"
+description: "Inspect and selectively resolve GitHub PR review threads with scripts/pr-review-threads.py, run entirely through a pinned Dagger container."
+---
+
+`scripts/pr-review-threads.py` replaces the ad hoc manual workflow of paginating `gh api graphql` for a PR's review threads and hand-picking unresolved CodeRabbit comments to resolve. It always runs `gh` inside a pinned Dagger container — there is no host `gh` fallback, so it does not run in environments without a Dagger engine (for example, Conductor cloud sandboxes).
+
+## Usage
+
+```bash
+scripts/pr-review-threads.py inspect [--repo OWNER/REPO] [--pr NUMBER] \
+    [--provider LOGIN] [--unresolved-only] [--format table|json]
+
+scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
+    --thread THREAD_ID [--thread THREAD_ID ...] [--allow-outdated] \
+    [--format table|json]
+```
+
+`--repo`/`--pr` default to the current branch's associated PR (via `gh pr view`). `--provider coderabbitai` is a shorthand for the `coderabbitai[bot]` author login; any other value matches an exact `author.login`.
+
+`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is injected into the Dagger container only as a secret environment variable — never in argv, image layers, logs, or the script's own output.
+
+## Safety model
+
+- `inspect` is strictly read-only and never invokes the resolve mutation.
+- `resolve` mutates only the thread IDs passed via `--thread`. It never guesses or resolves by path/body/provider.
+- The request is all-or-nothing: any unknown thread ID, or any outdated thread without `--allow-outdated`, refuses the entire call before any mutation runs.
+- Already-resolved thread IDs are reported as no-ops; no mutation call is issued for them.
+- Exit codes: `0` success, `2` usage error, `3` auth/API/GraphQL failure, `4` refusal (unsafe/unknown/outdated mutation request).
+
+## Implementation notes
+
+Pagination is fully recursive across `reviewThreads`, `reviews`, top-level PR comments, and each thread's own nested `comments` connection. The base container image is pinned (`ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim`), matching `scripts/webhooks-handlers-redeploy.py`'s `DAGGER_BASE_IMAGE`, for toolchain consistency across the repo's Dagger pipelines.
