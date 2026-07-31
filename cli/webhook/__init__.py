@@ -23,8 +23,7 @@ def sync() -> None:
     write_registry(registry)
     print(
         f"wrote {REGISTRY_PATH.relative_to(REGISTRY_PATH.parents[1])}: "
-        f"{len(registry.webhooks)} per-source rows, "
-        f"{len(registry.singletons)} singleton apps",
+        f"{len(registry.webhooks)} per-source rows",
         file=sys.stderr,
     )
 
