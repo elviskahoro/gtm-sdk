@@ -23,7 +23,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -57,11 +57,11 @@ def prt() -> Iterator[ModuleType]:
 
 
 def _threads_payload(
-    nodes: list[dict],
+    nodes: list[dict[str, Any]],
     *,
     has_next: bool = False,
     cursor: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "data": {
             "repository": {
@@ -83,7 +83,7 @@ def _thread_node(
     outdated: bool = False,
     author: str = "coderabbitai[bot]",
     comment_has_next: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "id": thread_id,
         "isResolved": resolved,
@@ -239,7 +239,7 @@ def test_filter_threads_unresolved_only(prt: ModuleType) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _threads_fixture(prt: ModuleType) -> list:
+def _threads_fixture(prt: ModuleType) -> list[Any]:
     return [
         prt.Thread(
             id="RESOLVED",
@@ -377,7 +377,7 @@ def test_cmd_resolve_refuses_unknown_thread(prt: ModuleType) -> None:
 
 def test_cmd_resolve_reports_partial_progress_on_mutation_failure(
     prt: ModuleType,
-    capsys: pytest.CaptureFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A later mutation failing must not hide the earlier ones that succeeded."""
     mutated_ids: list[str] = []
@@ -481,7 +481,10 @@ def _build_dagger_mock(stdout_value: str) -> tuple[MagicMock, MagicMock]:
 
     dag = MagicMock(name="dag")
     dag.container.return_value.from_.return_value = base_container
-    dag.set_secret.side_effect = lambda name, value: MagicMock(_secret=(name, value))
+    def set_secret(name: str, value: str) -> MagicMock:
+        return MagicMock(_secret=(name, value))
+
+    dag.set_secret.side_effect = set_secret
 
     connection_cm = MagicMock(name="connection_cm")
     connection_cm.__aenter__ = AsyncMock(return_value=None)
