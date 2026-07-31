@@ -13,8 +13,9 @@ Two layers, mirroring the split used elsewhere in this repo:
 Neither layer needs a live Dagger engine or real GitHub credentials.
 """
 
-# ruff: noqa: S101, SLF001 -- asserts are the point of a test file; SLF001 covers
-# deliberate white-box use of the script's private helpers (_build_parser, etc).
+# ruff: noqa: S101, SLF001, TRY003, EM101 -- asserts are the point of a test file;
+# SLF001 covers deliberate white-box use of the script's private helpers
+# (_build_parser, etc); TRY003/EM101 cover inline test-fixture error messages.
 
 from __future__ import annotations
 
@@ -374,6 +375,61 @@ def test_cmd_resolve_refuses_unknown_thread(prt: ModuleType) -> None:
     assert exit_code == prt.EXIT_REFUSAL
 
 
+def test_cmd_resolve_reports_partial_progress_on_mutation_failure(
+    prt: ModuleType,
+) -> None:
+    """A later mutation failing must not hide the earlier ones that succeeded."""
+    mutated_ids: list[str] = []
+
+    def fake_run_gh(args: list[str]) -> str:
+        joined = " ".join(args)
+        if "resolveReviewThread" in joined:
+            if "T2" in joined:
+                raise prt.GhApiError("simulated network failure")
+            mutated_ids.append("T1")
+            return json.dumps(
+                {
+                    "data": {
+                        "resolveReviewThread": {
+                            "thread": {
+                                "id": "T1",
+                                "isResolved": True,
+                                "isOutdated": False,
+                            },
+                        },
+                    },
+                },
+            )
+        return json.dumps(_threads_payload([_thread_node("T1"), _thread_node("T2")]))
+
+    args = prt._build_parser().parse_args(
+        ["resolve", "--repo", "o/r", "--pr", "1", "--thread", "T1", "--thread", "T2"],
+    )
+    exit_code = prt._cmd_resolve(args, fake_run_gh)
+    assert exit_code == prt.EXIT_API_ERROR
+    assert mutated_ids == ["T1"]
+
+
+# ---------------------------------------------------------------------------
+# PR/repo resolution: fork-safe base-repo parsing
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_current_pr_uses_base_repo_from_url(prt: ModuleType) -> None:
+    """For a fork-based PR, headRepository is the fork -- url names the base repo."""
+
+    def fake_run_gh(_args: list[str]) -> str:
+        return json.dumps(
+            {
+                "number": 42,
+                "url": "https://github.com/upstream-owner/upstream-repo/pull/42",
+            },
+        )
+
+    owner, repo, number = prt.resolve_current_pr(fake_run_gh)
+    assert (owner, repo, number) == ("upstream-owner", "upstream-repo", 42)
+
+
 # ---------------------------------------------------------------------------
 # Mocked-Dagger transport: container chain, secret injection, no token leakage
 # ---------------------------------------------------------------------------
@@ -424,7 +480,8 @@ def test_dagger_transport_injects_token_as_secret_not_env(prt: ModuleType) -> No
     fake_dagger.dag.container.return_value.from_.assert_called_once_with(
         prt.DAGGER_BASE_IMAGE,
     )
-    fake_dagger.dag.set_secret.assert_called_once_with("gh-token", "sekret-token")
+    expected_name = prt._content_addressed_secret_name("gh-token", "sekret-token")
+    fake_dagger.dag.set_secret.assert_called_once_with(expected_name, "sekret-token")
 
     secret_container = (
         fake_dagger.dag.container.return_value.from_.return_value.with_exec.return_value
@@ -433,7 +490,7 @@ def test_dagger_transport_injects_token_as_secret_not_env(prt: ModuleType) -> No
     # a plain with_env_variable or baked into the with_exec argv.
     name, secret_obj = secret_container.with_secret_variable.call_args[0]
     assert name == "GH_TOKEN"
-    assert secret_obj._secret == ("gh-token", "sekret-token")
+    assert secret_obj._secret == (expected_name, "sekret-token")
 
     final_exec_args = (
         secret_container.with_secret_variable.return_value.with_exec.call_args[0][0]
