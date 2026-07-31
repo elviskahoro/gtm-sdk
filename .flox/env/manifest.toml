@@ -12,6 +12,7 @@ uv.version = "0.11.26"
 dolt.pkg-path = "dolt"
 infisical.pkg-path = "infisical"
 gh.pkg-path = "gh"
+git.pkg-path = "git"
 bd.flake = "github:gastownhall/beads/v1.1.0"
 roborev.flake = "github:kenn-io/roborev/v0.62.1"
 # gum.pkg-path = "gum"
@@ -93,10 +94,6 @@ roborev.flake = "github:kenn-io/roborev/v0.62.1"
 [options]
 # Systems that environment is compatible with. uv 0.11.26 is not published
 # for Intel macOS (x86_64-darwin).
-systems = [
-  "aarch64-darwin",
-  "aarch64-linux",
-  "x86_64-linux",
-]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
 # Uncomment to disable CUDA detection.
 # cuda-detection = false

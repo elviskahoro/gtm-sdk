@@ -18,8 +18,13 @@ Usage:
     scripts/webhooks-handlers-redeploy.py <handler> <source>
     scripts/webhooks-handlers-redeploy.py <handler> --all
 
-The ``DAGGER_DRY_RUN=1`` env var swaps the Dagger deploy for a direct
-``infisical run -- uv run modal deploy`` invocation on the host. Used by the
+The ``GTM_DEPLOY_VIA_FLOX=1`` env var swaps the Dagger deploy for a
+Flox-activated ``infisical run -- uv run modal deploy`` invocation on the
+host, for environments where Dagger's container model cannot run at all
+(Conductor cloud sandboxes — see "Webhook deploys" in AGENTS.md and issue
+#284). Flox (`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix store
+instead of container namespaces, so it provides the same reproducibility
+guarantee Dagger gives Mac/CI without needing nested-runc. Also used by the
 test suite so CI does not need a Dagger engine running.
 
 The shebang is a plain ``python3``, not ``uv run python``: ``[tool.uv]
@@ -919,17 +924,37 @@ async def _deploy_via_dagger(
         ).sync()
 
 
-def _deploy_via_host_subprocess(handler_file: Path) -> None:
-    """Test-only fallback: run modal deploy on the host (no Dagger engine needed).
+def _deploy_via_flox(handler_file: Path) -> None:
+    """Run modal deploy inside a Flox-activated shell (no Dagger engine needed).
 
-    Activated by ``DAGGER_DRY_RUN=1``. Mirrors the bash script's deploy
-    shape so the existing stub-binary tests (``infisical``/``modal``/``uv``
-    in ``tests/scripts/test_deploy_webhook.py``) exercise the same code
-    path without requiring a real Dagger engine in CI.
+    Activated by ``GTM_DEPLOY_VIA_FLOX=1``. Dagger cannot run in Conductor
+    cloud sandboxes (nested-runc creation fails at the kernel level — issue
+    #284, do not reinvestigate). Flox pins ``uv``/``git`` via the Nix store
+    (``.flox/env/manifest.toml``) rather than container namespaces, so
+    ``flox activate`` gives the same version-reproducibility guarantee
+    Dagger provides on Mac/CI, without needing containerization at all.
+
+    Unlike ``_deploy_via_dagger``, there is no Dagger ``with_exec`` cache to
+    defeat, so no content-addressed secret naming is needed here — Infisical
+    creds flow straight through ``infisical run`` exactly as they do for
+    every other preflight in this file, never through the parent process's
+    ``os.environ`` (see AGENTS.md "Scripted deploy pitfalls").
+
+    Calls ``uv`` directly rather than via ``_require_uv_path()``'s PATH-scan:
+    Flox pins an exact ``uv`` version in the activated shell, so the PATH
+    resolution that protects the non-Flox path is redundant here and would
+    just re-discover the same activated binary.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
     subprocess.run(
         [
+            "flox",
+            "activate",
+            "--dir",
+            str(REPO_ROOT),
+            "--mode",
+            "run",
+            "--",
             "infisical",
             "run",
             "--projectId",
@@ -938,7 +963,7 @@ def _deploy_via_host_subprocess(handler_file: Path) -> None:
             os.environ["INFISICAL_TOKEN"],
             "--env=dev",
             "--",
-            _require_uv_path(),
+            "uv",
             "run",
             "modal",
             "deploy",
@@ -998,8 +1023,8 @@ def _deploy_one(handler_file: Path, source: str) -> None:
     handler_file.write_text(original.replace(PLACEHOLDER, source))
 
     try:
-        if os.environ.get("DAGGER_DRY_RUN") == "1":
-            _deploy_via_host_subprocess(handler_file)
+        if os.environ.get("GTM_DEPLOY_VIA_FLOX") == "1":
+            _deploy_via_flox(handler_file)
         else:
             modal_token_id, modal_token_secret = _resolve_modal_tokens()
             asyncio.run(

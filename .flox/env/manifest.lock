@@ -12,6 +12,9 @@
       "gh": {
         "pkg-path": "gh"
       },
+      "git": {
+        "pkg-path": "git"
+      },
       "infisical": {
         "pkg-path": "infisical"
       },
@@ -41,13 +44,13 @@
       "description": "Relational database with version control and CLI a-la Git",
       "install_id": "dolt",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "dolt-2.1.9",
       "pname": "dolt",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:19:04.392947Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:41.783449Z",
       "stabilities": [
         "unstable"
       ],
@@ -70,13 +73,13 @@
       "description": "Relational database with version control and CLI a-la Git",
       "install_id": "dolt",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "dolt-2.1.9",
       "pname": "dolt",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:52:31.867262Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:52:43.013594Z",
       "stabilities": [
         "unstable"
       ],
@@ -99,13 +102,13 @@
       "description": "Relational database with version control and CLI a-la Git",
       "install_id": "dolt",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "dolt-2.1.9",
       "pname": "dolt",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-14T15:09:28.104466Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:22.174311Z",
       "stabilities": [
         "unstable"
       ],
@@ -128,13 +131,13 @@
       "description": "GitHub CLI tool",
       "install_id": "gh",
       "license": "MIT",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "gh-2.96.0",
       "pname": "gh",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:19:04.970347Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:42.356074Z",
       "stabilities": [
         "unstable"
       ],
@@ -157,13 +160,13 @@
       "description": "GitHub CLI tool",
       "install_id": "gh",
       "license": "MIT",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "gh-2.96.0",
       "pname": "gh",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:52:32.705096Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:52:44.728847Z",
       "stabilities": [
         "unstable"
       ],
@@ -186,13 +189,13 @@
       "description": "GitHub CLI tool",
       "install_id": "gh",
       "license": "MIT",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "gh-2.96.0",
       "pname": "gh",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-14T15:09:29.073060Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:23.142918Z",
       "stabilities": [
         "unstable"
       ],
@@ -209,19 +212,111 @@
       "priority": 5
     },
     {
+      "attr_path": "git",
+      "broken": false,
+      "derivation": "/nix/store/p5zk3a15253q3xj694j7fpib81bbrj0z-git-2.54.0.drv",
+      "description": "Distributed version control system",
+      "install_id": "git",
+      "license": "GPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "git-2.54.0",
+      "pname": "git",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:42.401717Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.54.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/fa8bp120sy3kiyrsy6l47lfan0zjl589-git-2.54.0-doc",
+        "out": "/nix/store/01258rj9fvamcl4bf7yjffysmwyvd72i-git-2.54.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "git",
+      "broken": false,
+      "derivation": "/nix/store/9qws0dpk8k46pllp8jbywn7hwjghlgxh-git-2.54.0.drv",
+      "description": "Distributed version control system",
+      "install_id": "git",
+      "license": "GPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "git-2.54.0",
+      "pname": "git",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:52:44.785056Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.54.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/pf9h57hj6j7s6p16y9j3xlhqgzn60nin-git-2.54.0-debug",
+        "doc": "/nix/store/hypxgl3rcxiyj56dq1ixwihqg23asklm-git-2.54.0-doc",
+        "out": "/nix/store/r0581vs09k8g2pkd41w4g7m8y14rnpbc-git-2.54.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "git",
+      "broken": false,
+      "derivation": "/nix/store/z4bgb40x2r71vpkilbff5lbybjw4wkka-git-2.54.0.drv",
+      "description": "Distributed version control system",
+      "install_id": "git",
+      "license": "GPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "git-2.54.0",
+      "pname": "git",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:23.204424Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.54.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/6mj7lgxzx4zzdinr3xvxwa8gd0jrp4jq-git-2.54.0-debug",
+        "doc": "/nix/store/6k14cjwl7a5q78w3dddbm4x49k9g4ywp-git-2.54.0-doc",
+        "out": "/nix/store/1k2lblqlj39azh6wn1sffa2869vrg3mr-git-2.54.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
       "attr_path": "infisical",
       "broken": false,
       "derivation": "/nix/store/2wk99li8hrlspwrhm4401bnmcnfjngl6-infisical-0.41.90.drv",
       "description": "Official Infisical CLI",
       "install_id": "infisical",
       "license": "MIT",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "infisical-0.41.90",
       "pname": "infisical",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:19:20.820791Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:58.596278Z",
       "stabilities": [
         "unstable"
       ],
@@ -244,13 +339,13 @@
       "description": "Official Infisical CLI",
       "install_id": "infisical",
       "license": "MIT",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "infisical-0.41.90",
       "pname": "infisical",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:52:52.584509Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:53:04.889194Z",
       "stabilities": [
         "unstable"
       ],
@@ -273,13 +368,13 @@
       "description": "Official Infisical CLI",
       "install_id": "infisical",
       "license": "MIT",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "infisical-0.41.90",
       "pname": "infisical",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-14T15:09:50.635455Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:44.523139Z",
       "stabilities": [
         "unstable"
       ],
@@ -302,13 +397,13 @@
       "description": "Extremely fast Python package installer and resolver, written in Rust",
       "install_id": "uv",
       "license": "[ Apache-2.0, MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "uv-0.11.26",
       "pname": "uv",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:21:52.461387Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:56:32.647084Z",
       "stabilities": [
         "unstable"
       ],
@@ -331,13 +426,13 @@
       "description": "Extremely fast Python package installer and resolver, written in Rust",
       "install_id": "uv",
       "license": "[ Apache-2.0, MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "uv-0.11.26",
       "pname": "uv",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-11T03:55:57.294571Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:56:13.295419Z",
       "stabilities": [
         "unstable"
       ],
@@ -360,13 +455,13 @@
       "description": "Extremely fast Python package installer and resolver, written in Rust",
       "install_id": "uv",
       "license": "[ Apache-2.0, MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
       "name": "uv-0.11.26",
       "pname": "uv",
-      "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
-      "rev_count": 1031299,
-      "rev_date": "2026-07-08T14:55:02Z",
-      "scrape_date": "2026-07-14T15:13:03.808325Z",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T19:00:18.532070Z",
       "stabilities": [
         "unstable"
       ],

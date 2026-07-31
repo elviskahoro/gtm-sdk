@@ -4,11 +4,11 @@ Verifies the substitute -> deploy -> restore loop preserves the working tree,
 even when the deploy fails mid-iteration. Stubs modal / infisical / uv / gcloud
 so the test never makes real network calls.
 
-Sets ``DAGGER_DRY_RUN=1`` so the script's deploy step shells out to the host
-stubs instead of spinning up a Dagger engine. The non-dry-run path (which
-runs ``modal deploy`` inside a Dagger container) is covered by manual smoke
-tests — running it in CI would require a Dagger engine and real Modal/GCP
-credentials.
+Sets ``GTM_DEPLOY_VIA_FLOX=1`` so the script's deploy step shells out to the
+host stubs (via a stubbed ``flox``) instead of spinning up a Dagger engine.
+The Dagger path (which runs ``modal deploy`` inside a Dagger container) is
+covered by manual smoke tests — running it in CI would require a Dagger
+engine and real Modal/GCP credentials.
 
 BD: gtm-sdk-43z (epic gtm-sdk-yol). Each test maps to one acceptance criterion.
 """
@@ -158,6 +158,22 @@ def _write_default_stubs(bin_dir: Path) -> None:
     )
     _make_executable(bin_dir / "gcloud")
 
+    (bin_dir / "flox").write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            # _deploy_via_flox() invokes `flox activate --dir ... --mode run -- <cmd>`.
+            # The stub just execs everything after the first `--`, matching how a
+            # real `flox activate --mode run` hands off to the wrapped command
+            # without an interactive shell.
+            while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
+            shift  # drop the --
+            exec "$@"
+            """,
+        ),
+    )
+    _make_executable(bin_dir / "flox")
+
 
 @pytest.fixture
 def stub_bin(tmp_path: Path) -> Path:
@@ -232,11 +248,11 @@ def _run_deploy(
     # script header. Tests pin to "dev" since they stub the modal binary
     # and never reach Infisical.
     env.setdefault("INFISICAL_ENV", "dev")
-    # Force the host-subprocess deploy path so the existing infisical/modal/uv
+    # Force the Flox deploy path so the existing infisical/modal/uv/flox
     # stubs handle the deploy step. The Dagger path is exercised by manual
     # smoke tests; bringing a Dagger engine into CI would also drag in real
     # Modal credentials, which defeats the purpose of these stubs.
-    env.setdefault("DAGGER_DRY_RUN", "1")
+    env.setdefault("GTM_DEPLOY_VIA_FLOX", "1")
     if env_overrides:
         env.update(env_overrides)
     # Invoke the script with the test's own interpreter rather than
