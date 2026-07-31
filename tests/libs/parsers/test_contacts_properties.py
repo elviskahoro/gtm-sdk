@@ -75,10 +75,6 @@ _VALID_PHONE_NUMBERS = (
 )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="parse_phone currently returns arbitrary set iteration order",
-)
 @given(numbers=st.lists(st.sampled_from(_VALID_PHONE_NUMBERS), min_size=1, max_size=4))
 @example(
     numbers=[
