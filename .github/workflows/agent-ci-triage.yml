@@ -1,0 +1,347 @@
+name: CI failure triage
+
+# Diagnoses a failed CI run and files (or bumps) a Linear issue explaining why.
+#
+# Why this exists: nothing closed the loop between "a check went red" and "here is
+# the cause". Scheduled and non-required checks have no reviewer by construction,
+# and it showed -- the nightly Integration tests were red for 13 consecutive nights
+# (2026-07-15 .. 2026-07-27) with no in-repo reaction, and eb815f9 put a red Trunk
+# Check on main.
+#
+# Deliberately DIAGNOSIS-ONLY -- it never commits and never opens a PR:
+#   1. GITHUB_TOKEN cannot push to .github/workflows/**, and no `permissions:` value
+#      grants that (there is no `workflows` permission; even write-all is rejected).
+#      Workflow YAML is a large share of this repo's failures, so an auto-fix path
+#      would be unavailable exactly where it is needed most.
+#   2. An agent with `contents: write` on a public repo is a far larger blast radius
+#      than the problem justifies.
+#
+# Fully containerized: every step that runs logic runs in Dagger. The agent is
+# invoked through `oz-agent-sdk` (plain Python, Apache-2.0) rather than
+# `warpdotdev/oz-agent-action`, which is what makes that possible -- a `uses:` action
+# cannot run inside a container. It submits a CLOUD run, matching this repo's
+# guidance to prefer cloud agent runs over local execution.
+#
+# Because the agent executes in Warp's sandbox it cannot read this checkout, so all
+# evidence is extracted here and embedded in the prompt: the failed-step log tail and
+# the diff between the default branch and the failing commit. Handing a cloud agent a
+# repo path would be actively worse than giving it nothing -- `git show` would still
+# succeed against whatever its sandbox cloned, and it would diagnose confidently
+# against the wrong bytes.
+#
+# The agent never holds a credential that can change anything. Its only output is
+# tmp/diagnosis.md; a separate container turns that into a Linear issue. So the Linear
+# key is never in the agent's environment, and dedupe lives in reviewable, tested
+# Python rather than depending on a model following an instruction.
+#
+# Reporting does not depend on the agent working: if no diagnosis comes back, a
+# log-only stub is filed instead. Thirteen consecutive silent red nights is the
+# problem being solved, and it would recur if a broken agent meant no ticket.
+#
+# None of warpdotdev/oz-agent-action's reusable workflows are used. `fix-failing-
+# checks.yml` in particular cannot be: its guard is
+# `if:\n  ${{ ... }} && !startsWith(...)`, which leaves literal text outside the
+# replacement token, so GitHub compiles it to a non-empty (therefore truthy) string
+# -- it fires on SUCCESSFUL runs, its recursion guard never engages, and it then
+# runs `git push --force`.
+
+on:
+  workflow_run:
+    # Matched on workflow NAME, not filename or job name.
+    workflows:
+      - Unit tests
+      - Lint and type check with Trunk
+      - Integration tests
+      - Docs checks
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-ci-triage-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage CI failure
+    runs-on: ubuntu-latest
+    # No ${{ }} wrapper: an `if:` mixing a replacement token with literal text
+    # evaluates to a non-empty string and is therefore always truthy. GitHub warns
+    # on this as of 2026-01-29 and actionlint flags it.
+    #
+    # The head_repository guard is load-bearing: workflow_run executes in the BASE
+    # repo with full access to secrets even when reacting to a fork PR. Without it,
+    # a fork's failing CI would reach our credentials.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_repository.full_name == github.repository && !startsWith(github.event.workflow_run.head_branch, 'agent/ci-triage')
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read # download the failed run's logs
+      pull-requests: write # link the Linear issue from the PR, when there is one
+    steps:
+      # Check out the DEFAULT branch, never the failing run's head. A workflow_run
+      # job holds secrets, so materializing the triggering commit into the workspace
+      # is the classic workflow-run-target-code-checkout weakness that semgrep flags.
+      # The next step fetches the failing commit as a bare object instead, so the
+      # diff can be read out of it without it ever becoming the working tree -- the
+      # same trusted-asset pattern tests-unit.yml uses for its CI pipeline files.
+      - name: Checkout the default branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the failing commit as a read-only object
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Already present when the failure was on the default branch (the common
+          # case: nightly schedule runs and pushes to main).
+          git fetch --no-tags --depth=1 origin "${HEAD_SHA}" 2>/dev/null \
+            || echo "::notice::Could not fetch ${HEAD_SHA}; diagnosis will rely on logs alone."
+
+      # `secrets` is unavailable in a job-level `if:`, so gate on a step output.
+      # Without this, merging before the secrets exist would turn every red check
+      # into two red checks.
+      - name: Preflight credentials
+        id: preflight
+        env:
+          WARP_API_KEY: ${{ secrets.WARP_API_KEY }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          missing=''
+          for name in WARP_API_KEY LINEAR_API_KEY; do
+            eval "value=\${$name}"
+            if [ -z "${value}" ]; then
+              missing="${missing} ${name}"
+            fi
+          done
+          if [ -n "${missing}" ]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping triage; not configured:${missing}"
+          else
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect failure logs
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          mkdir -p tmp
+          # --log-failed exits non-zero when a run has no failed-step logs
+          # (cancellation, startup_failure); a partial log still beats aborting.
+          gh run view "${RUN_ID}" --log-failed > tmp/ci-failure.log 2>&1 || true
+          # Bound the prompt: keep the tail, where the actual error lives.
+          tail -c 100000 tmp/ci-failure.log > tmp/ci-failure-tail.log
+          wc -l tmp/ci-failure-tail.log
+
+      # The agent runs in Warp's cloud and cannot read this checkout, so the diff
+      # has to be extracted here, where the failing commit actually exists. This is
+      # not a convenience: pointing a cloud agent at a repo path would let `git show`
+      # succeed against whatever its sandbox cloned, and it would then diagnose
+      # confidently against the wrong bytes. Wrong-and-plausible beats missing.
+      - name: Extract the diff that introduced the failure
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          mkdir -p tmp
+          : > tmp/failing-diff.patch
+          if git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
+            # Empty for a failure already on the default branch, which is fine --
+            # the log carries the signal there.
+            git diff origin/HEAD "${HEAD_SHA}" > tmp/failing-diff.patch 2>/dev/null || true
+          else
+            echo "::notice::${HEAD_SHA} is not available locally; diagnosing from logs alone."
+          fi
+          wc -c tmp/failing-diff.patch
+
+      # Dagger from here on. Both agent invocation and Linear filing run in pinned
+      # containers, so no `uses:` step touches this pipeline's logic.
+      #
+      # `version` is pinned deliberately -- unpinned, the action installs the latest
+      # CLI at run time, so an upstream release silently changes the engine and
+      # forces a cold image pull with no diff in this repo. Keep in lockstep with the
+      # dagger-io pin below and with tests-*.yml.
+      - name: Setup Dagger
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        uses: dagger/dagger-for-github@e47aba410ef9bb9ed81a4d2a97df31061e5e842e # 8.0.0
+        with:
+          version: 0.21.7
+
+      # ubuntu-latest, so a plain venv works -- unlike the Namespace runners in
+      # tests-*.yml, which are PEP 668 externally-managed and need the root-free
+      # dance. Prepending to $GITHUB_PATH keeps the invocations a bare
+      # `dagger run python …`.
+      - name: Install Dagger Python SDK
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          dagger_venv="$HOME/.dagger-sdk/controller-venv"
+          python3 -m venv "${dagger_venv}"
+          "${dagger_venv}/bin/pip" install --quiet \
+            "dagger-io==0.21.7" "anyio==4.13.0"
+          echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
+
+      # Runs the Oz agent through oz-agent-sdk inside a container instead of the
+      # `warpdotdev/oz-agent-action` runner action. The SDK is plain Python, which is
+      # what makes a fully containerized pipeline possible, and it submits a CLOUD
+      # run -- this repo's guidance prefers cloud runs over local execution.
+      #
+      # continue-on-error: a failed or slow agent must not fail the job. The next
+      # step substitutes a log-only stub so a red check still produces a ticket.
+      - name: Diagnose with Oz (Dagger)
+        id: diagnose
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        env:
+          WARP_API_KEY: ${{ secrets.WARP_API_KEY }}
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          OZ_ENVIRONMENT_ID: ${{ secrets.OZ_ENVIRONMENT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
+        run: |
+          dagger run python .github/workflows/ci/triage_diagnose_dagger.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow "${WORKFLOW}" \
+            --run-url "${RUN_URL}" \
+            --branch "${HEAD_BRANCH}" \
+            --commit "${HEAD_SHA}" \
+            --event "${TRIGGER_EVENT}" \
+            --log-file tmp/ci-failure-tail.log \
+            --diff-file tmp/failing-diff.patch \
+            --output tmp/diagnosis.md
+
+      # The reporting guarantee must not depend on the agent. Thirteen consecutive
+      # silent red nights is the problem being solved, and it would recur if a
+      # broken agent meant no ticket. A log-only issue is worse than a diagnosis and
+      # far better than silence.
+      - name: Ensure a diagnosis exists
+        if: steps.preflight.outputs.configured == 'true'
+        env:
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ -s tmp/diagnosis.md ]; then
+            echo "Agent produced a diagnosis."
+            exit 0
+          fi
+          echo "::warning::No agent diagnosis; filing a log-only issue."
+          {
+            printf 'Automated diagnosis was unavailable for this failure, so this\n'
+            printf 'issue records the failure itself. See the run log for detail.\n\n'
+            printf '**Root cause** — not determined automatically.\n\n'
+            printf '**Fix** — needs a human look at [the failing run](%s).\n\n' "${RUN_URL}"
+            printf '**Confidence** — none; no analysis was produced.\n\n'
+            printf 'Tail of the failed step:\n\n```\n'
+            tail -c 3000 tmp/ci-failure-tail.log 2>/dev/null || true
+            printf '\n```\n'
+          } > tmp/diagnosis.md
+
+      - name: File or bump the Linear issue (Dagger)
+        id: linear_dagger
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          # Passed as env, never interpolated into the command line: a branch name
+          # is attacker-influencable text, and `${{ }}` in a `run:` block is
+          # substituted before the shell parses it (semgrep run-shell-injection).
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          dagger run python .github/workflows/ci/triage_dagger.py \
+            --workflow "${WORKFLOW}" \
+            --run-url "${RUN_URL}" \
+            --branch "${HEAD_BRANCH}" \
+            --commit "${HEAD_SHA}" \
+            --timestamp "${UPDATED_AT}" \
+            --diagnosis-file tmp/diagnosis.md \
+            --output tmp/linear-issue.tsv
+
+      # Fallback, not a second attempt at the same thing: runs the identical
+      # stdlib-only script directly on the runner when the containerized path could
+      # not start. Skipped when Dagger already succeeded.
+      - name: File or bump the Linear issue (host fallback)
+        id: linear_host
+        if: >-
+          steps.preflight.outputs.configured == 'true' && steps.linear_dagger.outcome != 'success'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          echo "::warning::Dagger path unavailable; filing from the host instead."
+          python3 scripts/ci-triage-linear-issue.py \
+            --workflow "${WORKFLOW}" \
+            --run-url "${RUN_URL}" \
+            --branch "${HEAD_BRANCH}" \
+            --commit "${HEAD_SHA}" \
+            --timestamp "${UPDATED_AT}" \
+            --diagnosis-file tmp/diagnosis.md \
+            --output tmp/linear-issue.tsv
+
+      - name: Publish the issue reference
+        id: linear
+        if: steps.preflight.outputs.configured == 'true'
+        run: |
+          if [ -s tmp/linear-issue.tsv ]; then
+            {
+              printf 'identifier=%s\n' "$(cut -f1 tmp/linear-issue.tsv | tail -1)"
+              printf 'url=%s\n' "$(cut -f2 tmp/linear-issue.tsv | tail -1)"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No Linear issue was filed (no diagnosis, or both paths failed)."
+          fi
+
+      - name: Summarize
+        if: steps.linear.outputs.url != ''
+        env:
+          IDENTIFIER: ${{ steps.linear.outputs.identifier }}
+          URL: ${{ steps.linear.outputs.url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          {
+            printf '### CI failure triaged\n\n'
+            printf '**%s** failed. Filed as [%s](%s).\n' \
+              "${WORKFLOW}" "${IDENTIFIER}" "${URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Best-effort: a red check on a PR should say where the explanation went.
+      # Scheduled failures have no PR, which is why Linear is the primary channel.
+      - name: Link the Linear issue from the PR, if there is one
+        if: steps.linear.outputs.url != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          IDENTIFIER: ${{ steps.linear.outputs.identifier }}
+          URL: ${{ steps.linear.outputs.url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          pr="$(gh pr list --search "${HEAD_SHA}" --state open \
+                  --json number --jq '.[0].number // empty')"
+          if [ -z "${pr}" ]; then
+            echo "::notice::No open PR for ${HEAD_SHA}; Linear issue only."
+            exit 0
+          fi
+          gh pr comment "${pr}" --body "$(printf '%s failed on this PR ([run](%s)). Triage: [%s](%s).' \
+            "${WORKFLOW}" "${RUN_URL}" "${IDENTIFIER}" "${URL}")"

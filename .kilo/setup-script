@@ -6,7 +6,7 @@
 # (the primary repo root) into this script's environment.
 set -e
 
-cd "$WORKTREE_PATH"
+cd "${WORKTREE_PATH}"
 
 # --- Symlink gitignored, per-checkout directories ---------------------------
 # .beads, .agents, and .claude are all gitignored (see .gitignore) — they are
@@ -20,14 +20,14 @@ cd "$WORKTREE_PATH"
 # rather than copying the `../.beads` relative link, since Kilo worktrees
 # live two levels deeper (.kilo/worktrees/<branch>/) and a naive relative
 # copy would resolve to a nonexistent path.
-if [ -e "$REPO_PATH/.beads" ] && [ ! -e "$WORKTREE_PATH/.beads" ]; then
-  BEADS_REAL="$(cd "$REPO_PATH/.beads" && pwd -P)"
-  ln -s "$BEADS_REAL" "$WORKTREE_PATH/.beads"
+if [ -e "${REPO_PATH}/.beads" ] && [ ! -e "${WORKTREE_PATH}/.beads" ]; then
+  BEADS_REAL="$(cd "${REPO_PATH}/.beads" && pwd -P)"
+  ln -s "${BEADS_REAL}" "${WORKTREE_PATH}/.beads"
 fi
 
 for dir in .agents .claude; do
-  if [ -e "$REPO_PATH/$dir" ] && [ ! -e "$WORKTREE_PATH/$dir" ]; then
-    ln -s "$REPO_PATH/$dir" "$WORKTREE_PATH/$dir"
+  if [ -e "${REPO_PATH}/${dir}" ] && [ ! -e "${WORKTREE_PATH}/${dir}" ]; then
+    ln -s "${REPO_PATH}/${dir}" "${WORKTREE_PATH}/${dir}"
   fi
 done
 
@@ -39,7 +39,7 @@ done
 # Required for the "git roborev review --wait" pre-push gate (see AGENTS.md
 # "Session Completion"). roborev ships a plain `roborev` binary, not a
 # `git-roborev` PATH shim, so alias it under git for that invocation to work.
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="${HOME}/.local/bin:${PATH}"
 if ! command -v roborev >/dev/null 2>&1; then
   curl -fsSL https://roborev.io/install.sh | bash
 fi

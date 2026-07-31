@@ -284,26 +284,35 @@ def _preflight_infisical_keys(
     """
     env_slug = os.environ["INFISICAL_ENV"]
     is_slack = handler_file.stem == "export_to_slack"
+    is_clay = handler_file.stem == "export_to_clay"
     preflight: list[str] = []
     for source in sources:
         module = _source_module_for(handler_file, source)
         # For the Slack handler also emit the source's per-automation channel
         # key (slack_get_channel_secret_name(), e.g. CALCOM_SLACK_CHANNEL_ID) so
         # it's preflighted alongside the source's declared keys.
-        extra = "print(Webhook.slack_get_channel_secret_name())\n" if is_slack else ""
+        if is_clay:
+            keys_program = (
+                "print(Webhook.clay_get_webhook_url_secret_name())\n"
+                "print(Webhook.clay_get_webhook_auth_token_secret_name())\n"
+            )
+        else:
+            extra = (
+                "print(Webhook.slack_get_channel_secret_name())\n" if is_slack else ""
+            )
+            keys_program = (
+                "for k in list(Webhook.required_api_keys()) + "
+                "list(Webhook.optional_api_keys()):\n"
+                "    print(k)\n"
+                f"{extra}"
+            )
         keys_text = subprocess.run(
             [
                 "uv",
                 "run",
                 "python",
                 "-c",
-                (
-                    f"from {module} import Webhook\n"
-                    "for k in list(Webhook.required_api_keys()) + "
-                    "list(Webhook.optional_api_keys()):\n"
-                    "    print(k)\n"
-                    f"{extra}"
-                ),
+                (f"from {module} import Webhook\n{keys_program}"),
             ],
             cwd=REPO_ROOT,
             capture_output=True,
