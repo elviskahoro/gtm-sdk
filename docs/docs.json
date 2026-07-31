@@ -50,7 +50,8 @@
             "group": "Contributing",
             "pages": [
               "contributing/development",
-              "contributing/module-boundaries"
+              "contributing/module-boundaries",
+              "contributing/pr-review-threads"
             ]
           },
           {
