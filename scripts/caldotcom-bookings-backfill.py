@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 """Backfill historical cal.com bookings into Attio by replaying them through the
 live Modal webhook (``export-to-attio-from-calcom-bookings``).
 
@@ -48,6 +48,15 @@ prod-backed webhook deployment to actually create meeting records.
 """
 
 from __future__ import annotations
+
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
+from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+
+if __name__ == "__main__":
+    _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse
 import json
