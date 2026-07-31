@@ -209,9 +209,9 @@ def test_unit_workflow_only_publishes_dependency_images_from_trusted_main() -> N
     normalized = " ".join(workflow.split())
 
     assert (
-        "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8" in workflow
+        "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a" in workflow
     )
-    assert "# v6.19.2" in workflow
+    assert "# v7.3.0" in workflow
     assert "github.ref == 'refs/heads/main'" in normalized
     assert "github.event_name != 'pull_request'" in normalized
     assert "steps.pytest_dependency_image.outputs.hit != 'true'" in normalized
