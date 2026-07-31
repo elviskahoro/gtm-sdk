@@ -90,7 +90,7 @@ jobs:
       # dependencies are immutable OCI inputs and never enter this mount.
       - name: Cache host Dagger and uv data
         id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@58bf6e08898e88803c098e2b522668541cd3b2e3 # v1.6.0
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. Keep the host SDK
           # controller venv and its uv-managed CPython as sibling paths
