@@ -126,11 +126,13 @@ _ABSENT_VALUES: tuple[tuple[str, str | None], ...] = (
 _NON_LINKEDIN_TEXT = st.text(
     alphabet=string.ascii_letters + string.digits + " -_.",
 ).filter(_contains_no_linkedin_host)
+_MALFORMED_AUTHORITIES = ("[", "//[", "http://[", "https://[in/foo")
 _TAGGED_UNSAFE_VALUES: st.SearchStrategy[tuple[str, str]] = st.one_of(
     st.tuples(st.just("host"), _HOST_CONFUSION),
     st.tuples(st.just("lookalike"), _BRAND_LOOKALIKE),
     st.tuples(st.just("userinfo"), _PATH.map(_with_userinfo)),
     st.tuples(st.just("plain-text"), _NON_LINKEDIN_TEXT),
+    st.tuples(st.just("malformed-authority"), st.sampled_from(_MALFORMED_AUTHORITIES)),
 )
 
 
@@ -161,6 +163,8 @@ def test_is_linkedin_url_accepts_canonical_linkedin_hosts(
 @example(case_and_value=("userinfo", "https://foo@linkedin.com/in/bar"))
 @example(case_and_value=("userinfo", "https://foo:bar@linkedin.com/in/baz"))
 @example(case_and_value=("scheme", "mailto:foo@linkedin.com"))
+@example(case_and_value=("malformed-authority", "["))
+@example(case_and_value=("malformed-authority", "//["))
 def test_is_linkedin_url_rejects_unsafe_or_non_linkedin_values(
     case_and_value: tuple[str, str],
 ) -> None:
