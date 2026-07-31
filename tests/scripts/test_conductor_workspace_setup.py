@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import sys
 import textwrap
 import tomllib
 from pathlib import Path
@@ -233,7 +234,7 @@ def _run_setup(
     path_parts = [str(bin_dir)]
     if later_uv_dir is not None:
         path_parts.append(str(later_uv_dir))
-    path_parts += ["/usr/bin", "/bin"]
+    path_parts += [str(Path(sys.executable).parent), "/usr/bin", "/bin"]
     env = {
         "HOME": str(home),
         "PATH": os.pathsep.join(path_parts),
