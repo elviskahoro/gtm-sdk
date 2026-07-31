@@ -137,5 +137,4 @@ def build_registry() -> Registry:
     return Registry(
         generated_at=datetime.now(UTC),
         webhooks=webhooks,
-        singletons=[],
     )
