@@ -25,8 +25,12 @@ failure, 4 refusal (unsafe/unknown/outdated mutation request).
 Safety model:
   - `inspect` never invokes the resolveReviewThread mutation.
   - `resolve` requires explicit `--thread` IDs. Any unknown ID, or any
-    outdated thread without `--allow-outdated`, aborts the *whole* call
-    before any mutation runs (all-or-nothing -- no partial resolution).
+    outdated thread without `--allow-outdated`, refuses the whole request
+    before any mutation runs. GitHub has no batch resolve mutation, so this
+    guarantee covers validation, not the mutation calls themselves -- if a
+    later mutation fails after earlier ones already succeeded, the command
+    reports what it actually resolved and exits non-zero rather than
+    silently losing that partial progress.
   - Already-resolved thread IDs are reported as no-ops; no mutation call is
     issued for them.
   - GH_TOKEN is injected into the Dagger container only as a secret env var
@@ -47,8 +51,10 @@ if __name__ == "__main__":
 
 import argparse  # noqa: E402
 import asyncio  # noqa: E402
+import hashlib  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
+import re  # noqa: E402
 import subprocess  # noqa: E402
 from collections.abc import Callable  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
@@ -95,7 +101,7 @@ query($owner: String!, $repo: String!, $number: Int!, $after: String) {
 """
 
 _THREAD_COMMENTS_QUERY = """
-query($threadId: ID!, $after: String!) {
+query($threadId: ID!, $after: String) {
   node(id: $threadId) {
     ... on PullRequestReviewThread {
       comments(first: 50, after: $after) {
@@ -220,9 +226,13 @@ def _run_graphql(
     return payload
 
 
-def _paginate_thread_comments(run_gh: RunGh, thread: Thread) -> None:
-    """Fully paginate a single thread's nested `comments` connection in place."""
-    after = None
+def _paginate_thread_comments(run_gh: RunGh, thread: Thread, after: str | None) -> None:
+    """Fully paginate a single thread's nested `comments` connection in place.
+
+    `after` is the first page's own `endCursor` (already fetched by the main
+    threads query) -- starting from `None` here would refetch page 1 as
+    page 2, silently duplicating comments instead of advancing.
+    """
     while True:
         payload = _run_graphql(
             run_gh,
@@ -252,8 +262,8 @@ def _comment_from_node(node: dict[str, Any]) -> Comment:
     )
 
 
-def _thread_from_node(node: dict[str, Any]) -> tuple[Thread, bool]:
-    """Return the parsed thread plus whether its first comment page had more."""
+def _thread_from_node(node: dict[str, Any]) -> tuple[Thread, bool, str | None]:
+    """Return the parsed thread, whether its first comment page had more, and its cursor."""
     thread = Thread(
         id=node["id"],
         is_resolved=node["isResolved"],
@@ -262,7 +272,8 @@ def _thread_from_node(node: dict[str, Any]) -> tuple[Thread, bool]:
         line=node.get("line"),
         comments=[_comment_from_node(n) for n in node["comments"]["nodes"]],
     )
-    return thread, node["comments"]["pageInfo"]["hasNextPage"]
+    page_info = node["comments"]["pageInfo"]
+    return thread, page_info["hasNextPage"], page_info["endCursor"]
 
 
 def fetch_review_threads(
@@ -273,7 +284,7 @@ def fetch_review_threads(
 ) -> list[Thread]:
     """Fully paginate `reviewThreads`, including each thread's own comments."""
     threads: list[Thread] = []
-    needs_more_comments: list[Thread] = []
+    needs_more_comments: list[tuple[Thread, str | None]] = []
     after = None
     while True:
         payload = _run_graphql(
@@ -283,16 +294,16 @@ def fetch_review_threads(
         )
         connection = payload["data"]["repository"]["pullRequest"]["reviewThreads"]
         for node in connection["nodes"]:
-            thread, had_more_comments = _thread_from_node(node)
+            thread, had_more_comments, comment_cursor = _thread_from_node(node)
             threads.append(thread)
             if had_more_comments:
-                needs_more_comments.append(thread)
+                needs_more_comments.append((thread, comment_cursor))
         if not connection["pageInfo"]["hasNextPage"]:
             break
         after = connection["pageInfo"]["endCursor"]
 
-    for thread in needs_more_comments:
-        _paginate_thread_comments(run_gh, thread)
+    for thread, comment_cursor in needs_more_comments:
+        _paginate_thread_comments(run_gh, thread, comment_cursor)
     return threads
 
 
@@ -427,19 +438,22 @@ def resolve_thread(thread_id: str, run_gh: RunGh) -> dict[str, Any]:
 
 
 def resolve_current_pr(run_gh: RunGh) -> tuple[str, str, int]:
-    raw = run_gh(
-        [
-            "pr",
-            "view",
-            "--json",
-            "number,headRepositoryOwner,headRepository",
-        ],
-    )
+    """Resolve (owner, repo, number) for the current branch's PR.
+
+    Review threads live on the PR's *base* repository, not its head. For a
+    fork-based PR those differ -- `headRepositoryOwner`/`headRepository`
+    would point at the contributor's fork, and querying reviewThreads there
+    with the upstream PR number returns nothing. `url` (e.g.
+    https://github.com/OWNER/REPO/pull/NUMBER) always names the base repo.
+    """
+    raw = run_gh(["pr", "view", "--json", "number,url"])
     data = json.loads(raw)
-    owner = data["headRepositoryOwner"]["login"]
-    repo = data["headRepository"]["name"]
-    number = data["number"]
-    return owner, repo, number
+    match = re.match(r"^https://github\.com/([^/]+)/([^/]+)/pull/\d+$", data["url"])
+    if match is None:
+        msg = f"Could not parse owner/repo from PR url: {data['url']!r}"
+        raise GhApiError(msg)
+    owner, repo = match.group(1), match.group(2)
+    return owner, repo, data["number"]
 
 
 # ---------------------------------------------------------------------------
@@ -486,9 +500,25 @@ def render_threads(threads: list[Thread], fmt: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _content_addressed_secret_name(base: str, value: str) -> str:
+    """Derive a Dagger secret name that changes when `value` changes.
+
+    `dagger.dag.set_secret(name, value)` caches downstream `with_exec` steps
+    keyed on the secret's name, not its plaintext -- reusing a fixed name
+    across a rotated token would silently replay a stale cached `gh` call
+    (including a stale mutation result) against the OLD credentials.
+    Mirrors `scripts/webhooks-handlers-redeploy.py`'s helper of the same name.
+    """
+    digest = hashlib.sha256(value.encode()).hexdigest()[:12]
+    return f"{base}-{digest}"
+
+
 async def _run_gh_in_dagger(args: list[str], gh_token: str) -> str:
     async with dagger.connection(dagger.Config(log_output=sys.stderr)):
-        token_secret = dagger.dag.set_secret("gh-token", gh_token)
+        token_secret = dagger.dag.set_secret(
+            _content_addressed_secret_name("gh-token", gh_token),
+            gh_token,
+        )
         container = (
             dagger.dag.container()
             .from_(DAGGER_BASE_IMAGE)
@@ -605,6 +635,16 @@ def _cmd_inspect(args: argparse.Namespace, run_gh: RunGh) -> int:
 
 
 def _cmd_resolve(args: argparse.Namespace, run_gh: RunGh) -> int:
+    """Resolve the caller's selected threads.
+
+    "All-or-nothing" applies to *validation*: an unknown ID or an outdated
+    thread without --allow-outdated refuses the whole request before any
+    mutation call is made (see plan_mutations). It does not make the actual
+    GitHub mutations atomic -- GitHub has no batch resolveReviewThread call,
+    so if a later mutation fails after earlier ones already succeeded, this
+    reports the successfully-mutated threads and returns EXIT_API_ERROR
+    rather than silently losing that partial progress.
+    """
     owner, repo, number = _resolve_repo_and_pr(args, run_gh)
     threads = fetch_review_threads(owner, repo, number, run_gh)
     plan = plan_mutations(threads, args.threads, allow_outdated=args.allow_outdated)
@@ -617,8 +657,14 @@ def _cmd_resolve(args: argparse.Namespace, run_gh: RunGh) -> int:
         results.append(
             {"thread_id": tid, "previously_resolved": True, "now_resolved": True},
         )
+    exit_code = EXIT_OK
     for tid in plan.to_mutate:
-        mutated = resolve_thread(tid, run_gh)
+        try:
+            mutated = resolve_thread(tid, run_gh)
+        except GhApiError as exc:
+            print(f"ERROR: failed to resolve {tid}: {exc}", file=sys.stderr)
+            exit_code = EXIT_API_ERROR
+            break
         results.append(
             {
                 "thread_id": tid,
@@ -633,7 +679,7 @@ def _cmd_resolve(args: argparse.Namespace, run_gh: RunGh) -> int:
     else:
         for r in results:
             print(f"{r['thread_id']}  now_resolved={r['now_resolved']}")
-    return EXIT_OK
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:

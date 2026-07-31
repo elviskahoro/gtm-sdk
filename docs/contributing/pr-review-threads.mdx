@@ -24,7 +24,7 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 - `inspect` is strictly read-only and never invokes the resolve mutation.
 - `resolve` mutates only the thread IDs passed via `--thread`. It never guesses or resolves by path/body/provider.
-- The request is all-or-nothing: any unknown thread ID, or any outdated thread without `--allow-outdated`, refuses the entire call before any mutation runs.
+- Validation is all-or-nothing: any unknown thread ID, or any outdated thread without `--allow-outdated`, refuses the entire request before any mutation runs. GitHub has no batch resolve mutation, so this does not make the mutation calls themselves atomic — if a later one fails after earlier ones succeeded, the command reports what it actually resolved and exits non-zero.
 - Already-resolved thread IDs are reported as no-ops; no mutation call is issued for them.
 - Exit codes: `0` success, `2` usage error, `3` auth/API/GraphQL failure, `4` refusal (unsafe/unknown/outdated mutation request).
 
