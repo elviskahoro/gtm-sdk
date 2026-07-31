@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 # trunk-ignore-all(bandit/B607): list-arg subprocess only; `bd` resolved via PATH on purpose.
 """Copy this repo's beads issues into the Gas Town rig's beads database.
 
@@ -54,6 +54,15 @@ usually does NOT have it). Otherwise the first existing town in
 """
 
 from __future__ import annotations
+
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
+from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+
+if __name__ == "__main__":
+    _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse
 import os

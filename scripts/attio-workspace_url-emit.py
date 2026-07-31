@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 """Emit shareable Attio inspection URLs for the injected ``ATTIO_API_KEY``.
 
 Resolves the token's workspace slug from ``GET /v2/self`` (reusing
@@ -34,6 +34,15 @@ Usage:
 """
 
 from __future__ import annotations
+
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
+from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+
+if __name__ == "__main__":
+    _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse
 import json
