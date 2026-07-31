@@ -31,20 +31,24 @@ def bootstrap_uv(*, script_path: str, mode: RunMode) -> None:
 
     Imports in unit tests must never replace the pytest process, and an active
     virtualenv has already selected a concrete interpreter.  In both cases the
-    bootstrap is intentionally inert.  A sentinel prevents an accidental
-    re-exec loop if ``uv`` itself delegates back to this entrypoint.
+    bootstrap is intentionally inert.  The sentinel names the entrypoint being
+    re-execed, which prevents its loop without suppressing a child script's
+    independent bootstrap.
     """
-    if os.environ.get(UV_BOOTSTRAP_ENV) or sys.prefix != sys.base_prefix:
+    resolved_script = Path(script_path).resolve()
+    if (
+        os.environ.get(UV_BOOTSTRAP_ENV) == str(resolved_script)
+        or sys.prefix != sys.base_prefix
+    ):
         return
 
-    resolved_script = Path(script_path).resolve()
     repo_root = resolved_script.parents[1]
     try:
         candidate = find_compatible_uv_for_repo(cwd=str(repo_root))
     except NoCompatibleUvError as exc:
         _fail(str(exc))
 
-    os.environ[UV_BOOTSTRAP_ENV] = "1"
+    os.environ[UV_BOOTSTRAP_ENV] = str(resolved_script)
     os.chdir(repo_root)
     command = [candidate.path, "run"]
     if mode == "python":
