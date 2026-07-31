@@ -1,21 +1,22 @@
-"""Placeholder ETL contract for a future Fathom message webhook.
+"""Webhook ETL contract for Fathom transcript-message ingestion.
 
-Fathom currently only delivers recording webhooks (see ``call.py``). This
-module exists so ``webhooks/export_to_gcp_etl.py``'s eager import resolves.
-Selecting this class as the active provider raises immediately — there is
-no validated payload shape to ingest yet.
+Fathom delivers a recording as one webhook payload.  The message stream is
+the recording transcript, so this handler preserves the recording metadata on
+each row while expanding each transcript utterance into its own JSONL row.
 """
 
 from typing import Any
 
+import orjson
 from pydantic import BaseModel
 
 from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
 from libs.fathom import Webhook as FathomWebhook
+from src.fathom.utils import generate_gcs_filename, generate_row_id
 
 
 class Webhook(FathomWebhook):
-    """Stub. Not implemented — see module docstring."""
+    """Fathom recording webhook projected into transcript message rows."""
 
     @staticmethod
     def modal_get_secret_collection_names() -> list[str]:
@@ -59,19 +60,41 @@ class Webhook(FathomWebhook):
         raise NotImplementedError("Fathom message ETL is not implemented")
 
     def etl_is_valid_webhook(self) -> bool:
-        return False
+        return bool(self.transcript)
 
     def etl_get_invalid_webhook_error_msg(self) -> str:
-        return "Fathom message webhook ETL is not implemented"
+        return "Fathom message webhook has no transcript messages"
 
     def etl_get_json(self, storage: Any = None) -> str:
-        raise NotImplementedError("Fathom message ETL is not implemented")
+        del storage
+        metadata = self.model_dump(mode="json", exclude={"transcript"})
+        lines = []
+        for index, message in enumerate(self.transcript or []):
+            lines.append(
+                orjson.dumps(
+                    {
+                        **metadata,
+                        "id": generate_row_id(self.recording_id, index),
+                        "speaker_display_name": message.speaker.display_name,
+                        "speaker_matched_calendar_invitee_email": (
+                            message.speaker.matched_calendar_invitee_email
+                        ),
+                        "text": message.text,
+                        "timestamp": message.timestamp,
+                    },
+                ).decode("utf-8"),
+            )
+        return "\n".join(lines) + "\n"
 
     def etl_get_file_name(self) -> str:
-        raise NotImplementedError("Fathom message ETL is not implemented")
+        return generate_gcs_filename(
+            self.recording_start_time,
+            self.recording_id,
+            self.meeting_title or self.title,
+        )
 
     def etl_get_base_models(self, storage: Any) -> list[Any]:
-        raise NotImplementedError("Fathom message ETL is not implemented")
+        raise NotImplementedError("LanceDB integration is Phase 2+")
 
     # --- Attio export contract ---
 
@@ -106,6 +129,29 @@ class Webhook(FathomWebhook):
 
     def slack_get_messages(self) -> list[Any]:
         return []
+
+    # --- Clay webhook-table export contract (not implemented for this source) ---
+
+    @staticmethod
+    def clay_get_app_name() -> str:
+        return "export-to-clay-from-fathom-messages"
+
+    @staticmethod
+    def clay_get_webhook_url_secret_name() -> str:
+        return "UNSUPPORTED_CLAY_WEBHOOK_URL"
+
+    @staticmethod
+    def clay_get_webhook_auth_token_secret_name() -> str:
+        return "UNSUPPORTED_CLAY_WEBHOOK_AUTH_TOKEN"
+
+    def clay_is_valid_webhook(self) -> bool:
+        return False
+
+    def clay_get_invalid_webhook_error_msg(self) -> str:
+        return "Clay export is not supported for Fathom messages"
+
+    def clay_get_row(self) -> dict[str, Any]:
+        return {}
 
     def attio_is_valid_webhook(self) -> bool:
         # Fathom "messages" are action-items / one-line follow-ups that don't

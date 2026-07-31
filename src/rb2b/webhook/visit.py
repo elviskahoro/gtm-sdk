@@ -170,6 +170,54 @@ class Webhook(Rb2bWebhook):
     def slack_get_messages(self) -> list[Any]:
         return []
 
+    # --- Clay webhook-table export contract ---
+
+    @staticmethod
+    def clay_get_app_name() -> str:
+        return "export-to-clay-from-rb2b-visits"
+
+    @staticmethod
+    def clay_get_webhook_url_secret_name() -> str:
+        return "CLAY_WEBHOOK_URL_RB2B"
+
+    @staticmethod
+    def clay_get_webhook_auth_token_secret_name() -> str:
+        return "CLAY_WEBHOOK_AUTH_TOKEN_RB2B"
+
+    def clay_is_valid_webhook(self) -> bool:
+        return bool(self.payload.business_email)
+
+    def clay_get_invalid_webhook_error_msg(self) -> str:
+        return "rb2b Clay export requires business_email"
+
+    def clay_get_row(self) -> dict[str, Any]:
+        payload = self.payload
+        event_type = "repeat_visit" if payload.is_repeat_visit else "first_visit"
+        return {
+            "event_id": self.event_id,
+            "event_type": event_type,
+            "received_at": self.timestamp.isoformat(),
+            "seen_at": payload.seen_at.isoformat() if payload.seen_at else None,
+            "connection": self.connection,
+            "first_name": payload.first_name,
+            "last_name": payload.last_name,
+            "business_email": payload.business_email,
+            "linkedin_url": payload.linkedin_url,
+            "title": payload.title,
+            "company_name": payload.company_name,
+            "company_domain": self._attio_domain(),
+            "company_website": payload.website,
+            "industry": payload.industry,
+            "employee_count": payload.employee_count,
+            "estimated_revenue": payload.estimate_revenue,
+            "city": payload.city,
+            "state": payload.state,
+            "zipcode": payload.zipcode,
+            "captured_url": payload.captured_url,
+            "referrer": payload.referrer,
+            "tags": payload.tags,
+        }
+
     def _attio_domain(self) -> str | None:
         return extract_domain(self.payload.website)
 

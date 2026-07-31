@@ -6,7 +6,6 @@ from typing import Any
 
 from .client import SanityConfig, query
 from .errors import SanityQueryError
-from .models import BlogPost
 
 # GROQ projection that flattens the post into the shape BlogPost expects:
 # - slug/title/description are lifted out of the nested `metadata` object
@@ -68,15 +67,3 @@ def fetch_blog_posts_raw(
                 f"{type(row).__name__}: {str(row)[:200]}",
             )
     return rows
-
-
-def fetch_blog_posts(
-    config: SanityConfig,
-    *,
-    allow_env_token: bool = False,
-) -> list[BlogPost]:
-    """Fetch every blog post, validated into :class:`BlogPost` models."""
-    return [
-        BlogPost.model_validate(row)
-        for row in fetch_blog_posts_raw(config, allow_env_token=allow_env_token)
-    ]

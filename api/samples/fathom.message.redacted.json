@@ -1,0 +1,60 @@
+{
+  "action_items": null,
+  "calendar_invitees": [
+    {
+      "email": "host@dlthub.com",
+      "email_domain": "dlthub.com",
+      "is_external": false,
+      "matched_speaker_display_name": "Host",
+      "name": "Host"
+    },
+    {
+      "email": "guest@example.com",
+      "email_domain": "example.com",
+      "is_external": true,
+      "matched_speaker_display_name": null,
+      "name": "Guest"
+    }
+  ],
+  "calendar_invitees_domains_type": "external",
+  "created_at": "2026-07-29T16:25:58Z",
+  "crm_matches": null,
+  "is_test_event": true,
+  "meeting_title": "Host / Guest",
+  "meeting_type": "Weekly demos",
+  "meeting_url": "https://meet.google.com/example",
+  "recorded_by": {
+    "email": "host@dlthub.com",
+    "email_domain": "dlthub.com",
+    "name": "Host",
+    "team": "GTM"
+  },
+  "recording_end_time": "2026-07-29T16:25:49Z",
+  "recording_id": 168379684,
+  "recording_start_time": "2026-07-29T16:01:12Z",
+  "scheduled_end_time": "2026-07-29T16:30:00Z",
+  "scheduled_start_time": "2026-07-29T16:00:00Z",
+  "share_url": "https://fathom.video/share/redacted",
+  "shared_with": "all_teams",
+  "title": "Workshopping a demo",
+  "transcript": [
+    {
+      "speaker": {
+        "display_name": "Host",
+        "matched_calendar_invitee_email": "host@dlthub.com"
+      },
+      "text": "Welcome to the demo.",
+      "timestamp": "00:00:00"
+    },
+    {
+      "speaker": {
+        "display_name": "Guest",
+        "matched_calendar_invitee_email": null
+      },
+      "text": "Thanks for having me.",
+      "timestamp": "00:00:04"
+    }
+  ],
+  "transcript_language": "en",
+  "url": "https://fathom.video/calls/765698721"
+}

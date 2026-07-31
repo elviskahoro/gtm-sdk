@@ -17,13 +17,32 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-# --- Parent-repo symlinks -------------------------------------------------
-PARENT_REPO="$(dirname "$(git rev-parse --git-common-dir)")/.."
-PRIMARY_REPO_ROOT="$(cd "${PARENT_REPO}" && pwd)"
+# --- Primary-checkout symlinks ---------------------------------------------
+# In a linked worktree, git-common-dir is the .git directory of the primary
+# checkout. Resolve that checkout directly; walking one directory higher
+# selects the surrounding Gas Town directory and its unrelated beads DB.
+PRIMARY_REPO_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
 
-[[ ! -f .env.local ]] && [[ -f "${PRIMARY_REPO_ROOT}/.env.local" ]] && ln -s "${PRIMARY_REPO_ROOT}/.env.local" .env.local
-[[ ! -L .agents ]] && [[ -d "${PRIMARY_REPO_ROOT}/.agents" ]] && ln -s "${PRIMARY_REPO_ROOT}/.agents" .agents
-[[ ! -L .claude ]] && [[ -d "${PRIMARY_REPO_ROOT}/.claude" ]] && ln -s "${PRIMARY_REPO_ROOT}/.claude" .claude
+ensure_primary_symlink() {
+  local link_path="$1"
+  local target_path="$2"
+
+  # The primary checkout owns its own links. Only linked worktrees should
+  # inherit or repair links into that checkout.
+  [[ ${REPO_ROOT} == "${PRIMARY_REPO_ROOT}" ]] && return 0
+
+  # Repair stale links from older setup versions, but never replace a regular
+  # file or directory that an operator created in the workspace.
+  if [[ -L ${link_path} ]] && [[ "$(readlink "${link_path}")" != "${target_path}" ]]; then
+    unlink "${link_path}"
+  fi
+  [[ ! -e ${link_path} ]] && [[ -e ${target_path} ]] && ln -s "${target_path}" "${link_path}"
+  return 0
+}
+
+[[ -f "${PRIMARY_REPO_ROOT}/.env.local" ]] && ensure_primary_symlink .env.local "${PRIMARY_REPO_ROOT}/.env.local"
+[[ -d "${PRIMARY_REPO_ROOT}/.agents" ]] && ensure_primary_symlink .agents "${PRIMARY_REPO_ROOT}/.agents"
+[[ -d "${PRIMARY_REPO_ROOT}/.claude" ]] && ensure_primary_symlink .claude "${PRIMARY_REPO_ROOT}/.claude"
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
@@ -85,15 +104,15 @@ verify_flox_tool() {
 
   tool_path="$(command -v "${tool}" || true)"
   case "${tool_path}" in
-    "${FLOX_BIN}"/*) ;;
-    "")
-      echo "error: Flox tool '${tool}' is missing from ${FLOX_BIN}" >&2
-      return 1
-      ;;
-    *)
-      echo "error: Flox tool '${tool}' resolved outside ${FLOX_BIN}: ${tool_path}" >&2
-      return 1
-      ;;
+  "${FLOX_BIN}"/*) ;;
+  "")
+    echo "error: Flox tool '${tool}' is missing from ${FLOX_BIN}" >&2
+    return 1
+    ;;
+  *)
+    echo "error: Flox tool '${tool}' resolved outside ${FLOX_BIN}: ${tool_path}" >&2
+    return 1
+    ;;
   esac
 
   if ! "${tool}" "$@"; then
@@ -143,7 +162,7 @@ if command -v flox >/dev/null 2>&1 && provision_flox_tools; then
 else
   if command -v flox >/dev/null 2>&1; then
     echo "warning: Flox ${FLOX_FAILURE_STAGE:-provisioning} failed; using fallback installers"
-    [[ -n ${FLOX_BIN:-} ]] && PATH="${PATH#"${FLOX_BIN}:"}"
+    [[ -n ${FLOX_BIN-} ]] && PATH="${PATH#"${FLOX_BIN}:"}"
   fi
   echo "info: provisioning source: fallback installers"
   # Non-Flox fallback (macOS Conductor workspaces): original installers.
@@ -192,6 +211,12 @@ git config --global alias.roborev '!roborev'
 # isn't enough: bogus dirs like a stray $HOME/.beads from a global bd install
 # pass the -e check but aren't a real project), otherwise seed a fresh local
 # DB from the shared DoltHub remote so the sandbox sees real issue history.
+if [[ ${REPO_ROOT} == "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ ! -e .beads ]]; then
+  unlink .beads
+fi
+if [[ ${REPO_ROOT} != "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
+  unlink .beads
+fi
 if [[ ! -e .beads ]] && [[ -e "${PRIMARY_REPO_ROOT}/.beads" ]] && bd -C "${PRIMARY_REPO_ROOT}" status >/dev/null 2>&1; then
   BEADS_REAL="$(cd "${PRIMARY_REPO_ROOT}/.beads" && pwd -P)"
   ln -s "${BEADS_REAL}" .beads

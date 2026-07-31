@@ -1,0 +1,65 @@
+# Symbols that downstream repos import from gtm-sdk.
+#
+# A symbol listed here is public API: it may be entirely unreferenced inside
+# this repo and still be load-bearing. Do not delete one because a dead-code
+# scan called it unused — see AGENTS.md, "Public API and downstream consumers".
+#
+# Generated file. Regenerate rather than hand-edit:
+#   scripts/downstream-contract-sync.py <consumer-checkout> --write
+#
+# Enforced by tests/test_downstream_contract.py, which runs in the required
+# `Unit tests` gate.
+
+[consumers."crm-uploader"]
+description = "downstream consumer: crm-uploader"
+
+[consumers."crm-uploader".modules]
+"libs.attio.attributes" = [
+  "create_attribute",
+  "ensure_select_options",
+  "is_select_attribute_writable",
+  "list_select_options",
+]
+"libs.attio.client" = ["get_client"]
+"libs.attio.companies" = [
+  "find_company_by_domain",
+  "find_company_by_name",
+  "set_company_owner",
+  "stub_create_company",
+]
+"libs.attio.contracts" = ["ReliabilityEnvelope"]
+"libs.attio.ext_tam" = [
+  "EXT_TAM_OBJECT",
+  "find_by_person_and_account",
+  "upsert_ext_tam",
+]
+"libs.attio.gtm_content" = ["GTM_CONTENT_OBJECT", "upsert_gtm_content"]
+"libs.attio.models" = [
+  "AttributeCreateResult",
+  "CompanyInput",
+  "ExtTamInput",
+  "GtmContentInput",
+  "NoteInput",
+  "PersonInput",
+]
+"libs.attio.notes" = ["create_note"]
+"libs.attio.objects" = ["create_object"]
+"libs.attio.people" = [
+  "_search_people_raw",
+  "find_person_by_name_at_company",
+  "find_person_by_sanity_author_id",
+  "search_people",
+  "set_person_sanity_author_id",
+  "stub_create_person",
+  "upsert_person",
+]
+"libs.attio.sdk_boundary" = [
+  "build_patch_record_request",
+  "describe_attio_error",
+]
+"libs.attio.values" = [
+  "format_company_description",
+  "format_company_domains",
+  "format_company_linkedin",
+  "format_location_from_parts",
+]

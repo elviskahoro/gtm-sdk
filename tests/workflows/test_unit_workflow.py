@@ -601,7 +601,15 @@ def test_unit_dagger_pipeline_uses_measured_four_worker_configuration() -> None:
     assert "-p pytest_asyncio.plugin" in source
     assert "-p anyio.pytest_plugin" in source
     assert '"PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"' in source
-    for excluded in ('".git"', '".entire"', '".kilo"'):
+    # Hypothesis's plugin must NOT be named here. It is enabled from addopts in
+    # pyproject.toml, because on a pull request tests-unit.yml runs the BASE
+    # branch's copy of this file (so a flag added here is inert until it reaches
+    # main, which the required gate would block). Re-adding it would also risk
+    # "Plugin already registered under a different name" if the two spellings
+    # ever diverge. tests/test_hypothesis_plugin.py guards the runtime result.
+    assert "_hypothesis_pytestplugin" not in source
+    assert '"HYPOTHESIS_PROFILE", "ci"' in source
+    for excluded in ('".git"', '".entire"', '".kilo"', '".hypothesis"'):
         assert excluded in source
     assert "--junit-xml=junit.xml" in source
     assert "echo $? > /src/pytest_rc" in source
