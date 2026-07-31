@@ -173,10 +173,28 @@ else
     curl -1sLf 'https://artifacts-cli.infisical.com/setup.rpm.sh' | sudo -E bash
     sudo dnf install -y infisical
   fi
-  if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+  # Presence alone isn't enough: pyproject.toml's [tool.uv] required-version
+  # can reject whatever `uv` happens to be first on PATH (e.g. a stray pyenv
+  # shim shadowing a compatible Homebrew install), and "latest" from the
+  # unpinned installer isn't guaranteed to satisfy it either. Delegate the
+  # actual compatibility check to scripts/lib/uv_resolve.py -- one
+  # implementation, reused by this script and the redeploy script's own
+  # bootstrap -- rather than re-deriving version comparison in bash.
+  UV_PINNED_VERSION="0.11.26" # keep in sync with .flox/env/manifest.toml's uv.version
+  UV_RESOLVER="${REPO_ROOT}/scripts/lib/uv_resolve.py"
+  if ! uv_resolved_path="$(python3 "${UV_RESOLVER}")"; then
+    echo "info: no uv on PATH satisfies required-version; installing pinned uv ${UV_PINNED_VERSION}"
+    # astral.sh/uv/install.sh only ever installs unpinned latest -- no
+    # --version flag, no UV_VERSION env var (confirmed against the script's
+    # own source). Each uv release instead publishes its own installer
+    # snapshot as a GitHub release asset with the version baked in.
+    curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_PINNED_VERSION}/uv-installer.sh" | sh
     export PATH="${HOME}/.local/bin:${PATH}"
+    uv_resolved_path="$(python3 "${UV_RESOLVER}")" # re-verify; set -e aborts loudly if still broken
   fi
+  uv_resolved_dir="$(dirname "${uv_resolved_path}")"
+  export PATH="${uv_resolved_dir}:${PATH}"
+  echo "info: using compatible uv at ${uv_resolved_path}"
 fi
 if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
   dolt version

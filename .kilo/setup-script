@@ -48,4 +48,20 @@ git config --global alias.roborev '!roborev'
 
 # --- Install Python deps -----------------------------------------------------
 # Use uv, never pip (see AGENTS.md "Package management").
+#
+# Presence alone isn't enough: pyproject.toml's [tool.uv] required-version
+# can reject whatever `uv` happens to be first on PATH. Delegate the actual
+# compatibility check to scripts/lib/uv_resolve.py -- the same implementation
+# scripts/conductor-workspace-setup.sh and webhooks-handlers-redeploy.py's
+# own bootstrap use -- rather than re-deriving version comparison here.
+UV_PINNED_VERSION="0.11.26" # keep in sync with .flox/env/manifest.toml's uv.version
+UV_RESOLVER="${WORKTREE_PATH}/scripts/lib/uv_resolve.py"
+if ! uv_resolved_path="$(python3 "${UV_RESOLVER}")"; then
+  curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_PINNED_VERSION}/uv-installer.sh" | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+  uv_resolved_path="$(python3 "${UV_RESOLVER}")" # re-verify; set -e aborts loudly if still broken
+fi
+uv_resolved_dir="$(dirname "${uv_resolved_path}")"
+export PATH="${uv_resolved_dir}:${PATH}"
+
 uv sync --frozen
