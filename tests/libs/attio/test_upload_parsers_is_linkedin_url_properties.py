@@ -68,6 +68,10 @@ def _format_valid_url(
     return f"{padding}{prefix}{host}{port}{path}{padding}"
 
 
+def _with_lookalike_host(prefix: str, host: str, path: str) -> str:
+    return f"{prefix}{host}{path}"
+
+
 def _with_disallowed_scheme(scheme: str, path: str) -> str:
     return f"{scheme}://linkedin.com{path}"
 
@@ -156,6 +160,7 @@ def test_is_linkedin_url_accepts_canonical_linkedin_hosts(
 @example(case_and_value=("userinfo", "foo@linkedin.com"))
 @example(case_and_value=("userinfo", "https://foo@linkedin.com/in/bar"))
 @example(case_and_value=("userinfo", "https://foo:bar@linkedin.com/in/baz"))
+@example(case_and_value=("scheme", "mailto:foo@linkedin.com"))
 def test_is_linkedin_url_rejects_unsafe_or_non_linkedin_values(
     case_and_value: tuple[str, str],
 ) -> None:
@@ -163,6 +168,30 @@ def test_is_linkedin_url_rejects_unsafe_or_non_linkedin_values(
     case, value = case_and_value
     event(case)
     assert is_linkedin_url(value) is False
+
+
+@given(host=_HOST_CONFUSION, path=_PATH)
+@example(host="linkedin.com.attacker.tld", path="/in/foo")
+def test_is_linkedin_url_rejects_prefixed_host_confusion(
+    host: str,
+    path: str,
+) -> None:
+    """A hostname extending linkedin.com is unsafe in every web URL form."""
+    for prefix in _WEB_PREFIXES:
+        event("host")
+        assert is_linkedin_url(_with_lookalike_host(prefix, host, path)) is False
+
+
+@given(host=_BRAND_LOOKALIKE, path=_PATH)
+@example(host="evil-linkedin.com", path="/in/foo")
+def test_is_linkedin_url_rejects_prefixed_brand_lookalikes(
+    host: str,
+    path: str,
+) -> None:
+    """Brand lookalikes are unsafe in every web URL form."""
+    for prefix in _WEB_PREFIXES:
+        event("lookalike")
+        assert is_linkedin_url(_with_lookalike_host(prefix, host, path)) is False
 
 
 @given(path=_PATH)
