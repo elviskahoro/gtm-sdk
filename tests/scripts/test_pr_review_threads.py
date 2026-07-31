@@ -377,6 +377,7 @@ def test_cmd_resolve_refuses_unknown_thread(prt: ModuleType) -> None:
 
 def test_cmd_resolve_reports_partial_progress_on_mutation_failure(
     prt: ModuleType,
+    capsys: pytest.CaptureFixture,
 ) -> None:
     """A later mutation failing must not hide the earlier ones that succeeded."""
     mutated_ids: list[str] = []
@@ -403,11 +404,35 @@ def test_cmd_resolve_reports_partial_progress_on_mutation_failure(
         return json.dumps(_threads_payload([_thread_node("T1"), _thread_node("T2")]))
 
     args = prt._build_parser().parse_args(
-        ["resolve", "--repo", "o/r", "--pr", "1", "--thread", "T1", "--thread", "T2"],
+        [
+            "resolve",
+            "--repo",
+            "o/r",
+            "--pr",
+            "1",
+            "--thread",
+            "T1",
+            "--thread",
+            "T2",
+            "--format",
+            "json",
+        ],
     )
     exit_code = prt._cmd_resolve(args, fake_run_gh)
     assert exit_code == prt.EXIT_API_ERROR
     assert mutated_ids == ["T1"]
+
+    captured = capsys.readouterr()
+    reported = json.loads(captured.out)
+    assert reported == [
+        {
+            "thread_id": "T1",
+            "previously_resolved": False,
+            "now_resolved": True,
+            "outdated": False,
+        },
+    ]
+    assert "simulated network failure" in captured.err
 
 
 # ---------------------------------------------------------------------------
