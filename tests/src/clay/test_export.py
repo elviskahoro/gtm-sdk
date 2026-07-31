@@ -37,12 +37,12 @@ def test_execute_reposts_same_event_id_for_transport_retries(
 
     first = execute(
         webhook_url="https://clay.test/hook",
-        auth_token="token",  # noqa: S106
+        auth_token="token",  # noqa: S106 # nosec B106
         row=row,
     )
     second = execute(
         webhook_url="https://clay.test/hook",
-        auth_token="token",  # noqa: S106
+        auth_token="token",  # noqa: S106 # nosec B106
         row=row,
     )
 

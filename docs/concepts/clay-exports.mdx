@@ -27,7 +27,7 @@ Public API keys are server-side credentials. Store them in the secret manager
 if a future reconciliation job needs them. The Tables API has no list-tables
 operation, so table IDs must be configured explicitly.
 
-## Idempotency contract
+## Duplicate handling
 
 Every exported row must contain a deterministic, non-empty `event_id`. RB2B
 uses its source event ID and Octolens derives an ID from the source and source

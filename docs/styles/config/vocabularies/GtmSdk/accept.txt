@@ -5,6 +5,7 @@ Exa
 Grafana
 Hookdeck
 Infisical
+idempotency
 Logfire
 Octolens
 Polars
@@ -32,7 +33,10 @@ stderr
 stdout
 subapps?
 unflushed
+upsert
 upserts
+passthrough
+rollout
 uv
 Dash0
 OTLP
