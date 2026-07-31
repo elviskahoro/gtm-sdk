@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 """Find pre-fix synthetic duplicate Attio meetings for manual UI deletion (ai-4bz.9).
 
 Before the dedup fix landed (ai-4bz.8), the live cal.com webhook and a partial
@@ -33,6 +33,15 @@ Requires ATTIO_API_KEY in the environment — inject via Infisical.
 """
 
 from __future__ import annotations
+
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
+from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+
+if __name__ == "__main__":
+    _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse
 import datetime as dt

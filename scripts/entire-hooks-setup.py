@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --script
+#!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
 # dependencies = []
@@ -25,6 +25,15 @@ Usage:
 """
 
 from __future__ import annotations
+
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
+from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+
+if __name__ == "__main__":
+    _bootstrap_uv(script_path=__file__, mode="script")
 
 import os
 import shutil
