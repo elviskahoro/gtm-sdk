@@ -288,13 +288,13 @@ def parse_phone(
     if not numbers:
         return ""
 
-    parsed_numbers: set[str] = set()
+    parsed_numbers: dict[str, None] = {}
     for number in numbers:
         try:
             parsed: PhoneNumber = phonenumbers.parse(number, default_region)
             if phonenumbers.is_valid_number(parsed):
                 e164: str = phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
-                parsed_numbers.add(e164)
+                parsed_numbers.setdefault(e164, None)
 
         except (phonenumbers.phonenumberutil.NumberParseException, TypeError):
             continue
