@@ -3,7 +3,7 @@ title: "PR review-thread utility"
 description: "Inspect and selectively resolve GitHub PR review threads with scripts/pr-review-threads.py, run entirely through a pinned Dagger container."
 ---
 
-`scripts/pr-review-threads.py` replaces the ad hoc manual workflow of paginating `gh api graphql` for a PR's review threads and hand-picking unresolved CodeRabbit comments to resolve. It always runs `gh` inside a pinned Dagger container — there is no host `gh` fallback, so it does not run in environments without a Dagger engine (for example, Conductor cloud sandboxes).
+`scripts/pr-review-threads.py` replaces the improvised manual workflow of paginating `gh api graphql` for a pull request's review threads and hand-picking unresolved CodeRabbit comments to resolve. It always runs `gh` inside a pinned Dagger container — there is no host `gh` fallback, so it does not run in environments without a Dagger engine (for example, Conductor cloud sandboxes).
 
 ## Usage
 
@@ -18,7 +18,7 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 `--repo`/`--pr` default to the current branch's associated PR (via `gh pr view`). `--provider coderabbitai` is a shorthand for the `coderabbitai[bot]` author login; any other value matches an exact `author.login`.
 
-`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is injected into the Dagger container only as a secret environment variable — never in argv, image layers, logs, or the script's own output.
+`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is injected into the Dagger container only as a secret environment variable — never in command-line arguments, image layers, logs, or the script's own output.
 
 ## Safety model
 
@@ -30,4 +30,4 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 ## Implementation notes
 
-Pagination is fully recursive across `reviewThreads`, `reviews`, top-level PR comments, and each thread's own nested `comments` connection. The base container image is pinned (`ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim`), matching `scripts/webhooks-handlers-redeploy.py`'s `DAGGER_BASE_IMAGE`, for toolchain consistency across the repo's Dagger pipelines.
+Pagination is fully recursive across `reviewThreads`, `reviews`, top-level pull request comments, and each thread's own nested `comments` connection. The base container image is pinned (`ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim`), matching `scripts/webhooks-handlers-redeploy.py`'s `DAGGER_BASE_IMAGE`, for dependency-version consistency across the repo's Dagger pipelines.
