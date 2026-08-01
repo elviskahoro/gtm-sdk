@@ -115,11 +115,14 @@ def _cache_key_tag(api_key: str) -> str:
     """Return the stable, non-secret tag used to partition Dagger caches."""
     # This is a cache partition identifier, not password storage; the API key
     # is never persisted, logged, or emitted by this function.
-    return hashlib.blake2b(
+    return hashlib.scrypt(
         api_key.encode("utf-8"),
-        key=_CACHE_TAG_KEY,
-        digest_size=8,
-    ).hexdigest()
+        salt=_CACHE_TAG_KEY,
+        n=2**14,
+        r=8,
+        p=1,
+        dklen=8,
+    ).hex()
 
 
 async def probe(*, api_key: str, json_output: bool) -> str:
@@ -129,8 +132,8 @@ async def probe(*, api_key: str, json_output: bool) -> str:
     # mislead the operator (we hit this returning a dev workspace slug after
     # switching to prod). Derive a stable per-key tag and bind it both as the
     # secret's Dagger name and an env var so the cache key changes with the
-    # key. Keyed BLAKE2b keeps this cache identity separate from a bare hash
-    # while retaining deterministic tags across runs for the same API key.
+    # key. Scrypt keeps this cache identity separate from a bare fast hash while
+    # retaining deterministic tags across runs for the same API key.
     key_tag = _cache_key_tag(api_key)
 
     async with dagger.connection(dagger.Config(log_output=sys.stderr)):
