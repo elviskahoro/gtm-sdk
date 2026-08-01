@@ -591,7 +591,7 @@ def _run_gh_in_flox(args: list[str], gh_token: str) -> str:
     """
     env = {**os.environ, "GH_TOKEN": gh_token}
     proc = subprocess.run(  # noqa: S603 — argv list, shell disabled
-        [*flox_activate_prefix(), "gh", *args],
+        [*flox_activate_prefix(REPO_ROOT), "gh", *args],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,

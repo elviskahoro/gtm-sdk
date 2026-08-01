@@ -456,7 +456,7 @@ def _dump_via_flox(
         env["HD_TMP_DIR"] = str(hd_tmp_dir)
 
         subprocess.run(  # noqa: S603 — argv list, shell disabled
-            [*flox_activate_prefix(), "bash", str(script_path)],
+            [*flox_activate_prefix(REPO_ROOT), "bash", str(script_path)],
             cwd=REPO_ROOT,
             env=env,
             check=True,
