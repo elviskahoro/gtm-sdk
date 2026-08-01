@@ -558,7 +558,7 @@ def test_deploy_steps_matches_the_literal_commands(script_module: ModuleType) ->
         "-c",
         "apt-get update && apt-get install -y --no-install-recommends git",
     )
-    assert script_module.flox_activate_prefix() == [
+    assert script_module.flox_activate_prefix(script_module.REPO_ROOT) == [
         "flox",
         "activate",
         "--dir",
@@ -597,12 +597,13 @@ async def test_executors_run_the_same_recipe(
         *[step.argv for step in steps],
     ]
     assert [argv for argv, _ in flox_calls] == [
-        [*script_module.flox_activate_prefix(), *step.argv] for step in steps
+        [*script_module.flox_activate_prefix(script_module.REPO_ROOT), *step.argv]
+        for step in steps
     ]
 
     flox_per_step = [
         (
-            argv[len(script_module.flox_activate_prefix()) :],
+            argv[len(script_module.flox_activate_prefix(script_module.REPO_ROOT)) :],
             sorted(k for k in cast("dict[str, str]", kwargs["env"]) if k in deploy_env),
         )
         for argv, kwargs in flox_calls
@@ -841,7 +842,7 @@ def test_preflight_flox_reads_flox_env_and_checks_the_pinned_tools(
 
     assert len(seen) == 1
     assert seen[0] == [
-        *script_module.flox_activate_prefix(),
+        *script_module.flox_activate_prefix(script_module.REPO_ROOT),
         "sh",
         "-c",
         'printf %s "$FLOX_ENV"',
@@ -867,7 +868,7 @@ def test_preflight_flox_asks_the_activation_when_tools_are_not_in_flox_env_bin(
     script_module._preflight_flox()
 
     assert seen[1] == [
-        *script_module.flox_activate_prefix(),
+        *script_module.flox_activate_prefix(script_module.REPO_ROOT),
         "sh",
         "-c",
         "command -v uv && command -v git",

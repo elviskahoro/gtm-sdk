@@ -634,7 +634,7 @@ def _preflight_flox() -> None:
             "cannot) or unset GTM_DEPLOY_VIA_FLOX to deploy via Dagger.",
         )
     probe = subprocess.run(  # noqa: S603 — argv list, shell disabled
-        [*flox_activate_prefix(), "sh", "-c", 'printf %s "$FLOX_ENV"'],
+        [*flox_activate_prefix(REPO_ROOT), "sh", "-c", 'printf %s "$FLOX_ENV"'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -667,7 +667,12 @@ def _preflight_flox() -> None:
     # (flox composes multiple store paths), so fall back to asking the
     # activation itself before failing.
     resolved = subprocess.run(  # noqa: S603 — argv list, shell disabled
-        [*flox_activate_prefix(), "sh", "-c", "command -v uv && command -v git"],
+        [
+            *flox_activate_prefix(REPO_ROOT),
+            "sh",
+            "-c",
+            "command -v uv && command -v git",
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -1212,7 +1217,7 @@ def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
     bans everywhere else.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
-    prefix = flox_activate_prefix()
+    prefix = flox_activate_prefix(REPO_ROOT)
     base_env = _scrubbed_parent_env()
     # Set after the scrub (which strips every UV_*): redirect the sync into a
     # throwaway venv so an in-place deploy can never prune the operator's.

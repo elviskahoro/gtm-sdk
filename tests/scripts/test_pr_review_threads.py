@@ -556,7 +556,7 @@ def test_flox_transport_activates_flox_and_injects_gh_token(
     assert result == '{"data": {}}'
     call_args, call_kwargs = fake_run.call_args
     argv = call_args[0]
-    assert argv == [*prt.flox_activate_prefix(), "gh", "pr", "view"]
+    assert argv == [*prt.flox_activate_prefix(prt.REPO_ROOT), "gh", "pr", "view"]
     assert call_kwargs["env"]["GH_TOKEN"] == "sekret-token"
     assert call_kwargs["cwd"] == prt.REPO_ROOT
     assert call_kwargs["check"] is True
