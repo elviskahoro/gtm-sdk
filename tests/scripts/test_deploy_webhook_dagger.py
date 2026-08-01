@@ -27,6 +27,7 @@ BD: ai-04d. Roborev flagged this gap during the bash→Python rewrite.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -732,6 +733,176 @@ def test_use_flox_accepts_the_documented_spellings(
     """``GTM_DEPLOY_VIA_FLOX=true`` used to silently select *Dagger*."""
     monkeypatch.setenv("GTM_DEPLOY_VIA_FLOX", raw)
     assert script_module._use_flox() is expected
+
+
+# ---------------------------------------------------------------------------
+# Flox preflight
+# ---------------------------------------------------------------------------
+
+
+def _stub_flox_probes(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    results: list[subprocess.CompletedProcess[str]],
+    flox_on_path: bool = True,
+) -> list[list[str]]:
+    """Feed ``_preflight_flox`` canned probe results; capture the argvs it ran."""
+    monkeypatch.setattr(
+        script_module.shutil,
+        "which",
+        lambda name: "/usr/bin/flox" if (flox_on_path and name == "flox") else None,
+    )
+    seen: list[list[str]] = []
+    pending = list(results)
+
+    def _run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(argv)
+        return pending.pop(0)
+
+    fake_subprocess = MagicMock(name="subprocess")
+    fake_subprocess.run.side_effect = _run
+    monkeypatch.setattr(script_module, "subprocess", fake_subprocess)
+    return seen
+
+
+def _completed(
+    returncode: int,
+    stdout: str = "",
+    stderr: str = "",
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=[],
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def test_preflight_flox_fails_when_flox_is_absent(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _stub_flox_probes(script_module, monkeypatch, results=[], flox_on_path=False)
+
+    with pytest.raises(SystemExit):
+        script_module._preflight_flox()
+
+    assert "flox" in capsys.readouterr().err
+
+
+def test_preflight_flox_fails_when_activation_fails(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A real activation failure is fatal — the toolchain would be unpinned."""
+    _stub_flox_probes(script_module, monkeypatch, results=[_completed(1)])
+
+    with pytest.raises(SystemExit):
+        script_module._preflight_flox()
+
+    assert "flox activate" in capsys.readouterr().err
+
+
+def test_preflight_flox_reads_flox_env_and_checks_the_pinned_tools(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``$FLOX_ENV`` comes from flox, and `uv`/`git` are looked for inside it.
+
+    Re-deriving the path (``uname -m | sed s/arm64/aarch64/`` and friends) is
+    a second implementation of something the activation already exports.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "uv").touch()
+    (bin_dir / "git").touch()
+
+    seen = _stub_flox_probes(
+        script_module,
+        monkeypatch,
+        results=[_completed(0, str(tmp_path))],
+    )
+    script_module._preflight_flox()
+
+    assert len(seen) == 1
+    assert seen[0] == [
+        *script_module.flox_activate_prefix(),
+        "sh",
+        "-c",
+        'printf %s "$FLOX_ENV"',
+    ]
+    assert "uv, git pinned" in capsys.readouterr().out
+
+
+def test_preflight_flox_asks_the_activation_when_tools_are_not_in_flox_env_bin(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Flox composes several store paths, so `$FLOX_ENV/bin` is not exhaustive.
+
+    The fallback must ask the *activated* shell — this process's own
+    ``shutil.which`` cannot see inside an activation.
+    """
+    seen = _stub_flox_probes(
+        script_module,
+        monkeypatch,
+        results=[_completed(0, str(tmp_path)), _completed(0, "/nix/store/…/uv\n")],
+    )
+    script_module._preflight_flox()
+
+    assert seen[1] == [
+        *script_module.flox_activate_prefix(),
+        "sh",
+        "-c",
+        "command -v uv && command -v git",
+    ]
+
+
+def test_preflight_flox_tolerates_an_activation_that_reports_no_flox_env(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """rc=0 with an empty FLOX_ENV means "not really flox" — say so, don't lie.
+
+    A genuinely failed activation already exited above, so the only casualty
+    is the pinning guarantee. The deploy still works; the preflight must not
+    claim a check it could not perform.
+    """
+    _stub_flox_probes(script_module, monkeypatch, results=[_completed(0, "")])
+
+    script_module._preflight_flox()
+
+    assert "unverified" in capsys.readouterr().out
+
+
+def test_preflight_flox_never_invokes_flox_without_a_double_dash(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`flox --version` and friends are useless as probes.
+
+    The test suite's pass-through `flox` stub shifts until it finds `--`;
+    with no `--` it shifts an empty `$@` and execs nothing, returning 0. Any
+    availability probe built that way passes unconditionally, including on a
+    machine with no flox at all.
+    """
+    seen = _stub_flox_probes(
+        script_module,
+        monkeypatch,
+        results=[_completed(0, str(tmp_path)), _completed(0, "/bin/uv")],
+    )
+    script_module._preflight_flox()
+
+    for argv in seen:
+        assert "--" in argv, f"probe without a `--` separator: {argv}"
 
 
 def test_use_flox_rejects_a_bogus_value(

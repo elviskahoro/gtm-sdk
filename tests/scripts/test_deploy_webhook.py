@@ -292,6 +292,11 @@ def test_substitution_and_restore(stub_bin: Path) -> None:
     assert HANDLER_FILE.read_bytes() == original
     bak = HANDLER_FILE.with_suffix(HANDLER_FILE.suffix + ".bak")
     assert not bak.exists(), "stale .bak sidecar left behind"
+    # The Flox preflight runs (it is gated on the selector) and survives the
+    # pass-through `flox` stub, which activates nothing and so reports no
+    # FLOX_ENV. It must degrade to "unverified", not abort the deploy.
+    assert "Preflighting Flox environment" in result.stdout
+    assert "toolchain pinning unverified" in result.stdout
 
 
 def test_all_flag_deploys_every_source(stub_bin: Path) -> None:

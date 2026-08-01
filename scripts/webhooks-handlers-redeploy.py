@@ -595,6 +595,95 @@ def _preflight_otel_log_sink_keys() -> None:
         print(f"  No OTLP-sink keys set in Infisical env={env_slug}.")
 
 
+def _preflight_flox() -> None:
+    """Verify the Flox environment can actually pin the deploy toolchain.
+
+    Only meaningful when ``GTM_DEPLOY_VIA_FLOX`` selects the Flox executor —
+    running it unconditionally would make every Mac Dagger deploy realize a
+    Nix environment for nothing.
+
+    Asks flox where its environment is rather than re-deriving the path from
+    ``uname``: ``FLOX_ENV`` is set inside a ``--mode run`` activation and
+    equals the project-local ``.flox/run/<arch>-<os>.<env>-run`` symlink, so
+    reimplementing the ``arm64`` -> ``aarch64`` translation in Python would be
+    a second copy of something flox already knows.
+    (``scripts/conductor-workspace-setup.sh`` still derives its own; this
+    avoids adding a third.)
+
+    Three traps encoded here deliberately:
+
+    - ``printf %s "$FLOX_ENV"`` inside ``sh -c``, never ``printenv
+      FLOX_ENV``: ``printenv`` exits 1 on an unset variable, which would turn
+      a diagnostic into a hard failure.
+    - Every probe passes ``--``. Any ``flox`` invocation without one (e.g.
+      ``flox --version``) degenerates to a silent success under the test
+      suite's pass-through stub, making the probe worthless.
+    - Tool resolution asks the *activated* shell. ``shutil.which`` in this
+      process cannot see inside an activation.
+
+    ``--mode run``, matching :func:`flox_activate_prefix` — ``--mode dev``
+    resolves a different store path, so probing it would verify the wrong
+    environment.
+    """
+    print("Preflighting Flox environment")
+    if shutil.which("flox") is None:
+        _fail(
+            "GTM_DEPLOY_VIA_FLOX is set but `flox` is not on PATH. Either "
+            "install it (scripts/conductor-workspace-setup.sh provisions it "
+            "on Linux sandboxes, and falls back to curl installers when it "
+            "cannot) or unset GTM_DEPLOY_VIA_FLOX to deploy via Dagger.",
+        )
+    probe = subprocess.run(
+        [*flox_activate_prefix(), "sh", "-c", 'printf %s "$FLOX_ENV"'],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        _fail(
+            f"`flox activate --dir {REPO_ROOT} --mode run` failed "
+            f"(exit {probe.returncode}). The environment in "
+            f".flox/env/manifest.toml could not be realized, so the deploy "
+            f"toolchain is unpinned.\n{probe.stderr.strip()}",
+        )
+    flox_env = probe.stdout.strip()
+    if not flox_env:
+        # An rc=0 activation that reports no FLOX_ENV is not really flox (the
+        # test suite's pass-through stub is the known case). A genuinely
+        # failed activation already raised above, so the only thing lost here
+        # is the pinning guarantee — say so rather than claiming a check we
+        # did not perform.
+        print("  activation returned no FLOX_ENV; toolchain pinning unverified")
+        return
+    print(f"  FLOX_ENV={flox_env}")
+    missing = [
+        tool for tool in ("uv", "git") if not (Path(flox_env) / "bin" / tool).exists()
+    ]
+    if not missing:
+        print("  uv, git pinned by the Flox environment ✓")
+        return
+    # A tool can be on the activated PATH without living in $FLOX_ENV/bin
+    # (flox composes multiple store paths), so fall back to asking the
+    # activation itself before failing.
+    resolved = subprocess.run(
+        [*flox_activate_prefix(), "sh", "-c", "command -v uv && command -v git"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if resolved.returncode != 0:
+        _fail(
+            f"The Flox environment does not provide {', '.join(missing)}. "
+            f"Add them via `flox install` (never by hand-editing "
+            f".flox/env/manifest.toml) before deploying.",
+        )
+    print(
+        f"  uv, git resolved inside the activation ✓ ({missing} not in $FLOX_ENV/bin)"
+    )
+
+
 _BUCKET_METHOD_RE = re.compile(r"WebhookModel\.([a-z_]+_get_bucket_name)")
 
 
@@ -1359,7 +1448,8 @@ def main() -> int:
     _preflight_env()
     # Resolve the selector once, up front: a typo'd GTM_DEPLOY_VIA_FLOX must
     # abort before the lock is taken, not on the first deploy.
-    _use_flox()
+    if _use_flox():
+        _preflight_flox()
 
     # Acquire lock *before* the working-tree preflight so the snapshot below
     # cannot become stale between check and mutation. Install cleanup
