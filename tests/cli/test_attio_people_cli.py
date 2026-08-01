@@ -379,7 +379,7 @@ def test_upsert_modal_sync_skip_bypasses_parity_gate(monkeypatch) -> None:
     def _preflight(**kwargs):
         assert kwargs["modal_sync"] == "skip"
         modal_id = "mid"
-        modal_secret = "mtoken"
+        modal_secret = "mtoken"  # noqa: S105 # nosec B105 -- test fixture, not a credential
         return (
             {
                 "ATTIO_API_KEY": "ak_test",
@@ -421,7 +421,7 @@ def test_upsert_modal_sync_deploy_retries_once_then_succeeds(monkeypatch) -> Non
         calls["count"] += 1
         assert kwargs["modal_sync"] == "deploy"
         modal_id = "mid"
-        modal_secret = "mtoken"
+        modal_secret = "mtoken"  # noqa: S105 # nosec B105 -- test fixture, not a credential
         return (
             {
                 "ATTIO_API_KEY": "ak_test",
