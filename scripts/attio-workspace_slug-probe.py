@@ -38,7 +38,6 @@ if __name__ == "__main__":
 
 import argparse
 import asyncio
-import hashlib
 import hmac
 import json
 import os
@@ -114,11 +113,11 @@ def extract_workspace_slug(body: str) -> str:
 
 def _cache_key_tag(api_key: str) -> str:
     """Return the stable, non-secret tag used to partition Dagger caches."""
-    return hmac.new(
+    return hmac.digest(
         _CACHE_TAG_KEY,
         api_key.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()[:16]
+        "sha256",
+    ).hex()[:16]
 
 
 async def probe(*, api_key: str, json_output: bool) -> str:
