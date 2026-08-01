@@ -16,8 +16,8 @@ from pathlib import Path
 # Add gtm-sdk to path so we can import libs
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from libs.telemetry import emit_cli_event, init_log_exporter, init_tracer
 from libs.logging.structured import log, set_source
+from libs.telemetry import emit_cli_event, init_log_exporter, init_tracer
 
 
 def verify_environment() -> dict[str, str]:
@@ -93,7 +93,7 @@ def verify_collector_config() -> bool:
     return True
 
 
-def emit_test_telemetry():
+def emit_test_telemetry() -> None:
     """Emit test logs, traces, and spans."""
     print("\n📤 Emitting test telemetry...")
 
@@ -148,7 +148,7 @@ def emit_test_telemetry():
     print("  □ Metrics appear in Dash0")
 
 
-def main():
+def main() -> None:
     """Run the verification."""
     print("🎯 Dash0 Telemetry Verification Tool\n")
 

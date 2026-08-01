@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.otel_collector import build_collector_config
 
 
-def verify_collector_config():
+def verify_collector_config() -> bool:
     """Verify the collector has both HyperDX and Dash0 configured."""
     config = build_collector_config()
     exporters = config.get("exporters", {})
@@ -74,18 +74,17 @@ def verify_collector_config():
         print("Deployment URL:")
         print("  https://modal.com/apps/devx/main/deployed/otel-collector")
         return True
-    else:
-        print("\n❌ MISSING REQUIRED EXPORTERS\n")
-        if not dash0_ok:
-            print(
-                "  - Dash0: Set DASH0_AUTH_TOKEN and DASH0_OTLP_ENDPOINT in Infisical",
-            )
-        if not hyperdx_ok:
-            print("  - HyperDX: Set HYPERDX_API_KEY in Infisical")
-        return False
+    print("\n❌ MISSING REQUIRED EXPORTERS\n")
+    if not dash0_ok:
+        print(
+            "  - Dash0: Set DASH0_AUTH_TOKEN and DASH0_OTLP_ENDPOINT in Infisical",
+        )
+    if not hyperdx_ok:
+        print("  - HyperDX: Set HYPERDX_API_KEY in Infisical")
+    return False
 
 
-def test_collector_callable():
+def test_collector_callable() -> bool | None:
     """Verify the fan_out function is callable."""
     try:
         import modal
@@ -107,7 +106,7 @@ def test_collector_callable():
         return True
 
 
-def main():
+def main() -> int:
     """Run verification."""
     print()
 
@@ -125,9 +124,8 @@ def main():
         print("  📊 HyperDX: https://in-otel.hyperdx.io")
         print()
         return 0
-    else:
-        print("\n❌ Configuration issue — redeploy with fixed secrets")
-        return 1
+    print("\n❌ Configuration issue — redeploy with fixed secrets")
+    return 1
 
 
 if __name__ == "__main__":

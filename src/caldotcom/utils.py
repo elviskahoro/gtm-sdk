@@ -50,7 +50,7 @@ def generate_gcs_filename(
     trigger_event: str,
     booking_id: str,
 ) -> str:
-    """Generate GCS filename: {clean_timestamp}-{trigger_slug}-{booking_id}.jsonl"""
+    """Generate GCS filename: {clean_timestamp}-{trigger_slug}-{booking_id}.jsonl."""
     timestamp = clean_timestamp(created_at)
     trigger_slug = clean_string(trigger_event)
     safe_booking_id = clean_string(booking_id)

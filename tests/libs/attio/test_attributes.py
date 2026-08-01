@@ -29,7 +29,7 @@ def _attr(slug: str, *, is_archived: bool = False, title: str | None = None):
 
 
 class _FakeAttributes:
-    def __init__(self, attrs=None, options=None, option_post_errors=None):
+    def __init__(self, attrs=None, options=None, option_post_errors=None) -> None:
         self.attrs = attrs or []
         self.created_attrs: list[dict[str, object]] = []
         self.restored_slugs: list[str] = []
@@ -122,7 +122,7 @@ def _make_sdk_error(status_code: int, message: str = "boom") -> SDKError:
 
 
 class _FakeClient:
-    def __init__(self, attributes):
+    def __init__(self, attributes) -> None:
         self.attributes = attributes
 
     def __enter__(self):
@@ -418,7 +418,7 @@ def _live_object(object_id: str, api_slug: str):
 
 
 class _FakeReadAttributes:
-    def __init__(self, attrs, *, options=None, statuses=None, attrs_error=None):
+    def __init__(self, attrs, *, options=None, statuses=None, attrs_error=None) -> None:
         self.attrs = attrs
         self.options = options or {}
         self.statuses = statuses or {}
@@ -465,7 +465,7 @@ class _FakeReadAttributes:
 
 
 class _FakeObjects:
-    def __init__(self, objects):
+    def __init__(self, objects) -> None:
         self.objects = objects
         self.calls = 0
 
@@ -475,7 +475,7 @@ class _FakeObjects:
 
 
 class _FakeReadClient:
-    def __init__(self, attributes, objects=None):
+    def __init__(self, attributes, objects=None) -> None:
         self.attributes = attributes
         self.objects = objects if objects is not None else _FakeObjects([])
 

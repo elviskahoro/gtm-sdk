@@ -32,7 +32,6 @@ from .models import (
     SearchResultItem,
 )
 
-
 _api_key_var: ContextVar[str | None] = ContextVar(
     "parallel_api_key",
     default=None,
@@ -40,7 +39,7 @@ _api_key_var: ContextVar[str | None] = ContextVar(
 
 
 @contextmanager
-def api_key_scope(api_key: str) -> Generator[None, None, None]:
+def api_key_scope(api_key: str) -> Generator[None]:
     """Bind ``api_key`` as the active Parallel key for this async/sync context.
 
     Mirrors :func:`libs.attio.client.api_key_scope`. The scope is reset on
@@ -68,13 +67,13 @@ def _get_client(api_key: str | None = None):
             "(2) call inside libs.parallel.client.api_key_scope(...), "
             "(3) set PARALLEL_API_KEY in the process environment.",
         )
-    parallel_client_class = getattr(parallel_sdk, "Parallel")
+    parallel_client_class = parallel_sdk.Parallel  # pyright: ignore[reportAttributeAccessIssue]
     return parallel_client_class(api_key=token)
 
 
 def extract_full_content(input: ExtractFullContentInput) -> ExtractResponse:
     client = _get_client()
-    response = client.beta.extract(
+    response = client.beta.extract(  # pyrefly: ignore[missing-attribute]
         urls=[input.url],
         excerpts=False,
         full_content=True,
@@ -84,7 +83,7 @@ def extract_full_content(input: ExtractFullContentInput) -> ExtractResponse:
 
 def extract_excerpts(input: ExtractExcerptsInput) -> ExtractResponse:
     client = _get_client()
-    response = client.beta.extract(
+    response = client.beta.extract(  # pyrefly: ignore[missing-attribute]
         urls=[input.url],
         objective=input.objective,
         excerpts=True,
@@ -95,7 +94,7 @@ def extract_excerpts(input: ExtractExcerptsInput) -> ExtractResponse:
 
 def search(input: SearchInput) -> SearchResponse:
     client = _get_client()
-    response = client.beta.search(
+    response = client.beta.search(  # pyrefly: ignore[missing-attribute]
         objective=input.objective,
         mode=input.mode,
         max_results=input.max_results,

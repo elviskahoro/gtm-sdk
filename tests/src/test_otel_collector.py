@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import src.otel_collector as otel_collector
+from src import otel_collector
 from src.otel_collector import (  # exercising collector internals directly
     _GRAFANA_DEFAULT_ENDPOINT,  # trunk-ignore(pyright/reportPrivateUsage)
     _PROVIDER_SECRET_KEYS,  # trunk-ignore(pyright/reportPrivateUsage)
@@ -36,7 +36,7 @@ _ALL_PROVIDER_ENV = {
 _GRAFANA_RAW_INPUTS = ("GRAFANA_INSTANCE_ID", "GRAFANA_API_KEY")
 
 
-def test_build_config_fans_out_to_all_providers():
+def test_build_config_fans_out_to_all_providers() -> None:
     cfg = build_collector_config(_ALL_PROVIDER_ENV)
     exporters = cfg["exporters"]
     assert set(exporters) == {
@@ -58,7 +58,7 @@ def test_build_config_fans_out_to_all_providers():
     assert http["endpoint"] == "127.0.0.1:4318"
 
 
-def test_build_config_endpoints_and_headers():
+def test_build_config_endpoints_and_headers() -> None:
     cfg = build_collector_config(_ALL_PROVIDER_ENV)
     exp = cfg["exporters"]
     # Tokens are referenced via ${env:...}, never inlined.
@@ -90,7 +90,7 @@ def test_build_config_endpoints_and_headers():
         assert block["sending_queue"]["enabled"] is True
 
 
-def test_build_config_dash0_dataset_defaults():
+def test_build_config_dash0_dataset_defaults() -> None:
     env = {
         "DASH0_AUTH_TOKEN": "d0",  # trunk-ignore(bandit/B105): test fixture
         "DASH0_OTLP_ENDPOINT": "https://ingress.dash0.com",
@@ -99,14 +99,14 @@ def test_build_config_dash0_dataset_defaults():
     assert cfg["exporters"]["otlphttp/dash0"]["headers"]["Dash0-Dataset"] == "default"
 
 
-def test_build_config_no_providers_omits_logs_pipeline():
+def test_build_config_no_providers_omits_logs_pipeline() -> None:
     # otelcol rejects a pipeline with an empty exporter list, so with no
     # providers configured the logs pipeline must be omitted entirely.
     pipelines = build_collector_config({})["service"]["pipelines"]
     assert "logs" not in pipelines
 
 
-def test_build_config_subset_and_empty():
+def test_build_config_subset_and_empty() -> None:
     assert build_collector_config({})["exporters"] == {}
     # Dash0 needs both token and endpoint; token alone is skipped.
     env = {
@@ -116,7 +116,7 @@ def test_build_config_subset_and_empty():
     assert set(build_collector_config(env)["exporters"]) == {"otlphttp/logfire"}
 
 
-def test_build_config_strips_full_signal_url_to_base():
+def test_build_config_strips_full_signal_url_to_base() -> None:
     env = {
         "HYPERDX_API_KEY": "hx",  # nosec: B105
         "HYPERDX_OTLP_ENDPOINT": "https://in-otel.hyperdx.io/v1/traces",
@@ -128,7 +128,7 @@ def test_build_config_strips_full_signal_url_to_base():
     )
 
 
-def test_build_config_grafana_endpoint_override_is_stripped_to_base():
+def test_build_config_grafana_endpoint_override_is_stripped_to_base() -> None:
     env = {
         "GRAFANA_OTLP_AUTH": "MTIzNDU2Omdsy19rZXk=",  # nosec: B105
         # otlphttp appends /v1/{signal} itself, so a pasted full-signal URL
@@ -142,7 +142,7 @@ def test_build_config_grafana_endpoint_override_is_stripped_to_base():
     )
 
 
-def test_build_config_grafana_bare_host_gets_otlp_path():
+def test_build_config_grafana_bare_host_gets_otlp_path() -> None:
     # Grafana Cloud serves OTLP under /otlp; a bare-host override (written like
     # the other providers' root-ingress endpoints) must still resolve to
     # .../otlp/v1/{signal}, not silently drop the /otlp segment.
@@ -157,16 +157,16 @@ def test_build_config_grafana_bare_host_gets_otlp_path():
     )
 
 
-def test_base_endpoint_strips_known_signal_suffixes():
+def test_base_endpoint_strips_known_signal_suffixes() -> None:
     assert _base_endpoint("https://x.io/v1/traces") == "https://x.io"
     assert _base_endpoint("https://x.io/v1/logs/") == "https://x.io"
     assert _base_endpoint("https://x.io") == "https://x.io"
 
 
-def test_post_local_targets_localhost_receiver():
+def test_post_local_targets_localhost_receiver() -> None:
     calls: list[dict[str, Any]] = []
 
-    def _post(url, data=None, headers=None, timeout=None):
+    def _post(url, data=None, headers=None, timeout=None) -> None:
         calls.append({"url": url, "data": data, "headers": headers})
 
     _post_local("traces", b"OTLP", post=_post)
@@ -179,7 +179,7 @@ def test_post_local_targets_localhost_receiver():
     ]
 
 
-def test_post_local_swallows_errors():
+def test_post_local_swallows_errors() -> None:
     def _boom(*_a, **_k):
         raise RuntimeError("otelcol not up")
 
@@ -187,10 +187,12 @@ def test_post_local_swallows_errors():
     _post_local("logs", b"x", post=_boom)
 
 
-def test_ensure_otelcol_running_noops_without_providers(monkeypatch):
+def test_ensure_otelcol_running_noops_without_providers(monkeypatch) -> None:
     """With no provider creds, the collector must NOT start otelcol (an empty
     exporter pipeline is invalid and would boot-loop); it degrades to a no-op.
-    Safe to call directly — no providers means no subprocess is launched."""
+    Safe to call directly — no providers means no subprocess is launche
+    d.
+    """
     monkeypatch.setattr(otel_collector, "_otelcol_proc", None, raising=False)
     for k in _ALL_PROVIDER_ENV:
         monkeypatch.delenv(k, raising=False)
@@ -205,9 +207,10 @@ class _FakeProc:
         return None if self.alive else 1
 
 
-def test_ensure_otelcol_restarts_crashed_sidecar(monkeypatch):
+def test_ensure_otelcol_restarts_crashed_sidecar(monkeypatch) -> None:
     """Liveness is by process handle, not a one-shot flag: a crashed sidecar
-    (poll() != None) is restarted instead of silently dropping forever."""
+    (poll() != None) is restarted instead of silently dropping forever.
+    """
     monkeypatch.setattr(otel_collector, "_otelcol_proc", None, raising=False)
     for k, v in _ALL_PROVIDER_ENV.items():
         monkeypatch.setenv(k, v)
@@ -234,7 +237,7 @@ def test_ensure_otelcol_restarts_crashed_sidecar(monkeypatch):
     assert len(procs) == 2  # restarted
 
 
-def test_post_local_logs_non_2xx(monkeypatch, capsys):
+def test_post_local_logs_non_2xx(monkeypatch, capsys) -> None:
     def _post_500(*_a, **_k):
         return _Resp(503)
 
@@ -244,7 +247,7 @@ def test_post_local_logs_non_2xx(monkeypatch, capsys):
     assert "503" in err
 
 
-def test_collector_secret_payload_reads_env(monkeypatch):
+def test_collector_secret_payload_reads_env(monkeypatch) -> None:
     for k in (*_PROVIDER_SECRET_KEYS, *_GRAFANA_RAW_INPUTS):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("DASH0_AUTH_TOKEN", "d0")
@@ -257,7 +260,7 @@ def test_collector_secret_payload_reads_env(monkeypatch):
     }
 
 
-def test_grafana_basic_auth_encodes_instance_and_token():
+def test_grafana_basic_auth_encodes_instance_and_token() -> None:
     import base64
 
     cred = _grafana_basic_auth("1718830", "glc_secret")  # nosec: B106
@@ -269,9 +272,10 @@ def test_grafana_basic_auth_encodes_instance_and_token():
     assert _grafana_basic_auth("1718830", "") is None
 
 
-def test_collector_secret_payload_derives_grafana_auth(monkeypatch):
+def test_collector_secret_payload_derives_grafana_auth(monkeypatch) -> None:
     """The raw glc token + instance id are collapsed to a pre-encoded Basic
-    credential at deploy time; the raw inputs never enter the shipped payload."""
+    credential at deploy time; the raw inputs never enter the shipped payload.
+    """
     for k in (*_PROVIDER_SECRET_KEYS, *_GRAFANA_RAW_INPUTS):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GRAFANA_INSTANCE_ID", "1718830")

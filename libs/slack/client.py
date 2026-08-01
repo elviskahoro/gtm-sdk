@@ -42,7 +42,7 @@ class SlackAuthError(RuntimeError):
 
 
 @contextmanager
-def api_key_scope(api_key: str) -> Generator[None, None, None]:
+def api_key_scope(api_key: str) -> Generator[None]:
     """Bind ``api_key`` as the active Slack bot token for this context.
 
     Used by the webhook flow: the endpoint resolves the token via Infisical

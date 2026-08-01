@@ -90,7 +90,8 @@ def script_module() -> Iterator[ModuleType]:
     identifier. importlib is the only way in short of renaming the script.
     """
     spec = importlib.util.spec_from_file_location(_MODULE_NAME, SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[_MODULE_NAME] = module
     spec.loader.exec_module(module)
@@ -254,7 +255,7 @@ async def test_deploy_via_dagger_with_host(script_module: ModuleType) -> None:
     # to the right credential — guards against a regression that wires
     # MODAL_TOKEN_ID to the infisical-token secret, etc.
     actual_env_calls = [
-        (args[0], cast(MagicMock, args[1])._secret)
+        (args[0], cast("MagicMock", args[1])._secret)
         for _step, args in _secret_links(steps)
     ]
     expected_env_calls = [

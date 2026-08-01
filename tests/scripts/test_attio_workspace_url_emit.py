@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "attio-workspace_url-emit.py"
 )

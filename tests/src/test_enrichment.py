@@ -12,7 +12,8 @@ from src.enrichment import HarvestProfile, profile_to_person_input
 
 def test_known_country_writes_iso2_country_code() -> None:
     """Harvest's free-text country normalizes to ISO-2 so primary_location can
-    be written downstream (see ai-862 / ai-sfp)."""
+    be written downstream (see ai-862 / ai-sfp).
+    """
     profile = HarvestProfile(
         firstName="Ada",
         lastName="Lovelace",
@@ -27,7 +28,8 @@ def test_known_country_writes_iso2_country_code() -> None:
 
 def test_unknown_country_leaves_country_code_none() -> None:
     """Unrecognized country names fall through to None — no silent default — so
-    the downstream writer skips primary_location rather than misattributing it."""
+    the downstream writer skips primary_location rather than misattributing it.
+    """
     profile = HarvestProfile(
         firstName="Marie",
         lastName="Curie",

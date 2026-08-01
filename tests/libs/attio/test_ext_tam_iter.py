@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from libs.attio.ext_tam import iter_company_ids_by_filter
 
 
-def test_iter_company_ids_by_filter_single_page():
+def test_iter_company_ids_by_filter_single_page() -> None:
     """Test iteration over a single page of results."""
     mock_client = MagicMock()
 
@@ -43,10 +43,11 @@ def test_iter_company_ids_by_filter_single_page():
         assert call_kwargs["offset"] == 0
 
 
-def test_iter_company_ids_by_filter_rejects_invalid_page_size():
+def test_iter_company_ids_by_filter_rejects_invalid_page_size() -> None:
     """Regression (roborev): ``page_size <= 0`` would prevent offset from
     advancing and loop forever. ``> 100`` exceeds Attio's per-query cap.
-    Both must be rejected with a clear ValueError."""
+    Both must be rejected with a clear ValueError.
+    """
     import pytest
 
     with pytest.raises(ValueError, match="page_size"):
@@ -57,13 +58,14 @@ def test_iter_company_ids_by_filter_rejects_invalid_page_size():
         list(iter_company_ids_by_filter({"source": "x"}, page_size=101))
 
 
-def test_iter_company_ids_by_filter_with_attribute_shaped_accounts():
+def test_iter_company_ids_by_filter_with_attribute_shaped_accounts() -> None:
     """Regression (roborev): Attio SDK returns relationship values as objects
     with attributes, not dicts. The iterator must read ``target_record_id``
-    via attribute access, not ``.get()``."""
+    via attribute access, not ``.get()``.
+    """
 
     class _AccountObj:
-        def __init__(self, rid: str):
+        def __init__(self, rid: str) -> None:
             self.target_record_id = rid
 
     mock_client = MagicMock()
@@ -83,7 +85,7 @@ def test_iter_company_ids_by_filter_with_attribute_shaped_accounts():
     assert result == ["company-attr-1"]
 
 
-def test_iter_company_ids_by_filter_multiple_pages():
+def test_iter_company_ids_by_filter_multiple_pages() -> None:
     """Test iteration over multiple pages."""
     mock_client = MagicMock()
 
@@ -120,7 +122,7 @@ def test_iter_company_ids_by_filter_multiple_pages():
         assert mock_client.records.post_v2_objects_object_records_query.call_count == 2
 
 
-def test_iter_company_ids_by_filter_deduplicates_across_pages():
+def test_iter_company_ids_by_filter_deduplicates_across_pages() -> None:
     """Test that duplicate company IDs across pages are deduplicated."""
     mock_client = MagicMock()
 
@@ -151,7 +153,7 @@ def test_iter_company_ids_by_filter_deduplicates_across_pages():
         assert result == ["company-1"]
 
 
-def test_iter_company_ids_by_filter_skips_missing_accounts():
+def test_iter_company_ids_by_filter_skips_missing_accounts() -> None:
     """Test that records without accounts are skipped."""
     mock_client = MagicMock()
 
@@ -182,7 +184,7 @@ def test_iter_company_ids_by_filter_skips_missing_accounts():
         assert result == ["company-1"]
 
 
-def test_iter_company_ids_by_filter_empty_result():
+def test_iter_company_ids_by_filter_empty_result() -> None:
     """Test iteration over empty results."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -199,7 +201,7 @@ def test_iter_company_ids_by_filter_empty_result():
         assert result == []
 
 
-def test_iter_company_ids_by_filter_custom_page_size():
+def test_iter_company_ids_by_filter_custom_page_size() -> None:
     """Test custom page size parameter."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -220,7 +222,7 @@ def test_iter_company_ids_by_filter_custom_page_size():
         assert call_kwargs["limit"] == 50
 
 
-def test_iter_company_ids_by_filter_compound_filter():
+def test_iter_company_ids_by_filter_compound_filter() -> None:
     """Test iteration with compound $and filter."""
     mock_client = MagicMock()
     mock_record = MagicMock()

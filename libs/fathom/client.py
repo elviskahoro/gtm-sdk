@@ -35,7 +35,7 @@ _api_key_var: ContextVar[str | None] = ContextVar("fathom_api_key", default=None
 
 
 @contextmanager
-def api_key_scope(api_key: str) -> Generator[None, None, None]:
+def api_key_scope(api_key: str) -> Generator[None]:
     """Bind ``api_key`` as the active Fathom key for this async/sync context."""
     token = _api_key_var.set(api_key)
     try:
@@ -122,6 +122,5 @@ def iter_meetings(
 
     response = fathom.list_meetings(**kwargs)
     while response is not None:
-        for meeting in response.result.items:
-            yield meeting
+        yield from response.result.items
         response = response.next()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill historical rb2b website-visit events into Attio.
+r"""Backfill historical rb2b website-visit events into Attio.
 
 rb2b has no API for retrieving historical visits — its API is identity /
 enrichment only, and visits arrive solely via realtime webhooks. So the only
@@ -61,7 +61,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 # Anchor on the script's directory so output paths resolve regardless of the CWD
 # `uv run` was invoked from, and make repo-local packages importable.
@@ -69,6 +69,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import dlt  # noqa: E402
 import requests  # noqa: E402
@@ -78,8 +81,10 @@ from cli.webhook._hookdeck import HOOKDECK_API_BASE, PAGE_LIMIT  # noqa: E402
 from cli.webhook._modal import modal_url_for_app  # noqa: E402
 from libs.dlt.bucket_naming import raw_bucket_name  # noqa: E402
 from libs.dlt.filesystem_gcp import GCPCredentials  # noqa: E402
-from libs.rb2b import Webhook as Rb2bWebhook  # noqa: E402
-from libs.rb2b import compute_event_id  # noqa: E402
+from libs.rb2b import (  # noqa: E402
+    Webhook as Rb2bWebhook,
+    compute_event_id,
+)
 
 # Reuse the model's timestamp normalizer so the synthesized envelope timestamp
 # parses even when rb2b emits its documented `12:34:56:00.00+00.00` shape.
@@ -233,7 +238,7 @@ def _gcs_filesystem() -> Any:
 
 
 def gcs_resource(cfg: BackfillConfig) -> Any:
-    """dlt resource yielding rows from every raw object in the GCS bucket."""
+    """Dlt resource yielding rows from every raw object in the GCS bucket."""
 
     @dlt.resource(
         name=cfg.table_name,
@@ -366,7 +371,7 @@ def _extract_hookdeck_body(event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def hookdeck_resource(cfg: BackfillConfig, api_key: str, source_id: str) -> Any:
-    """dlt resource yielding rows from archived Hookdeck events for the source.
+    """Dlt resource yielding rows from archived Hookdeck events for the source.
 
     ``source_id`` is resolved (and validated) up-front in :func:`extract` so a
     missing source fails loudly *before* the pipeline runs, rather than silently

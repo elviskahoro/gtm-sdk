@@ -215,7 +215,7 @@ def test_unknown_relevance_score_validates() -> None:
 
 
 def test_youtube_source_validates() -> None:
-    """youtube was added to the Source allow-list for the backfill."""
+    """Youtube was added to the Source allow-list for the backfill."""
     mention = Mention.model_validate(
         {
             "url": "https://youtube.com/watch?v=abc",

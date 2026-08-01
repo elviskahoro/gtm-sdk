@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["gtm-linear==0.1.0"]
 # ///
-"""File (or bump) a Linear issue describing a failed CI run.
+r"""File (or bump) a Linear issue describing a failed CI run.
 
 Reads a diagnosis written by the triage agent and turns it into exactly one
 Linear issue per distinct failing workflow. A recurring failure updates the

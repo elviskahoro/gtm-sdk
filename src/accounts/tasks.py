@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from libs.attio import companies as attio_companies
-from libs.attio import people as attio_people
+from libs.attio import (
+    companies as attio_companies,
+    people as attio_people,
+)
 from libs.attio.models import CompanyInput, PersonInput
 from libs.parallel import client as parallel_client
 from libs.parallel.models import ExtractExcerptsInput, SearchInput, SearchResponse
@@ -51,7 +53,7 @@ def _validate_company_records(records: list[dict[str, Any]]) -> None:
 
 
 def research(objective: str) -> ResearchResult:
-    raw = cast(object, parallel_client.search(SearchInput(objective=objective)))
+    raw = cast("object", parallel_client.search(SearchInput(objective=objective)))
     if isinstance(raw, SearchResponse):
         results = [item.model_dump(mode="json") for item in raw.results]
     else:
@@ -64,7 +66,7 @@ def research(objective: str) -> ResearchResult:
 
 
 def find_people(query: str) -> FindPeopleResult:
-    raw = cast(object, parallel_client.search(SearchInput(objective=query)))
+    raw = cast("object", parallel_client.search(SearchInput(objective=query)))
     if isinstance(raw, SearchResponse):
         people = [item.model_dump(mode="json") for item in raw.results]
     else:
@@ -86,7 +88,7 @@ def enrich(url: str, objective: str) -> EnrichResult:
 
 def map_account_hierarchy(account: str) -> MapAccountHierarchyResult:
     raw = cast(
-        object,
+        "object",
         parallel_client.search(
             SearchInput(objective=f"account hierarchy for {account}"),
         ),

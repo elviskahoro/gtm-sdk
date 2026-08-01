@@ -12,7 +12,7 @@ from libs.exa.models import (
 from libs.exa.search import search
 
 
-def test_search_basic():
+def test_search_basic() -> None:
     """Test basic search with mocked SDK."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -35,7 +35,7 @@ def test_search_basic():
         assert result.results == []
 
 
-def test_search_input_strips_and_rejects_blank_query():
+def test_search_input_strips_and_rejects_blank_query() -> None:
     """Regression: whitespace-only queries must be rejected centrally."""
     from pydantic import ValidationError
 
@@ -44,7 +44,7 @@ def test_search_input_strips_and_rejects_blank_query():
         SearchInput(query="   ")
 
 
-def test_contents_false_routes_to_plain_search():
+def test_contents_false_routes_to_plain_search() -> None:
     """Regression (roborev): ``contents=False`` is a valid 'no contents' signal
     and must NOT trigger the more expensive ``search_and_contents`` path.
     The ``contents`` kwarg is also stripped before calling ``client.search()``
@@ -70,14 +70,15 @@ def test_contents_false_routes_to_plain_search():
     assert "contents" not in forwarded_kwargs
 
 
-def test_sdk_http_error_translated_to_typed_exa_error():
+def test_sdk_http_error_translated_to_typed_exa_error() -> None:
     """Regression (roborev): SDK exceptions with HTTP status get translated
     into the typed ExaError hierarchy so callers can branch on auth /
-    rate-limit / server cleanly."""
+    rate-limit / server cleanly.
+    """
     from libs.exa.errors import ExaRateLimitError
 
     class _FakeSDKError(Exception):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__("rate limited")
             self.status_code = 429
             self.request_id = "req_abc"
@@ -95,10 +96,11 @@ def test_sdk_http_error_translated_to_typed_exa_error():
             raise AssertionError("expected ExaRateLimitError to be raised")
 
 
-def test_sdk_error_with_status_on_exc_still_reads_response_metadata():
+def test_sdk_error_with_status_on_exc_still_reads_response_metadata() -> None:
     """Regression (roborev): when status is on the exception itself, we must
     still consult ``exc.response`` for request_id/body so the typed error
-    retains diagnostic context."""
+    retains diagnostic context.
+    """
     from libs.exa.errors import ExaRateLimitError
 
     class _FakeResponse:
@@ -108,7 +110,7 @@ def test_sdk_error_with_status_on_exc_still_reads_response_metadata():
             return {"message": "rate limited by upstream"}
 
     class _FakeSDKError(Exception):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__("err")
             self.status_code = 429  # status on the exception
             self.response = _FakeResponse()  # request_id/body on the response
@@ -127,9 +129,10 @@ def test_sdk_error_with_status_on_exc_still_reads_response_metadata():
             raise AssertionError("expected ExaRateLimitError")
 
 
-def test_sdk_error_with_non_dict_response_body_is_tolerated():
+def test_sdk_error_with_non_dict_response_body_is_tolerated() -> None:
     """Regression: a non-dict ``response.json()`` result must not crash the
-    translation path or mask the original HTTP failure."""
+    translation path or mask the original HTTP failure.
+    """
     from libs.exa.errors import ExaBadRequestError
 
     class _FakeResponse:
@@ -139,7 +142,7 @@ def test_sdk_error_with_non_dict_response_body_is_tolerated():
             return ["error", "details"]
 
     class _FakeSDKError(Exception):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__("bad request")
             self.status_code = 400
             self.response = _FakeResponse()
@@ -159,9 +162,10 @@ def test_sdk_error_with_non_dict_response_body_is_tolerated():
             raise AssertionError("expected ExaBadRequestError")
 
 
-def test_sdk_non_http_error_is_not_translated():
+def test_sdk_non_http_error_is_not_translated() -> None:
     """SDK exceptions without an HTTP status (e.g. connection errors) pass
-    through unwrapped so we don't mask the original failure shape."""
+    through unwrapped so we don't mask the original failure shape.
+    """
     mock_client = MagicMock()
     mock_client.search.side_effect = RuntimeError("connection reset")
 
@@ -174,10 +178,11 @@ def test_sdk_non_http_error_is_not_translated():
             raise AssertionError("expected RuntimeError to propagate")
 
 
-def test_empty_contents_options_routes_to_plain_search():
+def test_empty_contents_options_routes_to_plain_search() -> None:
     """Regression (roborev): ``ContentsOptions()`` with all slots None is
     object-truthy, but represents "no contents requested" — must route to
-    plain ``search()``, not the more expensive ``search_and_contents()``."""
+    plain ``search()``, not the more expensive ``search_and_contents()``.
+    """
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.request_id = None
@@ -194,10 +199,11 @@ def test_empty_contents_options_routes_to_plain_search():
     mock_client.search_and_contents.assert_not_called()
 
 
-def test_output_content_preserves_list_value():
+def test_output_content_preserves_list_value() -> None:
     """Regression (roborev): structured ``output_schema`` results can be any
     JSON value (string, dict, list, number, boolean). The adapter must not
-    narrow to ``str | dict`` and silently drop other shapes."""
+    narrow to ``str | dict`` and silently drop other shapes.
+    """
     mock_client = MagicMock()
     mock_output = MagicMock()
     mock_output.content = [{"name": "Acme", "domain": "acme.com"}]
@@ -223,9 +229,10 @@ def test_output_content_preserves_list_value():
     assert result.output.content == [{"name": "Acme", "domain": "acme.com"}]
 
 
-def test_output_content_preserves_string_value():
+def test_output_content_preserves_string_value() -> None:
     """Plain-text ``output_schema`` (``{"type":"text","description":...}``)
-    returns a string. Must survive the adapter."""
+    returns a string. Must survive the adapter.
+    """
     mock_client = MagicMock()
     mock_output = MagicMock()
     mock_output.content = "Snowflake is a cloud data platform."
@@ -251,7 +258,7 @@ def test_output_content_preserves_string_value():
     assert result.output.content == "Snowflake is a cloud data platform."
 
 
-def test_output_content_preserves_falsey_json_values():
+def test_output_content_preserves_falsey_json_values() -> None:
     """Regression (roborev): valid structured output can be falsey.
 
     The adapter must preserve these payloads exactly instead of treating them
@@ -283,11 +290,12 @@ def test_output_content_preserves_falsey_json_values():
             assert result.output.content == value
 
 
-def test_output_with_falsy_grounding_list_preserved():
+def test_output_with_falsy_grounding_list_preserved() -> None:
     """Regression (roborev): the mapper used to drop ``output`` whenever
     ``output_obj.grounding`` was falsy (e.g. ``[]``). Now we use ``is not None``
     so an empty grounding list still produces a valid ``OutputGrounding`` with
-    empty citations."""
+    empty citations.
+    """
     mock_client = MagicMock()
     mock_output = MagicMock()
     mock_output.content = {"answer": "yes"}
@@ -315,11 +323,12 @@ def test_output_with_falsy_grounding_list_preserved():
     assert result.output.grounding.citations == []
 
 
-def test_output_schema_alone_routes_to_search_and_contents():
+def test_output_schema_alone_routes_to_search_and_contents() -> None:
     """Regression (roborev, high severity): ``output_schema`` requires the
     ``search_and_contents`` endpoint — plain ``search()`` does NOT populate
     ``response.output``. Without this routing, structured-output callers
-    (e.g. the company domain resolver) silently get empty results."""
+    (e.g. the company domain resolver) silently get empty results.
+    """
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.request_id = None
@@ -342,10 +351,11 @@ def test_output_schema_alone_routes_to_search_and_contents():
     mock_client.search.assert_not_called()
 
 
-def test_contents_options_with_false_slots_routes_to_plain_search():
+def test_contents_options_with_false_slots_routes_to_plain_search() -> None:
     """Regression (roborev): ``ContentsOptions(highlights=False)`` is an
     explicit "this slot off" signal, not a contents request. Must route
-    to plain ``search()``, not the more expensive ``search_and_contents``."""
+    to plain ``search()``, not the more expensive ``search_and_contents``.
+    """
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.request_id = None
@@ -364,9 +374,10 @@ def test_contents_options_with_false_slots_routes_to_plain_search():
     assert "contents" not in mock_client.search.call_args.kwargs
 
 
-def test_contents_options_with_one_slot_routes_to_search_and_contents():
+def test_contents_options_with_one_slot_routes_to_search_and_contents() -> None:
     """Conversely: a ``ContentsOptions`` with at least one slot set IS a
-    contents request and must use ``search_and_contents``."""
+    contents request and must use ``search_and_contents``.
+    """
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.request_id = None
@@ -383,7 +394,7 @@ def test_contents_options_with_one_slot_routes_to_search_and_contents():
     mock_client.search.assert_not_called()
 
 
-def test_contents_true_routes_to_search_and_contents():
+def test_contents_true_routes_to_search_and_contents() -> None:
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.request_id = "req-123"
@@ -400,7 +411,7 @@ def test_contents_true_routes_to_search_and_contents():
     mock_client.search.assert_not_called()
 
 
-def test_search_with_results():
+def test_search_with_results() -> None:
     """Test search with multiple results."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -439,7 +450,7 @@ def test_search_with_results():
         assert result.cost_dollars == 0.03
 
 
-def test_search_with_contents():
+def test_search_with_contents() -> None:
     """Test search_and_contents is called when contents is set."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -465,7 +476,7 @@ def test_search_with_contents():
         assert result.cost_dollars == 0.1
 
 
-def test_search_with_structured_output():
+def test_search_with_structured_output() -> None:
     """Test search with outputSchema and structured content."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -514,7 +525,7 @@ def test_search_with_structured_output():
         assert result.output.grounding.citations[0].url == "https://example.com"
 
 
-def test_search_with_string_output():
+def test_search_with_string_output() -> None:
     """Test search with string-type output content."""
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -540,7 +551,7 @@ def test_search_with_string_output():
         assert result.output.content == "Some summary text"
 
 
-def test_search_request_dict_format():
+def test_search_request_dict_format() -> None:
     """Test that search input is converted to snake_case request dict."""
     mock_client = MagicMock()
     mock_response = MagicMock()

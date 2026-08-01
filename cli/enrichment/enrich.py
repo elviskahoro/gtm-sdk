@@ -14,8 +14,8 @@ from src.enrichment import (
     HarvestProfile,
     build_enrichment_tasks,
     harvest_profile_from_task,
-    profile_to_person_input,
     load_enrichment_config,
+    profile_to_person_input,
 )
 
 app = typer.Typer(help="Enrich records from LinkedIn via Harvest API.")

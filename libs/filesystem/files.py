@@ -534,10 +534,10 @@ def test_source_file_data_from_input_folder_valid() -> None:
             assert len(results) == 2
 
             # Sort by name for consistent testing
-            results.sort(key=lambda x: cast(TestModel, x.base_model).name)
+            results.sort(key=lambda x: cast("TestModel", x.base_model).name)
 
-            first: TestModel = cast(TestModel, results[0].base_model)
-            second: TestModel = cast(TestModel, results[1].base_model)
+            first: TestModel = cast("TestModel", results[0].base_model)
+            second: TestModel = cast("TestModel", results[1].base_model)
             assert first.name == "file1"
             assert first.value == 1
             assert second.name == "file2"

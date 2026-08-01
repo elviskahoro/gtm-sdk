@@ -386,4 +386,4 @@ def test_create_note_passes_created_at_through_to_sdk_boundary() -> None:
     assert envelope.action == "created"
     request_obj = captured["data"]
     assert getattr(request_obj, "created_at", None) is not None
-    assert "2025-01-05" in str(getattr(request_obj, "created_at"))
+    assert "2025-01-05" in str(request_obj.created_at)  # pyright: ignore[reportAttributeAccessIssue]

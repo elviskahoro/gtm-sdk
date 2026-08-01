@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import orjson
 import pytest
@@ -83,7 +82,7 @@ class _FakeCalcomClient:
     def __enter__(self) -> _FakeCalcomClient:
         return self
 
-    def __exit__(self, *_: Any) -> None:
+    def __exit__(self, *_: object) -> None:
         return None
 
 
@@ -285,7 +284,8 @@ class TestOperationDispatch:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Transient Cal.com failures (network/5xx) must propagate so Hookdeck
-        retries the webhook."""
+        retries the webhook.
+        """
 
         class _FailingClient:
             def get_booking(self, _uid: str) -> BookingCreatedPayload | None:
@@ -294,7 +294,7 @@ class TestOperationDispatch:
             def __enter__(self) -> _FailingClient:
                 return self
 
-            def __exit__(self, *_: Any) -> None:
+            def __exit__(self, *_: object) -> None:
                 return None
 
         monkeypatch.setattr(
@@ -312,7 +312,8 @@ class TestOperationDispatch:
     ) -> None:
         """404 (booking deleted) → no host email + no start time → can't compute
         external_id, so skip the whole lifecycle path. Better than writing a
-        divergent row that no future webhook for the same meeting will patch."""
+        divergent row that no future webhook for the same meeting will patch.
+        """
 
         class _NotFoundClient:
             def get_booking(self, _uid: str) -> BookingCreatedPayload | None:
@@ -321,7 +322,7 @@ class TestOperationDispatch:
             def __enter__(self) -> _NotFoundClient:
                 return self
 
-            def __exit__(self, *_: Any) -> None:
+            def __exit__(self, *_: object) -> None:
                 return None
 
         monkeypatch.setattr(
@@ -425,7 +426,8 @@ def test_real_v2_created_produces_full_attio_plan() -> None:
     """Regression for the live BOOKING_CREATED 422: the real cal.com v2 payload
     (startTime/organizer/eventTitle, attendees without displayEmail/absent) must
     parse and produce the full Attio plan, not just for Slack. Before the model
-    fix this raised a Pydantic ValidationError (missing ``start``)."""
+    fix this raised a Pydantic ValidationError (missing ``start``).
+    """
     wh = _load("api/samples/caldotcom.booking.created.v2.redacted.json")
     assert wh.attio_is_valid_webhook(), wh.attio_get_invalid_webhook_error_msg()
     ops = wh.attio_get_operations()
@@ -459,7 +461,8 @@ def test_real_v2_created_produces_full_attio_plan() -> None:
 
 def test_real_v2_requested_is_valid_attio_noop() -> None:
     """BOOKING_REQUESTED parses and is a valid Attio webhook but writes nothing
-    (the Attio meeting is created on confirmation, BOOKING_CREATED)."""
+    (the Attio meeting is created on confirmation, BOOKING_CREATED).
+    """
     wh = _load("api/samples/caldotcom.booking.requested.v2.redacted.json")
     assert wh.attio_is_valid_webhook()
     assert wh.attio_get_operations() == []

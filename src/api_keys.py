@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
-from typing import Generator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 _KEY_ENV_MAP: dict[str, str] = {
     "apollo_api_key": "APOLLO_API_KEY",
@@ -17,7 +20,7 @@ _KEY_ENV_MAP: dict[str, str] = {
 
 
 @contextmanager
-def inject_api_keys(api_keys: dict[str, str]) -> Generator[None, None, None]:
+def inject_api_keys(api_keys: dict[str, str]) -> Generator[None]:
     """Override env vars from api_keys dict, restore originals on exit."""
     unknown_keys = sorted(set(api_keys) - set(_KEY_ENV_MAP))
     if unknown_keys:

@@ -25,7 +25,7 @@ def send_test_email(api_key: str, input: SendEmailInput | None = None) -> None:
             html="<strong>It works!</strong>",
         )
     resend = _resend_module()
-    setattr(resend, "api_key", api_key)
+    resend.api_key = api_key
 
     params: dict[str, object] = {
         "from": input.sender,
@@ -35,7 +35,7 @@ def send_test_email(api_key: str, input: SendEmailInput | None = None) -> None:
     }
 
     try:
-        emails_client = getattr(resend, "Emails")
+        emails_client = resend.Emails
         email = emails_client.send(params)
         print(f"Email sent successfully! ID: {email.get('id')}")
         print(email)

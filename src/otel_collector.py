@@ -1,4 +1,4 @@
-"""Telemetry collector: an OpenTelemetry Collector running on Modal that fans
+r"""Telemetry collector: an OpenTelemetry Collector running on Modal that fans
 out to all providers, reached purely over Modal RPC (no public endpoint).
 
 Architecture (see ``libs/telemetry.py`` for the app side):

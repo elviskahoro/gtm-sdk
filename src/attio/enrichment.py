@@ -180,7 +180,7 @@ def backfill_company_domains_via_exa(
     sleep_seconds: float = 0.0,
     apply: bool = False,
 ) -> CompanyDomainBackfillReport:
-    """Resolve and PATCH missing ``domains`` on a target set of Companies.
+    r"""Resolve and PATCH missing ``domains`` on a target set of Companies.
 
     Target identification (exactly one must be set):
     - ``ext_tam_filter``: pivot via ext_tam, dedupe ``accounts[0]`` Company ids.

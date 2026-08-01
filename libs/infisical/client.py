@@ -71,7 +71,7 @@ def _fetch_from_infisical(name: str) -> str:
 
 
 @contextmanager
-def fetch(name: str) -> Generator[str, None, None]:
+def fetch(name: str) -> Generator[str]:
     """Yield the value of ``name`` from session env, falling back to Infisical.
 
     The ``with`` form is API ergonomics: callers read as "I am acquiring this
@@ -91,7 +91,7 @@ def fetch(name: str) -> Generator[str, None, None]:
 
 
 @contextmanager
-def fetch_all(names: list[str]) -> Generator[dict[str, str], None, None]:
+def fetch_all(names: list[str]) -> Generator[dict[str, str]]:
     """Yield a ``{name: value}`` map, resolving each via :func:`fetch`."""
     with ExitStack() as stack:
         yield {name: stack.enter_context(fetch(name)) for name in names}

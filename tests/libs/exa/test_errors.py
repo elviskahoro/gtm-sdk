@@ -9,7 +9,7 @@ from libs.exa.errors import (
 )
 
 
-def test_from_http_status_401():
+def test_from_http_status_401() -> None:
     """Test 401 Unauthorized maps to ExaAuthError."""
     error = from_http_status(
         401,
@@ -22,7 +22,7 @@ def test_from_http_status_401():
     assert "Invalid API key" in str(error)
 
 
-def test_from_http_status_400():
+def test_from_http_status_400() -> None:
     """Test 400 Bad Request maps to ExaBadRequestError."""
     error = from_http_status(
         400,
@@ -34,7 +34,7 @@ def test_from_http_status_400():
     assert error.request_id == "req-456"
 
 
-def test_from_http_status_422():
+def test_from_http_status_422() -> None:
     """Test 422 Unprocessable Entity maps to ExaBadRequestError."""
     error = from_http_status(
         422,
@@ -45,7 +45,7 @@ def test_from_http_status_422():
     assert error.status == 422
 
 
-def test_from_http_status_429():
+def test_from_http_status_429() -> None:
     """Test 429 Too Many Requests maps to ExaRateLimitError."""
     error = from_http_status(
         429,
@@ -56,7 +56,7 @@ def test_from_http_status_429():
     assert error.status == 429
 
 
-def test_from_http_status_5xx():
+def test_from_http_status_5xx() -> None:
     """Test 5xx Server Error maps to ExaServerError."""
     for status in [500, 502, 503, 504]:
         error = from_http_status(status, request_id=f"req-{status}")
@@ -64,25 +64,26 @@ def test_from_http_status_5xx():
         assert error.status == status
 
 
-def test_from_http_status_missing_message():
+def test_from_http_status_missing_message() -> None:
     """Test from_http_status with missing message falls back to default."""
     error = from_http_status(400, body=None)
     assert isinstance(error, ExaBadRequestError)
     assert "Bad Request" in str(error)
 
 
-def test_from_http_status_unknown():
+def test_from_http_status_unknown() -> None:
     """Test from_http_status with unknown status code."""
     error = from_http_status(418, request_id="req-teapot")
     # Should return base ExaError for unknown codes
     assert error.status == 418
 
 
-def test_from_http_status_tolerates_non_dict_body():
+def test_from_http_status_tolerates_non_dict_body() -> None:
     """Regression (roborev): real-world error responses sometimes return a
     non-dict body (a string, list, or null). ``from_http_status`` must not
     crash on these — that would mask the original HTTP failure with an
-    ``AttributeError`` from ``body.get(...)``."""
+    ``AttributeError`` from ``body.get(...)``.
+    """
     # String body
     err1 = from_http_status(429, body="rate limited as text")  # type: ignore[arg-type]
     assert err1.status == 429

@@ -257,7 +257,8 @@ def test_poll_gives_up_at_the_deadline(script: Any) -> None:
 
 def test_plan_artifact_content_is_preferred(script: Any) -> None:
     """PLAN embeds markdown in the response, so it needs no download and no file
-    write inside the sandbox -- the most reliable of the three paths."""
+    write inside the sandbox -- the most reliable of the three paths.
+    """
     client = _FakeClient(
         artifact_responses={
             "plan-1": _Obj(data=_Obj(content="  # diagnosis from plan  ")),
@@ -400,7 +401,8 @@ def test_main_writes_nothing_when_no_diagnosis_and_still_succeeds(
     tmp_path: Path,
 ) -> None:
     """Exit 0 with no file: the caller files a log-only issue instead. Turning this
-    into a failure would make one red check into two."""
+    into a failure would make one red check into two.
+    """
     out = tmp_path / "diagnosis.md"
     client = _FakeClient(final=_Obj(state="FAILED", artifacts=[]))
     assert script.main(_args(out), client=client) == 0
@@ -425,7 +427,8 @@ def test_main_flags_a_non_success_terminal_state_in_the_output(
 
 def test_config_omits_unset_fields(script: Any) -> None:
     """An empty environment_id must be absent, not sent as '' -- the API treats a
-    missing one as 'no environment', which is the documented default."""
+    missing one as 'no environment', which is the documented default.
+    """
     args = script.parse_args(
         [*_args(Path("out.md")), "--environment-id", "", "--harness", ""],
     )
@@ -472,7 +475,7 @@ def test_run_start_failure_is_reported_as_exit_one(
 
 
 def test_normalization_strips_warp_prose_escaping(script: Any) -> None:
-    """Warp's plan renderer escapes prose punctuation; Linear renders it literally.
+    r"""Warp's plan renderer escapes prose punctuation; Linear renders it literally.
 
     Verified against a live run, which emitted `taplo \\(invoked by ...\\)` and
     `high\\-severity`.
@@ -484,8 +487,9 @@ def test_normalization_strips_warp_prose_escaping(script: Any) -> None:
 
 
 def test_normalization_never_touches_fenced_blocks(script: Any) -> None:
-    """The whole point of one real diagnosis was an invalid `\\d` escape -- mangling
-    code would destroy the very detail that matters."""
+    r"""The whole point of one real diagnosis was an invalid `\\d` escape -- mangling
+    code would destroy the very detail that matters.
+    """
     text = "prose \\(x\\)\n```text\nregex `[A-Z]+-\\d+` \\(kept\\)\n```\nmore \\(y\\)"
     got = script.normalize_agent_markdown(text)
     assert r"[A-Z]+-\d+" in got, "backslash inside a fence must survive"

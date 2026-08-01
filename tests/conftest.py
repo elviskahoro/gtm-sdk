@@ -18,7 +18,6 @@ from attio.errors import SDKError  # noqa: E402
 
 from libs.attio.sdk_boundary import get_attio_sdk_client_class  # noqa: E402
 
-
 # Hypothesis settings profiles.
 #
 # Registered at module scope rather than from a hook: the Hypothesis pytest
@@ -89,7 +88,8 @@ _REAL_SPAWN_BUILDERS: dict[str, Any] = {}
 @pytest.fixture(scope="session")
 def real_spawn_builders() -> Any:
     """The real (unpatched) Modal-spawn exporter builders as a namespace with
-    ``span`` and ``log`` attributes."""
+    ``span`` and ``log`` attributes.
+    """
     from types import SimpleNamespace
 
     return SimpleNamespace(**_REAL_SPAWN_BUILDERS)

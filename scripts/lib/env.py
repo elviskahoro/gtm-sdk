@@ -10,7 +10,6 @@ import os
 import sys
 from pathlib import Path
 
-
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SCRIPT_DIR.parent
 
@@ -22,7 +21,6 @@ def infisical_run_example(
     extra_args: str = "",
 ) -> str:
     """Return the canonical `infisical run` form for a repo script."""
-
     suffix = f" {extra_args}" if extra_args else ""
     return (
         'infisical run --projectId "$INFISICAL_PROJECT_ID" '
@@ -61,14 +59,13 @@ def env_flag(name: str, *, default: bool = False) -> bool:
 
 def add_repo_root_to_sys_path() -> None:
     """Insert the repo root into `sys.path` if a script needs local imports."""
-
     repo_root = str(REPO_ROOT)
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
 
 
 def clean_env(value: str | None) -> str | None:
-    """Strip whitespace from an env value; treat blank-after-strip as ``None``.
+    r"""Strip whitespace from an env value; treat blank-after-strip as ``None``.
 
     Trailing newlines on secrets (e.g. from a `cat`-ed file or copy-paste)
     silently break auth otherwise — Attio rejects "Bearer key\\n" with a 401

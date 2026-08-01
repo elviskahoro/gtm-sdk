@@ -187,7 +187,7 @@ def profile_to_person_input(profile: HarvestProfile, email: str) -> PersonInput:
     if "lastName" in data:
         person_input.last_name = data["lastName"]
 
-    if "emails" in data and data["emails"]:
+    if data.get("emails"):
         person_input.additional_emails = data["emails"]
 
     if "location" in data:
@@ -212,7 +212,7 @@ def profile_to_person_input(profile: HarvestProfile, email: str) -> PersonInput:
             if country := loc.get("country"):
                 person_input.country_code = country_name_to_iso2(country)
 
-    if "headline" in data and data["headline"]:
+    if data.get("headline"):
         person_input.notes = data["headline"]
 
     return person_input

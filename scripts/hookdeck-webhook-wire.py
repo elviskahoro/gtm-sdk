@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create (upsert) the Hookdeck Source → Destination → Connection for a deployed
+r"""Create (upsert) the Hookdeck Source → Destination → Connection for a deployed
 webhook, pointing the Destination at the app's Modal URL.
 
 The repo's other Hookdeck tooling is read-only (`gtm webhook sync` discovers

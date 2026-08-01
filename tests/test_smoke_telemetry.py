@@ -29,7 +29,7 @@ from src.otel_collector import (
 class TestTelemetryUtilityFunctions:
     """Test low-level utility functions."""
 
-    def test_endpoint_is_hyperdx_url_matches_exact_host(self):
+    def test_endpoint_is_hyperdx_url_matches_exact_host(self) -> None:
         """Verify exact host matching for HyperDX URL detection."""
         assert _endpoint_is_hyperdx_url("https://in-otel.hyperdx.io/v1/traces")
         assert _endpoint_is_hyperdx_url("https://in-otel.hyperdx.io")
@@ -40,7 +40,7 @@ class TestTelemetryUtilityFunctions:
         assert not _endpoint_is_hyperdx_url(None)
         assert not _endpoint_is_hyperdx_url("")
 
-    def test_normalize_otlp_endpoint_to_logs(self):
+    def test_normalize_otlp_endpoint_to_logs(self) -> None:
         """Ensure endpoint normalization handles signal suffixes."""
         # Full logs URL passes through
         assert (
@@ -66,7 +66,7 @@ class TestTelemetryUtilityFunctions:
             == "https://example.com/v1/logs"
         )
 
-    def test_hyperdx_auth_headers_format(self):
+    def test_hyperdx_auth_headers_format(self) -> None:
         """Verify HyperDX auth header format."""
         headers = _hyperdx_auth_headers("test-key-123")
         assert headers == {"authorization": "Bearer test-key-123"}
@@ -78,7 +78,7 @@ class TestTelemetryUtilityFunctions:
         headers = _hyperdx_auth_headers("")
         assert headers == {}
 
-    def test_collector_function_respects_env_vars(self):
+    def test_collector_function_respects_env_vars(self) -> None:
         """Collector app and function names are configurable via env vars."""
         # When app is set, uses default function
         with patch.dict(
@@ -122,7 +122,7 @@ class TestTelemetryUtilityFunctions:
 class TestTelemetryInitialization:
     """Test tracer and logger initialization paths."""
 
-    def test_init_tracer_noop_without_config(self):
+    def test_init_tracer_noop_without_config(self) -> None:
         """Tracer init is no-op when collector is opted out and no OTEL env vars set."""
         # Opt out of the default collector mode so we exercise the direct path,
         # which is a genuine no-op with no sink configured.
@@ -130,7 +130,7 @@ class TestTelemetryInitialization:
             result = init_tracer("test-service")
             assert result is None
 
-    def test_init_tracer_with_hyperdx_key(self):
+    def test_init_tracer_with_hyperdx_key(self) -> None:
         """Tracer initializes with HyperDX API key (direct path; collector opted out)."""
         with patch.dict(
             os.environ,
@@ -140,7 +140,7 @@ class TestTelemetryInitialization:
             # Should succeed and return a tracer
             assert result is not None
 
-    def test_init_tracer_with_otel_endpoint(self):
+    def test_init_tracer_with_otel_endpoint(self) -> None:
         """Tracer initializes with generic OTEL endpoint (direct path; collector opted out)."""
         with patch.dict(
             os.environ,
@@ -152,7 +152,7 @@ class TestTelemetryInitialization:
             result = init_tracer("test-service")
             assert result is not None
 
-    def test_init_tracer_via_collector_when_configured(self):
+    def test_init_tracer_via_collector_when_configured(self) -> None:
         """Tracer uses collector path when TELEMETRY_COLLECTOR_APP is set."""
         with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": "otel-collector"}):
             # Mock the spawn exporter to avoid needing opentelemetry
@@ -161,13 +161,13 @@ class TestTelemetryInitialization:
                 # Should use collector path
                 assert result is not None
 
-    def test_init_log_exporter_noop_without_config(self):
+    def test_init_log_exporter_noop_without_config(self) -> None:
         """Log exporter init is no-op when collector is opted out and no OTEL env vars set."""
         with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": ""}, clear=True):
             result = init_log_exporter("test-service")
             assert result is None
 
-    def test_init_log_exporter_with_hyperdx_key(self):
+    def test_init_log_exporter_with_hyperdx_key(self) -> None:
         """Log exporter initializes with HyperDX API key (direct path; collector opted out)."""
         with patch.dict(
             os.environ,
@@ -176,7 +176,7 @@ class TestTelemetryInitialization:
             result = init_log_exporter("test-service")
             assert result is not None
 
-    def test_init_log_exporter_with_headers_only(self):
+    def test_init_log_exporter_with_headers_only(self) -> None:
         """Log exporter works with headers-only OTEL config (direct path; collector opted out)."""
         with patch.dict(
             os.environ,
@@ -188,7 +188,7 @@ class TestTelemetryInitialization:
             result = init_log_exporter("test-service")
             assert result is not None
 
-    def test_init_log_exporter_idempotency(self):
+    def test_init_log_exporter_idempotency(self) -> None:
         """Repeated calls with same service name return cached logger."""
         with patch.dict(
             os.environ,
@@ -198,7 +198,7 @@ class TestTelemetryInitialization:
             logger2 = init_log_exporter("service-1")
             assert logger1 is logger2
 
-    def test_init_log_exporter_per_service(self):
+    def test_init_log_exporter_per_service(self) -> None:
         """Different service names get separate loggers."""
         with patch.dict(
             os.environ,
@@ -209,7 +209,7 @@ class TestTelemetryInitialization:
             # Should be different loggers
             assert logger1 is not logger2
 
-    def test_init_log_exporter_via_collector_when_configured(self):
+    def test_init_log_exporter_via_collector_when_configured(self) -> None:
         """Log exporter uses collector path when TELEMETRY_COLLECTOR_APP is set."""
         with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": "otel-collector"}):
             with patch("libs.telemetry._build_spawn_log_exporter"):
@@ -220,13 +220,13 @@ class TestTelemetryInitialization:
 class TestTelemetryLookup:
     """Test logger lookup and retrieval."""
 
-    def test_get_otlp_logger_returns_none_without_init(self):
+    def test_get_otlp_logger_returns_none_without_init(self) -> None:
         """get_otlp_logger returns None if not initialized."""
         with patch.dict(os.environ, {}, clear=True):
             result = get_otlp_logger("never-initialized")
             assert result is None
 
-    def test_get_otlp_logger_returns_none_for_none_service(self):
+    def test_get_otlp_logger_returns_none_for_none_service(self) -> None:
         """get_otlp_logger returns None when service_name is None."""
         # Initialize something first
         with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
@@ -236,7 +236,7 @@ class TestTelemetryLookup:
         result = get_otlp_logger(None)
         assert result is None
 
-    def test_get_otlp_logger_strict_lookup(self):
+    def test_get_otlp_logger_strict_lookup(self) -> None:
         """get_otlp_logger doesn't fall back to first-registered service."""
         from libs import telemetry
 
@@ -254,13 +254,13 @@ class TestTelemetryLookup:
 class TestTelemetryEvents:
     """Test CLI event emission."""
 
-    def test_emit_cli_event_noop_without_tracer(self):
+    def test_emit_cli_event_noop_without_tracer(self) -> None:
         """emit_cli_event is no-op if tracer not initialized."""
         with patch.dict(os.environ, {}, clear=True):
             # Should not raise
             emit_cli_event("test-event", {"key": "value"})
 
-    def test_emit_cli_event_with_tracer(self):
+    def test_emit_cli_event_with_tracer(self) -> None:
         """emit_cli_event emits span with attributes when tracer initialized."""
         with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
             init_tracer("test-service")
@@ -271,14 +271,14 @@ class TestTelemetryEvents:
 class TestCollectorConfiguration:
     """Test OTEL collector configuration building."""
 
-    def test_build_collector_config_no_providers(self):
+    def test_build_collector_config_no_providers(self) -> None:
         """Config with no provider credentials is valid but minimal."""
         config = build_collector_config({})
         assert "receivers" in config
         assert "exporters" in config
         assert "service" in config
 
-    def test_build_collector_config_hyperdx(self):
+    def test_build_collector_config_hyperdx(self) -> None:
         """Config includes HyperDX exporter when key is set."""
         env = {
             "HYPERDX_API_KEY": "test-key",
@@ -287,9 +287,9 @@ class TestCollectorConfiguration:
         config = build_collector_config(env)
         # Should have hyperdx exporter (uses otlphttp/hyperdx naming)
         exporters = config.get("exporters", {})
-        assert any("hyperdx" in key for key in exporters.keys())
+        assert any("hyperdx" in key for key in exporters)
 
-    def test_build_collector_config_logfire(self):
+    def test_build_collector_config_logfire(self) -> None:
         """Config includes generic OTEL exporter when configured."""
         env = {
             "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://ingest.logfire.io/v1/logs",
@@ -300,7 +300,7 @@ class TestCollectorConfiguration:
         exporters = config.get("exporters", {})
         assert len(exporters) > 0 or True  # Logfire requires full config
 
-    def test_build_collector_config_dash0(self):
+    def test_build_collector_config_dash0(self) -> None:
         """Config includes Dash0 exporter when configured."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: B105
@@ -309,7 +309,7 @@ class TestCollectorConfiguration:
         # Dash0 should be in exporters
         assert "exporters" in config
 
-    def test_build_collector_config_all_providers(self):
+    def test_build_collector_config_all_providers(self) -> None:
         """Config can include all three providers simultaneously."""
         env = {
             "HYPERDX_API_KEY": "hd-key",
@@ -322,14 +322,14 @@ class TestCollectorConfiguration:
         # Should have multiple exporters
         assert len(exporters) >= 1
 
-    def test_base_endpoint_strips_signal_suffix(self):
+    def test_base_endpoint_strips_signal_suffix(self) -> None:
         """_base_endpoint removes /v1/{signal} suffix."""
         assert _base_endpoint("https://example.com/v1/traces") == "https://example.com"
         assert _base_endpoint("https://example.com/v1/logs") == "https://example.com"
         assert _base_endpoint("https://example.com/v1/metrics") == "https://example.com"
         assert _base_endpoint("https://example.com") == "https://example.com"
 
-    def test_otelcol_alive_check(self):
+    def test_otelcol_alive_check(self) -> None:
         """_otelcol_alive returns False when not running."""
         # Should return False since we're not actually running otelcol
         result = _otelcol_alive()
@@ -340,7 +340,7 @@ class TestCollectorConfiguration:
 class TestSpanExporters:
     """Test span/log exporter builders."""
 
-    def test_build_spawn_span_exporter(self, real_spawn_builders):
+    def test_build_spawn_span_exporter(self, real_spawn_builders) -> None:
         """Spawn span exporter can be created."""
         # Modal is imported inside the function, so we patch it there
         import sys
@@ -354,7 +354,7 @@ class TestSpanExporters:
             assert hasattr(exporter, "shutdown")
             assert hasattr(exporter, "force_flush")
 
-    def test_build_spawn_log_exporter(self, real_spawn_builders):
+    def test_build_spawn_log_exporter(self, real_spawn_builders) -> None:
         """Spawn log exporter can be created."""
         import sys
 
@@ -370,7 +370,7 @@ class TestSpanExporters:
 class TestIntegration:
     """Integration tests combining multiple components."""
 
-    def test_tracer_and_logger_both_work(self):
+    def test_tracer_and_logger_both_work(self) -> None:
         """Tracer and logger can be initialized in same process."""
         with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
             tracer = init_tracer("service-1")
@@ -378,7 +378,7 @@ class TestIntegration:
             assert tracer is not None
             assert logger is not None
 
-    def test_multiple_services_independent(self):
+    def test_multiple_services_independent(self) -> None:
         """Multiple services maintain independent telemetry state."""
         with patch.dict(os.environ, {"HYPERDX_API_KEY": "test-key"}):
             init_tracer("service-1")
@@ -390,7 +390,7 @@ class TestIntegration:
             # and different loggers
             assert logger1 is not logger2
 
-    def test_collector_and_direct_sink_paths_exclusive(self):
+    def test_collector_and_direct_sink_paths_exclusive(self) -> None:
         """Collector path is used when enabled, direct sink path otherwise."""
         with patch.dict(os.environ, {"TELEMETRY_COLLECTOR_APP": "enabled"}):
             with patch("libs.telemetry._build_spawn_log_exporter"):

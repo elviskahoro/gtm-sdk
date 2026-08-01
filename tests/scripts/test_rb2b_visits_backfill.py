@@ -17,8 +17,10 @@ from typing import Any
 
 import orjson
 
-from libs.rb2b import Webhook as Rb2bWebhook
-from libs.rb2b import compute_event_id
+from libs.rb2b import (
+    Webhook as Rb2bWebhook,
+    compute_event_id,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "rb2b-visits-backfill.py"

@@ -553,7 +553,7 @@ def test_preflight_fails_when_infisical_returns_empty_stdout(
 
 
 def test_shutil_copyfile_overwrites(tmp_path: Path) -> None:
-    """AC4: restore overwrites unconditionally — no alias-bypass game in Python.
+    r"""AC4: restore overwrites unconditionally — no alias-bypass game in Python.
 
     The bash script needed `\\cp -f` to dodge `cp -i` aliases that would
     silently refuse the restore. The Python rewrite uses ``shutil.copyfile``,

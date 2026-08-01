@@ -7,10 +7,10 @@ from typing import Any
 from libs.octolens.models import ApiMention
 from src.octolens.backfill import (
     api_mention_to_row,
-    is_dlthub_url,
     build_webhook_payload,
     coerce_view_id,
     include_mention,
+    is_dlthub_url,
     normalize_source,
     relevance_from_api,
     split_csv_list,

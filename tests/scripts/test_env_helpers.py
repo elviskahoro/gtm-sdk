@@ -24,17 +24,7 @@ def test_clean_env_strips_and_blanks_to_none() -> None:
 
 
 def test_parse_dotenv_handles_export_quotes_and_comments() -> None:
-    text = "\n".join(
-        [
-            "# a comment",
-            "",
-            "export INFISICAL_PROJECT_ID=proj-123",
-            'INFISICAL_TOKEN="st.tok.en"',
-            "SINGLE='quoted value'",
-            "UNQUOTED=bare # trailing comment",
-            "NO_EQUALS_LINE",
-        ],
-    )
+    text = "# a comment\n\nexport INFISICAL_PROJECT_ID=proj-123\nINFISICAL_TOKEN=\"st.tok.en\"\nSINGLE='quoted value'\nUNQUOTED=bare # trailing comment\nNO_EQUALS_LINE"
     parsed = env.parse_dotenv(text)
     assert parsed["INFISICAL_PROJECT_ID"] == "proj-123"
     assert parsed["INFISICAL_TOKEN"] == "st.tok.en"

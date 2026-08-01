@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["oz-agent-sdk==0.14.0", "httpx>=0.23.0"]
 # ///
-"""Ask an Oz cloud agent why a CI run failed, and write its findings to a file.
+r"""Ask an Oz cloud agent why a CI run failed, and write its findings to a file.
 
 Runs the agent through ``oz_agent_sdk`` (Warp's REST API) rather than
 ``warpdotdev/oz-agent-action``. Two reasons: the SDK is plain Python, so the whole
@@ -172,7 +172,7 @@ _WARP_FENCE_LANGS = ("warp-runnable-command",)
 
 
 def normalize_agent_markdown(text: str) -> str:
-    """Undo Warp plan-renderer escaping so the text reads correctly in Linear.
+    r"""Undo Warp plan-renderer escaping so the text reads correctly in Linear.
 
     Fenced blocks and inline code spans are left byte-for-byte alone: a backslash
     inside them is content, and this diagnosis is *about* an invalid `\\d` escape, so

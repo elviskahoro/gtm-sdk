@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # ruff: noqa: PLR2004, S101, SLF001 -- white-box tests intentionally use
 # assertions and exercise the probe's private bootstrap sentinel.
-
 import importlib.util
 import json
 from pathlib import Path
@@ -63,7 +62,8 @@ def _scrub_bootstrap_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:  # pyrig
     """The bootstrap sentinel is set on `os.environ` directly inside the
     script (so it survives `execvp`). In tests where `execvp` is monkeypatched
     away, that side effect leaks across tests and short-circuits subsequent
-    bootstraps. Scrub it before every test."""
+    bootstraps. Scrub it before every test.
+    """
     module = _load_script_module()
     monkeypatch.delenv(module._BOOTSTRAP_SENTINEL_ENV, raising=False)
 
@@ -102,7 +102,8 @@ def test_missing_env_refuses_to_default_to_prod(
 ) -> None:
     """No silent prod default: refuse to bootstrap when --env and
     INFISICAL_ENV are both unset (codex review finding — silently probing
-    prod returns the wrong workspace slug)."""
+    prod returns the wrong workspace slug).
+    """
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.delenv("INFISICAL_ENV", raising=False)
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH)])
@@ -122,7 +123,8 @@ def test_preinjected_api_key_does_not_require_env_flag(
 ) -> None:
     """If ATTIO_API_KEY is already in the environment (e.g. exported manually
     or from another secret manager), --env / INFISICAL_ENV are unnecessary —
-    the script should run the probe directly (codex review finding)."""
+    the script should run the probe directly (codex review finding).
+    """
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.delenv("INFISICAL_ENV", raising=False)
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH)])
@@ -143,7 +145,8 @@ def test_infisical_env_env_var_is_honored_when_flag_absent(
 ) -> None:
     """INFISICAL_ENV stands in for --env, mirroring the repo convention
     (`export INFISICAL_ENV=dev` — explicit; no default, per
-    gtm-sdk/webhooks/AGENTS.md)."""
+    gtm-sdk/webhooks/AGENTS.md).
+    """
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-xyz")
     monkeypatch.setenv("INFISICAL_TOKEN", "tok-abc")
@@ -201,9 +204,10 @@ def test_explicit_env_prod_flag_self_bootstraps_via_infisical(
 def test_whitespace_in_env_credentials_is_stripped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Trailing newlines on copy-pasted credentials must not leak through to
+    r"""Trailing newlines on copy-pasted credentials must not leak through to
     Attio (codex review finding — `Bearer key\\n` returns a 401 that looks
-    identical to a bad key)."""
+    identical to a bad key).
+    """
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.setenv("INFISICAL_PROJECT_ID", "  proj-xyz\n")
     monkeypatch.setenv("INFISICAL_TOKEN", "tok-abc\n")
@@ -290,7 +294,8 @@ def test_extract_workspace_slug_non_object_payload_raises(
 ) -> None:
     """Guard against proxy or future-API responses where /v2/self is JSON but
     not a dict — a bare `.get()` would AttributeError and escape main()'s
-    catch (codex review finding)."""
+    catch (codex review finding).
+    """
     module = _load_script_module()
 
     with pytest.raises(ValueError, match="not a JSON object"):
@@ -309,7 +314,8 @@ def test_extract_workspace_slug_invalid_json_raises_value_error(
     invalid_body: str,
 ) -> None:
     """A non-JSON 200 (e.g. an upstream proxy HTML page) must surface as
-    ValueError so main()'s clean stderr path catches it (codex review)."""
+    ValueError so main()'s clean stderr path catches it (codex review).
+    """
     module = _load_script_module()
 
     with pytest.raises(ValueError, match="not valid JSON"):
@@ -321,7 +327,8 @@ def test_main_happy_path_prints_slug_only(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Happy path: probe() returns the slug, main() prints it with a
-    trailing newline to stdout and exits zero."""
+    trailing newline to stdout and exits zero.
+    """
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev"])
 
@@ -343,7 +350,8 @@ def test_main_happy_path_json_output(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """With --json, probe() returns a pretty-printed JSON string and main()
-    writes it to stdout verbatim (newline-terminated)."""
+    writes it to stdout verbatim (newline-terminated).
+    """
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev", "--json"])
 
@@ -371,7 +379,8 @@ def test_bootstrap_sentinel_blocks_infinite_loop(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """If the Infisical env doesn't contain ATTIO_API_KEY, fail fast rather
-    than re-execing `infisical run` forever (codex review finding)."""
+    than re-execing `infisical run` forever (codex review finding).
+    """
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-xyz")
     monkeypatch.setenv("INFISICAL_TOKEN", "tok-abc")
@@ -401,7 +410,8 @@ def test_probe_failure_surfaces_attio_error_body_and_exits_nonzero(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A bad Attio response must not dump a traceback — surface a clean
-    stderr message and exit non-zero (codex review finding)."""
+    stderr message and exit non-zero (codex review finding).
+    """
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev"])
 
@@ -431,7 +441,8 @@ def test_probe_inactive_token_surfaces_value_error_and_exits_nonzero(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """An inactive token returns 200 with `{"active": false}` (no slug).
-    extract_workspace_slug raises ValueError; main() must catch it cleanly."""
+    extract_workspace_slug raises ValueError; main() must catch it cleanly.
+    """
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev"])
 

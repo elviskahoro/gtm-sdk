@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from libs.attio.people import _linkedin_url_variants  # pyright: ignore[reportPrivateUsage]
+from libs.attio.people import (
+    _linkedin_url_variants,  # pyright: ignore[reportPrivateUsage]
+)
 
 EXPECTED_VARIANTS = {
     "https://www.linkedin.com/in/foo-bar",

@@ -4,8 +4,10 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from types import ModuleType
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 
 class _ModelDumpLike(Protocol):
@@ -15,28 +17,28 @@ class _ModelDumpLike(Protocol):
 def _import_attio_sdk_module() -> ModuleType:
     import attio
 
-    return cast(ModuleType, attio)
+    return cast("ModuleType", attio)
 
 
 def _import_attio_models_module() -> object:
     module = _import_attio_sdk_module()
-    return getattr(module, "models")
+    return module.models
 
 
 def get_attio_sdk_client_class() -> type[Any]:
     module = _import_attio_sdk_module()
-    return cast(type[Any], getattr(module, "SDK"))
+    return cast("type[Any]", module.SDK)
 
 
 def build_post_record_request(values: dict[str, Any]) -> object:
     models = _import_attio_models_module()
-    constructor = getattr(models, "PostV2ObjectsObjectRecordsDataRequest")
+    constructor = models.PostV2ObjectsObjectRecordsDataRequest  # pyrefly: ignore[missing-attribute]  # pyright: ignore[reportAttributeAccessIssue]
     return constructor(values=values)
 
 
 def build_patch_record_request(values: dict[str, Any]) -> object:
     models = _import_attio_models_module()
-    constructor = getattr(models, "PatchV2ObjectsObjectRecordsRecordIDDataRequest")
+    constructor = models.PatchV2ObjectsObjectRecordsRecordIDDataRequest  # pyrefly: ignore[missing-attribute]  # pyright: ignore[reportAttributeAccessIssue]
     return constructor(values=values)
 
 
@@ -50,7 +52,7 @@ def build_assert_record_request(values: dict[str, Any]) -> object:
     models = _import_attio_models_module()
     # Verified via `dir(attio.models)` probe: assert/PUT request type is
     # PutV2ObjectsObjectRecordsDataRequest, accepting a `values` kwarg.
-    constructor = getattr(models, "PutV2ObjectsObjectRecordsDataRequest")
+    constructor = models.PutV2ObjectsObjectRecordsDataRequest  # pyrefly: ignore[missing-attribute]  # pyright: ignore[reportAttributeAccessIssue]
     return constructor(values=values)
 
 
@@ -79,7 +81,7 @@ def build_post_note_request(
     default applies (no association).
     """
     models = _import_attio_models_module()
-    constructor = getattr(models, "PostV2NotesData")
+    constructor = models.PostV2NotesData  # pyrefly: ignore[missing-attribute]  # pyright: ignore[reportAttributeAccessIssue]
     kwargs: dict[str, Any] = {
         "parent_object": parent_object,
         "parent_record_id": parent_record_id,
@@ -108,7 +110,7 @@ def build_post_meeting_request(
     linked_records: list[dict[str, Any]],
 ) -> object:
     models = _import_attio_models_module()
-    constructor = getattr(models, "PostV2MeetingsData")
+    constructor = models.PostV2MeetingsData  # pyrefly: ignore[missing-attribute]  # pyright: ignore[reportAttributeAccessIssue]
     return constructor(
         external_ref=external_ref,
         title=title,
@@ -139,7 +141,7 @@ def _parse_json_object(text: str) -> Mapping[str, Any] | None:
         return None
 
     if isinstance(parsed, dict):
-        return cast(Mapping[str, Any], parsed)
+        return cast("Mapping[str, Any]", parsed)
     return None
 
 
@@ -246,6 +248,8 @@ def describe_attio_error(exc: BaseException) -> AttioErrorDescription | None:
 
 
 def model_dump_or_empty(value: object) -> dict[str, Any]:
-    if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
-        return cast(_ModelDumpLike, value).model_dump()
+    if hasattr(value, "model_dump") and callable(
+        value.model_dump,  # pyright: ignore[reportAttributeAccessIssue]
+    ):
+        return cast("_ModelDumpLike", value).model_dump()
     return {}

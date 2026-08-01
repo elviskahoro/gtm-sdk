@@ -14,7 +14,7 @@ class ExaError(Exception):
         status: int | None = None,
         request_id: str | None = None,
         body: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.request_id = request_id
@@ -24,25 +24,17 @@ class ExaError(Exception):
 class ExaAuthError(ExaError):
     """401 Unauthorized — invalid or missing API key."""
 
-    pass
-
 
 class ExaBadRequestError(ExaError):
     """400/422 Bad Request — invalid parameters or schema."""
-
-    pass
 
 
 class ExaRateLimitError(ExaError):
     """429 Too Many Requests — rate limit exceeded."""
 
-    pass
-
 
 class ExaServerError(ExaError):
     """5xx Server Error — Exa service error."""
-
-    pass
 
 
 def from_http_status(
@@ -78,21 +70,20 @@ def from_http_status(
 
     if status == 401:
         return ExaAuthError(message, status=status, request_id=request_id, body=body)
-    elif status in (400, 422):
+    if status in (400, 422):
         return ExaBadRequestError(
             message,
             status=status,
             request_id=request_id,
             body=body,
         )
-    elif status == 429:
+    if status == 429:
         return ExaRateLimitError(
             message,
             status=status,
             request_id=request_id,
             body=body,
         )
-    elif 500 <= status < 600:
+    if 500 <= status < 600:
         return ExaServerError(message, status=status, request_id=request_id, body=body)
-    else:
-        return ExaError(message, status=status, request_id=request_id, body=body)
+    return ExaError(message, status=status, request_id=request_id, body=body)

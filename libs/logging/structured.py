@@ -226,7 +226,7 @@ def log(event: str, **fields: Any) -> None:
 
 
 @contextlib.contextmanager
-def webhook_request_context(request: Request) -> Generator[str, None, None]:
+def webhook_request_context(request: Request) -> Generator[str]:
     """Bind `request_id` for the duration of a webhook call.
 
     Reads `X-Request-Id` from the inbound request (uuid7 fallback), sets the

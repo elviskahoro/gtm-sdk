@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from libs.attio.companies import set_company_domain_if_empty
 
 
-def test_set_company_domain_if_empty_apply_false():
+def test_set_company_domain_if_empty_apply_false() -> None:
     """Test that apply=False returns noop without I/O."""
     result = set_company_domain_if_empty(
         record_id="rec-123",
@@ -17,7 +17,7 @@ def test_set_company_domain_if_empty_apply_false():
     assert result.success is True
 
 
-def test_set_company_domain_if_empty_already_has_domain():
+def test_set_company_domain_if_empty_already_has_domain() -> None:
     """Test that non-empty domains returns noop without PATCH."""
     mock_client = MagicMock()
     mock_record = MagicMock()
@@ -42,7 +42,7 @@ def test_set_company_domain_if_empty_already_has_domain():
         mock_client.records.patch_v2_objects_object_records_record_id_.assert_not_called()
 
 
-def test_set_company_domain_if_empty_domain_empty_patches():
+def test_set_company_domain_if_empty_domain_empty_patches() -> None:
     """Test that empty domains PATCH with the new domain."""
     mock_client = MagicMock()
     mock_record = MagicMock()
@@ -78,7 +78,7 @@ def test_set_company_domain_if_empty_domain_empty_patches():
         assert call_kwargs["record_id"] == "rec-123"
 
 
-def test_set_company_domain_if_empty_invalid_domain():
+def test_set_company_domain_if_empty_invalid_domain() -> None:
     """Test that invalid domain returns noop."""
     mock_client = MagicMock()
     mock_record = MagicMock()
@@ -102,7 +102,7 @@ def test_set_company_domain_if_empty_invalid_domain():
         mock_client.records.patch_v2_objects_object_records_record_id_.assert_not_called()
 
 
-def test_set_company_domain_if_empty_race_condition():
+def test_set_company_domain_if_empty_race_condition() -> None:
     """Test race condition: domains populated between GET and PATCH."""
     mock_client = MagicMock()
 
@@ -127,11 +127,12 @@ def test_set_company_domain_if_empty_race_condition():
         assert result.success is True
 
 
-def test_looks_like_domain_handles_non_string_input():
+def test_looks_like_domain_handles_non_string_input() -> None:
     """Regression (roborev): ``looks_like_domain`` must not raise on
     non-string input (e.g. ``None``, integers, lists). Such values should
     return ``False`` so they flow through the helper's invalid-domain
-    noop path instead of crashing the orchestrator."""
+    noop path instead of crashing the orchestrator.
+    """
     from libs.attio.values import looks_like_domain
 
     assert looks_like_domain(None) is False
@@ -142,7 +143,7 @@ def test_looks_like_domain_handles_non_string_input():
     assert looks_like_domain("  acme.com  ") is True
 
 
-def test_looks_like_domain_rejects_invalid_label_shapes():
+def test_looks_like_domain_rejects_invalid_label_shapes() -> None:
     """Regression: reject malformed host labels, not just whole-string junk."""
     from libs.attio.values import looks_like_domain
 
@@ -157,12 +158,13 @@ def test_looks_like_domain_rejects_invalid_label_shapes():
         assert looks_like_domain(bad) is False, bad
 
 
-def test_set_company_domain_if_empty_malformed_domain_is_domain_invalid_noop():
+def test_set_company_domain_if_empty_malformed_domain_is_domain_invalid_noop() -> None:
     """Regression (roborev): a malformed-but-truthy domain (whitespace, URL
     scheme, no dot) must trip the ``domain_invalid`` noop branch instead of
     being PATCHed to Attio. ``format_company_domains`` now runs the shared
     ``looks_like_domain`` check, so the helper's existing noop path becomes
-    reachable for these cases."""
+    reachable for these cases.
+    """
     mock_client = MagicMock()
     mock_current = MagicMock()
     mock_current.data.values.get.return_value = []  # domains empty

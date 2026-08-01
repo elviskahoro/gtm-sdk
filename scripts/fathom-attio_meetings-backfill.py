@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill Attio Meeting records (+ Fathom summary / action-item notes) from the
+r"""Backfill Attio Meeting records (+ Fathom summary / action-item notes) from the
 Fathom REST API.
 
 Motivation (ai-t58): pre-plan-02 Cal.com reschedules left phantom duplicate

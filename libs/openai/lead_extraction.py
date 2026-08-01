@@ -175,7 +175,7 @@ def process_csv_with_lead_extraction(
 
     import openai as openai_sdk
 
-    client = getattr(openai_sdk, "OpenAI")(api_key=api_key)
+    client = openai_sdk.OpenAI(api_key=api_key)
 
     print(f"Reading CSV from: {input_csv_path}")
     # trunk-ignore(pyright/reportPrivateImportUsage): pyarrow.csv.read_csv is a public API, stubs flag it as internal

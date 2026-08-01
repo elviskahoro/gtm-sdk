@@ -61,7 +61,8 @@ def test_real_v2_created_parses_and_renders_with_attendee_timezone() -> None:
     """Regression for the live 422: the real cal.com v2 BOOKING_CREATED payload
     uses startTime/organizer/eventTitle (not start/hosts), and attendees omit
     displayEmail/absent. It must parse and render a 'scheduled' card whose
-    Attendees field includes the attendee's time zone."""
+    Attendees field includes the attendee's time zone.
+    """
     msgs = _messages("api/samples/caldotcom.booking.created.v2.redacted.json")
     assert len(msgs) == 1
     assert msgs[0].event_subtype == "scheduled"
@@ -104,7 +105,8 @@ def test_lifecycle_events_for_one_booking_share_a_thread_key() -> None:
     event for the *same* booking must collide on ``thread_key`` so the cancel
     threads under the original message. Both key off ``canonical_meeting_uid``
     of the same host + start, so they must match exactly. (The recorded
-    fixtures are different bookings, hence this builds matching payloads.)"""
+    fixtures are different bookings, hence this builds matching payloads.).
+    """
     from datetime import UTC, datetime
 
     from libs.caldotcom.models import (
@@ -249,7 +251,8 @@ def test_meeting_ended_no_show_host_is_urgent() -> None:
 
 def test_long_field_values_are_truncated_to_slack_limit() -> None:
     """A long cancellationReason must not exceed Slack's 2000-char per-field
-    cap (which would make chat.postMessage reject the whole post)."""
+    cap (which would make chat.postMessage reject the whole post).
+    """
     from datetime import UTC, datetime
 
     from libs.caldotcom.models import BookingCancelledPayload
@@ -338,7 +341,8 @@ def test_opening_message_never_broadcasts_even_if_urgent() -> None:
 def test_out_of_order_fallback_becomes_thread_root() -> None:
     """Documented best-effort edge: if a non-opening event arrives with no
     stored anchor (opener undelivered / out-of-order), it posts top-level and
-    becomes the thread root, so a later event threads under it."""
+    becomes the thread root, so a later event threads under it.
+    """
     client = _FakeSlackClient()
     store = InMemoryThreadStore()
 

@@ -12,7 +12,7 @@ between ops and lib-side input types lives in the dispatcher.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -55,7 +55,7 @@ class MeetingRef(BaseModel):
 # to a meeting — it is only *associated* via ``UpsertNote.meeting`` /
 # ``meeting_id``. See ai-gez and the Step 0 probe.
 Ref = Annotated[
-    Union[PersonRef, CompanyRef],
+    PersonRef | CompanyRef,
     Field(discriminator="ref_kind"),
 ]
 
@@ -305,14 +305,12 @@ class EmitMeetingLifecycleEvent(BaseModel):
 
 
 AttioOp = Annotated[
-    Union[
-        UpsertPerson,
-        UpsertCompany,
-        UpsertMeeting,
-        UpsertNote,
-        UpsertMention,
-        UpsertTrackingEvent,
-        EmitMeetingLifecycleEvent,
-    ],
+    UpsertPerson
+    | UpsertCompany
+    | UpsertMeeting
+    | UpsertNote
+    | UpsertMention
+    | UpsertTrackingEvent
+    | EmitMeetingLifecycleEvent,
     Field(discriminator="op_type"),
 ]

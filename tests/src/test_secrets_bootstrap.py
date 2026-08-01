@@ -48,7 +48,8 @@ def test_bootstrap_payload_collector_mode_withholds_sink_creds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """In collector mode, app containers get only the collector pointer — never
-    a provider credential (the collector holds those)."""
+    a provider credential (the collector holds those).
+    """
     from src.secrets_bootstrap import (
         _bootstrap_secret_payload,  # trunk-ignore(pyright/reportPrivateUsage)
     )
@@ -76,7 +77,8 @@ def test_bootstrap_payload_baseline_mode_includes_sink_creds(
     direct-sink creds are passed through to support the baseline fallback path.
 
     Collector mode is now the default, so baseline is reached by the explicit
-    empty-string opt-out, not by leaving the var unset."""
+    empty-string opt-out, not by leaving the var unset.
+    """
     from src.secrets_bootstrap import (
         _bootstrap_secret_payload,  # trunk-ignore(pyright/reportPrivateUsage)
     )
@@ -94,7 +96,8 @@ def test_bootstrap_payload_defaults_to_collector_mode(
 ) -> None:
     """Collector mode is the default: with TELEMETRY_COLLECTOR_APP unset, app
     containers must NOT carry direct-sink provider creds (they reach providers
-    only through the collector)."""
+    only through the collector).
+    """
     from src.secrets_bootstrap import (
         _bootstrap_secret_payload,  # trunk-ignore(pyright/reportPrivateUsage)
     )
@@ -175,7 +178,7 @@ def test_with_secrets_preserves_signature_and_name(
 
     @contextmanager
     def fake_fetch_all(names):
-        yield {n: "v" for n in names}
+        yield dict.fromkeys(names, "v")
 
     monkeypatch.setattr(sb.infisical, "fetch_all", fake_fetch_all)
     monkeypatch.setattr(sb, "KEY_SCOPES", {})
@@ -236,7 +239,6 @@ def test_with_secrets_honors_api_keys_kwarg_override_without_infisical(
     """When ``api_keys=`` is supplied, Infisical must not be contacted —
     ``inject_api_keys`` seeds the env so ``infisical.fetch`` short-circuits.
     """
-
     import src.secrets_bootstrap as sb
     from libs.attio import client as attio_client
 

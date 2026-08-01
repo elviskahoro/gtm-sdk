@@ -155,7 +155,7 @@ def _ensure_option_vocabulary(input: TrackingEventInput) -> None:
 def find_or_create_meeting_lifecycle_event(
     input: MeetingLifecycleEventInput,
 ) -> ReliabilityEnvelope:
-    """Upsert the single ``tracking_events`` row representing one cal.com meeting.
+    r"""Upsert the single ``tracking_events`` row representing one cal.com meeting.
 
     One row per meeting (keyed by ``external_id``). Every cal.com webhook for
     that meeting PATCHes this row, advancing ``event_subtype`` and appending a
@@ -359,7 +359,7 @@ def find_or_create_meeting_lifecycle_event(
 
 
 def _collapse_to_single_line(text: str) -> str:
-    """Collapse embedded newlines + whitespace runs into single spaces.
+    r"""Collapse embedded newlines + whitespace runs into single spaces.
 
     Cal.com free-form fields can carry ``\\n`` characters (cancellation
     reasons users typed across two lines, rating feedback with bullet

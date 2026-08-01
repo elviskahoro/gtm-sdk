@@ -1,3 +1,4 @@
+# ruff: noqa: S101 -- asserts are the point of a test file
 from __future__ import annotations
 
 import json
@@ -88,7 +89,8 @@ def test_read_text_routes_hex_to_stderr(
     assert cmd[:5] == ["/fake/gws", "gmail", "+read", "--id", _FAKE_HEX]
     assert "--headers" not in cmd
     assert "--html" not in cmd
-    assert "--format" in cmd and cmd[cmd.index("--format") + 1] == "text"
+    assert "--format" in cmd
+    assert cmd[cmd.index("--format") + 1] == "text"
 
 
 def test_read_json_passthrough_is_pipeable(

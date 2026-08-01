@@ -20,34 +20,40 @@ def _response(*, ok=True, status=200, json_value=None, json_raises=False, text="
     return resp
 
 
-def test_query_raises_on_http_error():
-    with patch(
-        "libs.sanity.client.requests.get",
-        return_value=_response(ok=False, status=500, text="boom"),
+def test_query_raises_on_http_error() -> None:
+    with (
+        patch(
+            "libs.sanity.client.requests.get",
+            return_value=_response(ok=False, status=500, text="boom"),
+        ),
+        pytest.raises(SanityQueryError),
     ):
-        with pytest.raises(SanityQueryError):
-            query("*", config=SanityConfig())
+        query("*", config=SanityConfig())
 
 
-def test_query_raises_on_non_json_body():
-    with patch(
-        "libs.sanity.client.requests.get",
-        return_value=_response(json_raises=True, text="<html>"),
+def test_query_raises_on_non_json_body() -> None:
+    with (
+        patch(
+            "libs.sanity.client.requests.get",
+            return_value=_response(json_raises=True, text="<html>"),
+        ),
+        pytest.raises(SanityQueryError),
     ):
-        with pytest.raises(SanityQueryError):
-            query("*", config=SanityConfig())
+        query("*", config=SanityConfig())
 
 
-def test_query_raises_when_payload_not_dict():
-    with patch(
-        "libs.sanity.client.requests.get",
-        return_value=_response(json_value=["unexpected"]),
+def test_query_raises_when_payload_not_dict() -> None:
+    with (
+        patch(
+            "libs.sanity.client.requests.get",
+            return_value=_response(json_value=["unexpected"]),
+        ),
+        pytest.raises(SanityQueryError),
     ):
-        with pytest.raises(SanityQueryError):
-            query("*", config=SanityConfig())
+        query("*", config=SanityConfig())
 
 
-def test_query_returns_result():
+def test_query_returns_result() -> None:
     with patch(
         "libs.sanity.client.requests.get",
         return_value=_response(json_value={"result": [1, 2]}),
@@ -55,7 +61,7 @@ def test_query_returns_result():
         assert query("*", config=SanityConfig()) == [1, 2]
 
 
-def test_no_env_token_ignores_ambient_token(monkeypatch):
+def test_no_env_token_ignores_ambient_token(monkeypatch) -> None:
     monkeypatch.setenv("SANITY_API_TOKEN", "ambient-secret")
     captured: dict[str, dict[str, str]] = {}
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import modal
+if TYPE_CHECKING:
+    import modal
 
 
 def test_parallel_search_sets_and_clears_env_and_forwards_mode(monkeypatch) -> None:
@@ -22,9 +23,9 @@ def test_parallel_search_sets_and_clears_env_and_forwards_mode(monkeypatch) -> N
 
     monkeypatch.setattr("src.parallel.search.search", _search)
 
-    fn = cast(modal.Function, parallel_search)  # type: ignore
+    fn = cast("modal.Function", parallel_search)  # type: ignore
     result = cast(
-        SearchResponse,
+        "SearchResponse",
         fn.local(
             payload={"objective": "find acme", "mode": "agentic", "max_results": 5},
             api_keys={"parallel_api_key": "pk_test"},
@@ -65,9 +66,9 @@ def test_parallel_findall_create_sets_and_clears_env_and_forwards_generator(
 
     monkeypatch.setattr("src.parallel.findall.findall_create", _findall_create)
 
-    fn = cast(modal.Function, parallel_findall_create)  # type: ignore
+    fn = cast("modal.Function", parallel_findall_create)  # type: ignore
     result = cast(
-        FindAllRunData,
+        "FindAllRunData",
         fn.local(
             payload={
                 "objective": "find sales leaders",

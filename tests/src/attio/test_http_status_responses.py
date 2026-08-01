@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
-from typing import cast
-
-import modal
+from typing import TYPE_CHECKING, cast
 
 from libs.attio.errors import ConflictError
-from src.attio import companies as modal_companies
-from src.attio import notes as modal_notes
-from src.attio import people as modal_people
+from src.attio import (
+    companies as modal_companies,
+    notes as modal_notes,
+    people as modal_people,
+)
+
+if TYPE_CHECKING:
+    import modal
 
 
 def test_company_add_http_returns_structured_409_on_conflict(monkeypatch) -> None:
@@ -17,7 +20,7 @@ def test_company_add_http_returns_structured_409_on_conflict(monkeypatch) -> Non
 
     monkeypatch.setattr(modal_companies.attio_add_company, "remote", _raise_conflict)
 
-    fn = cast(modal.Function, modal_companies.http_attio_company_add)  # type: ignore
+    fn = cast("modal.Function", modal_companies.http_attio_company_add)  # type: ignore
     response = fn.local(
         modal_companies.CompanyAddQuery(
             name="Acme",
@@ -41,7 +44,7 @@ def test_note_update_http_infers_401_from_error_message(monkeypatch) -> None:
 
     monkeypatch.setattr(modal_notes.attio_update_note, "remote", _raise_auth)
 
-    fn = cast(modal.Function, modal_notes.http_attio_note_update)  # type: ignore
+    fn = cast("modal.Function", modal_notes.http_attio_note_update)  # type: ignore
     response = fn.local(
         modal_notes.NoteUpdateQuery(
             note_id="note_123",
@@ -77,7 +80,7 @@ def test_note_add_forwards_meeting_id_to_note_input(monkeypatch) -> None:
 
     monkeypatch.setattr(modal_notes, "add_note", _capture)
 
-    fn = cast(modal.Function, modal_notes.attio_add_note)  # type: ignore
+    fn = cast("modal.Function", modal_notes.attio_add_note)  # type: ignore
     result = fn.local(
         payload=modal_notes.NoteAddQuery(
             title="Action items",
@@ -92,7 +95,7 @@ def test_note_add_forwards_meeting_id_to_note_input(monkeypatch) -> None:
 
     assert captured["meeting_id"] == "meet-123"
     assert captured["parent_object"] == "people"
-    assert cast(modal_notes.NoteResult, result).meeting_id == "meet-123"
+    assert cast("modal_notes.NoteResult", result).meeting_id == "meet-123"
 
 
 def test_person_add_http_returns_non_2xx_when_envelope_failed(monkeypatch) -> None:
@@ -119,7 +122,7 @@ def test_person_add_http_returns_non_2xx_when_envelope_failed(monkeypatch) -> No
 
     monkeypatch.setattr(modal_people.attio_add_person, "remote", _failed_envelope)
 
-    fn = cast(modal.Function, modal_people.http_attio_person_add)  # type: ignore
+    fn = cast("modal.Function", modal_people.http_attio_person_add)  # type: ignore
     response = fn.local(
         modal_people.PersonAddQuery(
             email="a@example.com",

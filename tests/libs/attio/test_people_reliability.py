@@ -25,7 +25,7 @@ def test_envelope_requires_warning_object_shape() -> None:
             partial_success=False,
             action="created",
             record_id="rec_123",
-            warnings=[cast(Any, {"code": "x"})],
+            warnings=[cast("Any", {"code": "x"})],
             skipped_fields=[],
             errors=[],
             meta={},

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find pre-fix synthetic duplicate Attio meetings for manual UI deletion (ai-4bz.9).
+r"""Find pre-fix synthetic duplicate Attio meetings for manual UI deletion (ai-4bz.9).
 
 Before the dedup fix landed (ai-4bz.8), the live cal.com webhook and a partial
 backfill minted ``api-token`` Meeting records that shadow the real
@@ -57,12 +57,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from libs.attio.meetings import iter_meetings_in_range  # noqa: E402
+from scripts.lib.env import infisical_run_example  # noqa: E402
 from src.attio.orphan_meetings import (  # noqa: E402
     classify,
     detect_orphans,
     write_orphan_csvs,
 )
-from scripts.lib.env import infisical_run_example  # noqa: E402
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "out" / "orphan-cleanup"
 

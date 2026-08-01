@@ -26,7 +26,7 @@ def _make_snapshot(path: Path) -> Path:
     return path
 
 
-def test_safe_slug_accepts_normal_slugs():
+def test_safe_slug_accepts_normal_slugs() -> None:
     assert is_safe_slug("duckdb-1M-downloads-users")
 
 
@@ -34,7 +34,7 @@ def test_safe_slug_accepts_normal_slugs():
     "bad",
     ["", ".", "..", "a/b", "..\\evil", "../escape", "with\x00null"],
 )
-def test_safe_slug_rejects_traversal(bad: str):
+def test_safe_slug_rejects_traversal(bad: str) -> None:
     assert not is_safe_slug(bad)
 
 
@@ -47,7 +47,7 @@ def _raw(slug: str) -> dict[str, Any]:
     }
 
 
-def test_download_skips_unsafe_slugs(tmp_path: Path):
+def test_download_skips_unsafe_slugs(tmp_path: Path) -> None:
     raw_posts = [_raw("good-post"), _raw("../escape")]
     with patch("src.sanity.blog_download.fetch_blog_posts_raw", return_value=raw_posts):
         result = download_blog_posts(tmp_path, config=SanityConfig())
@@ -60,7 +60,7 @@ def test_download_skips_unsafe_slugs(tmp_path: Path):
     assert not (tmp_path / "escape").exists()
 
 
-def test_frontmatter_is_valid_yaml_with_special_chars(tmp_path: Path):
+def test_frontmatter_is_valid_yaml_with_special_chars(tmp_path: Path) -> None:
     import yaml
 
     raw = _raw("tricky")
@@ -78,7 +78,7 @@ def test_frontmatter_is_valid_yaml_with_special_chars(tmp_path: Path):
     assert parsed["source"] == "https://dlthub.com/blog/tricky"
 
 
-def test_prune_removes_stale_snapshots(tmp_path: Path):
+def test_prune_removes_stale_snapshots(tmp_path: Path) -> None:
     blogs = tmp_path / "blogs"
     # A stale snapshot we own (carries the marker) and an unrelated dir to keep.
     stale = _make_snapshot(blogs / "old-post")
@@ -99,7 +99,7 @@ def test_prune_removes_stale_snapshots(tmp_path: Path):
     assert (keep / "scratch.txt").exists()
 
 
-def test_prune_ignores_unowned_dir_with_post_json(tmp_path: Path):
+def test_prune_ignores_unowned_dir_with_post_json(tmp_path: Path) -> None:
     # A user dir that happens to contain a post.json but lacks our marker must
     # never be deleted, even when its name is absent from the live corpus.
     blogs = tmp_path / "blogs"
@@ -117,7 +117,7 @@ def test_prune_ignores_unowned_dir_with_post_json(tmp_path: Path):
     assert foreign.exists()
 
 
-def test_prune_keeps_snapshot_for_present_but_skipped_post(tmp_path: Path):
+def test_prune_keeps_snapshot_for_present_but_skipped_post(tmp_path: Path) -> None:
     # A post still in the corpus but skipped this run (unsafe slug) must not have
     # its prior snapshot — stored under its real slug — pruned.
     blogs = tmp_path / "blogs"
@@ -130,22 +130,24 @@ def test_prune_keeps_snapshot_for_present_but_skipped_post(tmp_path: Path):
         return slug == "fresh-post"
 
     # Force the skip path while keeping the real slug present in the corpus.
-    with patch(
-        "src.sanity.blog_download.is_safe_slug",
-        side_effect=only_fresh_is_safe,
-    ):
-        with patch(
+    with (
+        patch(
+            "src.sanity.blog_download.is_safe_slug",
+            side_effect=only_fresh_is_safe,
+        ),
+        patch(
             "src.sanity.blog_download.fetch_blog_posts_raw",
             return_value=[_raw("fresh-post"), skipped],
-        ):
-            result = download_blog_posts(tmp_path, config=SanityConfig(), prune=True)
+        ),
+    ):
+        result = download_blog_posts(tmp_path, config=SanityConfig(), prune=True)
 
     assert result.skipped == 1
     assert result.pruned == 0
     assert prior.exists()
 
 
-def test_prune_keeps_snapshot_when_only_casing_differs(tmp_path: Path):
+def test_prune_keeps_snapshot_when_only_casing_differs(tmp_path: Path) -> None:
     # A snapshot dir written as "My-Post" must survive a run whose live slug is
     # "my-post": on a case-insensitive volume they are the same directory, so a
     # case-sensitive prune would delete live content.
@@ -162,7 +164,7 @@ def test_prune_keeps_snapshot_when_only_casing_differs(tmp_path: Path):
     assert existing.exists()
 
 
-def test_no_prune_keeps_stale_snapshots(tmp_path: Path):
+def test_no_prune_keeps_stale_snapshots(tmp_path: Path) -> None:
     stale = _make_snapshot(tmp_path / "blogs" / "old-post")
 
     with patch(
@@ -175,7 +177,7 @@ def test_no_prune_keeps_stale_snapshots(tmp_path: Path):
     assert stale.exists()
 
 
-def test_post_json_preserves_raw_payload(tmp_path: Path):
+def test_post_json_preserves_raw_payload(tmp_path: Path) -> None:
     # A field outside the BlogPost model must still land in post.json.
     raw = _raw("keep-me")
     raw["_extraField"] = {"nested": [1, 2, 3]}
@@ -188,7 +190,7 @@ def test_post_json_preserves_raw_payload(tmp_path: Path):
     assert written["_extraField"] == {"nested": [1, 2, 3]}
 
 
-def test_download_fails_fast_on_duplicate_slug(tmp_path: Path):
+def test_download_fails_fast_on_duplicate_slug(tmp_path: Path) -> None:
     from libs.sanity.errors import DuplicateSlugError
 
     first = _raw("dupe")
@@ -196,45 +198,51 @@ def test_download_fails_fast_on_duplicate_slug(tmp_path: Path):
     second = _raw("dupe")
     second["_id"] = "post-B"
 
-    with patch(
-        "src.sanity.blog_download.fetch_blog_posts_raw",
-        return_value=[first, second],
+    with (
+        patch(
+            "src.sanity.blog_download.fetch_blog_posts_raw",
+            return_value=[first, second],
+        ),
+        pytest.raises(DuplicateSlugError, match=r"post-A.*post-B|dupe"),
     ):
-        with pytest.raises(DuplicateSlugError, match="post-A.*post-B|dupe"):
-            download_blog_posts(tmp_path, config=SanityConfig())
+        download_blog_posts(tmp_path, config=SanityConfig())
 
 
-def test_download_fails_fast_on_case_aliased_slug(tmp_path: Path):
+def test_download_fails_fast_on_case_aliased_slug(tmp_path: Path) -> None:
     # Distinct slugs in Sanity that collide on a case-insensitive filesystem.
     from libs.sanity.errors import DuplicateSlugError
 
     first = _raw("Foo")
     second = _raw("foo")
 
-    with patch(
-        "src.sanity.blog_download.fetch_blog_posts_raw",
-        return_value=[first, second],
+    with (
+        patch(
+            "src.sanity.blog_download.fetch_blog_posts_raw",
+            return_value=[first, second],
+        ),
+        pytest.raises(DuplicateSlugError),
     ):
-        with pytest.raises(DuplicateSlugError):
-            download_blog_posts(tmp_path, config=SanityConfig())
+        download_blog_posts(tmp_path, config=SanityConfig())
 
 
-def test_duplicate_slug_aborts_before_any_write(tmp_path: Path):
+def test_duplicate_slug_aborts_before_any_write(tmp_path: Path) -> None:
     # A collision must be detected in the planning pass, so nothing is written —
     # the run never leaves a partially updated archive on disk.
     from libs.sanity.errors import DuplicateSlugError
 
-    with patch(
-        "src.sanity.blog_download.fetch_blog_posts_raw",
-        return_value=[_raw("dupe"), _raw("dupe")],
+    with (
+        patch(
+            "src.sanity.blog_download.fetch_blog_posts_raw",
+            return_value=[_raw("dupe"), _raw("dupe")],
+        ),
+        pytest.raises(DuplicateSlugError),
     ):
-        with pytest.raises(DuplicateSlugError):
-            download_blog_posts(tmp_path, config=SanityConfig())
+        download_blog_posts(tmp_path, config=SanityConfig())
 
     assert not (tmp_path / "blogs").exists()
 
 
-def test_source_url_is_percent_encoded(tmp_path: Path):
+def test_source_url_is_percent_encoded(tmp_path: Path) -> None:
     import yaml
 
     with patch(
@@ -249,7 +257,7 @@ def test_source_url_is_percent_encoded(tmp_path: Path):
     assert parsed["source"] == "https://dlthub.com/blog/a%20b%26c"
 
 
-def test_fetch_raises_on_non_list_result():
+def test_fetch_raises_on_non_list_result() -> None:
     from libs.sanity.blog import fetch_blog_posts_raw
 
     with patch("libs.sanity.blog.query", return_value={"unexpected": "shape"}):
@@ -257,7 +265,7 @@ def test_fetch_raises_on_non_list_result():
             fetch_blog_posts_raw(SanityConfig())
 
 
-def test_fetch_raises_on_non_dict_row():
+def test_fetch_raises_on_non_dict_row() -> None:
     from libs.sanity.blog import fetch_blog_posts_raw
 
     with patch("libs.sanity.blog.query", return_value=[{"slug": "ok"}, "broken"]):
@@ -280,11 +288,11 @@ def test_fetch_raises_on_non_dict_row():
         "lpt3",
     ],
 )
-def test_safe_slug_rejects_platform_invalid_names(bad: str):
+def test_safe_slug_rejects_platform_invalid_names(bad: str) -> None:
     assert not is_safe_slug(bad)
 
 
-def test_prune_disabled_when_a_live_post_is_skipped(tmp_path: Path):
+def test_prune_disabled_when_a_live_post_is_skipped(tmp_path: Path) -> None:
     # A still-live post with an unsafe slug this run must not let pruning delete
     # an unrelated stale snapshot — its real prior slug is unknown, so we can't
     # prove that snapshot is dead.
@@ -302,7 +310,7 @@ def test_prune_disabled_when_a_live_post_is_skipped(tmp_path: Path):
     assert stale.exists()
 
 
-def test_title_trailing_hash_is_escaped(tmp_path: Path):
+def test_title_trailing_hash_is_escaped(tmp_path: Path) -> None:
     raw = _raw("x")
     raw["title"] = "Release #"
     raw["metadata"]["title"] = "Release #"
@@ -313,7 +321,7 @@ def test_title_trailing_hash_is_escaped(tmp_path: Path):
     assert "# Release \\#" in text
 
 
-def test_download_fails_fast_on_unicode_aliased_slug(tmp_path: Path):
+def test_download_fails_fast_on_unicode_aliased_slug(tmp_path: Path) -> None:
     import unicodedata
 
     from libs.sanity.errors import DuplicateSlugError
@@ -322,20 +330,22 @@ def test_download_fails_fast_on_unicode_aliased_slug(tmp_path: Path):
     nfd = unicodedata.normalize("NFD", "café")
     assert nfc != nfd
 
-    with patch(
-        "src.sanity.blog_download.fetch_blog_posts_raw",
-        return_value=[_raw(nfc), _raw(nfd)],
+    with (
+        patch(
+            "src.sanity.blog_download.fetch_blog_posts_raw",
+            return_value=[_raw(nfc), _raw(nfd)],
+        ),
+        pytest.raises(DuplicateSlugError),
     ):
-        with pytest.raises(DuplicateSlugError):
-            download_blog_posts(tmp_path, config=SanityConfig())
+        download_blog_posts(tmp_path, config=SanityConfig())
 
 
 @pytest.mark.parametrize("bad", ["con .txt", "AUX .md", "nul. ", "com1 .log"])
-def test_safe_slug_rejects_reserved_names_with_trailing_padding(bad: str):
+def test_safe_slug_rejects_reserved_names_with_trailing_padding(bad: str) -> None:
     assert not is_safe_slug(bad)
 
 
-def test_download_refuses_to_clobber_unowned_dir(tmp_path: Path):
+def test_download_refuses_to_clobber_unowned_dir(tmp_path: Path) -> None:
     # A pre-existing user dir at the target slug (no marker) must not be written
     # into or overwritten; the post is skipped instead.
     blogs = tmp_path / "blogs"
@@ -355,7 +365,7 @@ def test_download_refuses_to_clobber_unowned_dir(tmp_path: Path):
     assert not (foreign / "post.json").exists()
 
 
-def test_download_overwrites_its_own_prior_snapshot(tmp_path: Path):
+def test_download_overwrites_its_own_prior_snapshot(tmp_path: Path) -> None:
     # A re-run over a dir this tool created (carries the marker) is fine.
     blogs = tmp_path / "blogs"
     _make_snapshot(blogs / "fresh-post")
@@ -370,7 +380,7 @@ def test_download_overwrites_its_own_prior_snapshot(tmp_path: Path):
     assert "fresh-post" in (blogs / "fresh-post" / "index.md").read_text()
 
 
-def test_download_refuses_symlink_target(tmp_path: Path):
+def test_download_refuses_symlink_target(tmp_path: Path) -> None:
     # A symlink (even broken) at the target slug must never be written through.
     blogs = tmp_path / "blogs"
     blogs.mkdir(parents=True)
@@ -388,7 +398,7 @@ def test_download_refuses_symlink_target(tmp_path: Path):
     assert link.is_symlink()
 
 
-def test_prune_ignores_symlinked_dir(tmp_path: Path):
+def test_prune_ignores_symlinked_dir(tmp_path: Path) -> None:
     # A symlinked blogs/<slug> dir is not ours even if it points at a marked
     # snapshot; pruning must not delete or follow it.
     blogs = tmp_path / "blogs"
@@ -408,7 +418,7 @@ def test_prune_ignores_symlinked_dir(tmp_path: Path):
     assert real.exists()
 
 
-def test_download_resolves_symlinked_root_to_real_target(tmp_path: Path):
+def test_download_resolves_symlinked_root_to_real_target(tmp_path: Path) -> None:
     # A symlinked --out-dir is resolved to its real target so writes/prunes
     # operate on one concrete tree (rather than diverging through the link).
     real = tmp_path / "real-out"
@@ -426,7 +436,7 @@ def test_download_resolves_symlinked_root_to_real_target(tmp_path: Path):
     assert (real / "blogs" / "fresh-post" / "index.md").exists()
 
 
-def test_download_refuses_symlinked_blogs_parent(tmp_path: Path):
+def test_download_refuses_symlinked_blogs_parent(tmp_path: Path) -> None:
     # A symlinked blogs/ parent would redirect every snapshot write into the
     # link target; it must be rejected before any write rather than followed.
     real = tmp_path / "real-blogs"
@@ -445,7 +455,7 @@ def test_download_refuses_symlinked_blogs_parent(tmp_path: Path):
     assert not (real / "fresh-post").exists()
 
 
-def test_download_refuses_file_at_blogs_parent(tmp_path: Path):
+def test_download_refuses_file_at_blogs_parent(tmp_path: Path) -> None:
     # A plain file at blogs/ would crash the first mkdir with NotADirectoryError;
     # fail fast with a clear error instead.
     (tmp_path / "blogs").write_text("not a dir", encoding="utf-8")
@@ -460,7 +470,7 @@ def test_download_refuses_file_at_blogs_parent(tmp_path: Path):
         download_blog_posts(tmp_path, config=SanityConfig())
 
 
-def test_download_removes_partial_snapshot_on_write_failure(tmp_path: Path):
+def test_download_removes_partial_snapshot_on_write_failure(tmp_path: Path) -> None:
     # A write that fails partway must not leave a half-written directory behind;
     # it is removed so a later run can recreate it cleanly.
     blogs = tmp_path / "blogs"
@@ -484,7 +494,7 @@ def test_download_removes_partial_snapshot_on_write_failure(tmp_path: Path):
     assert not (blogs / "fresh-post").exists()
 
 
-def test_download_repairs_marker_only_partial_snapshot(tmp_path: Path):
+def test_download_repairs_marker_only_partial_snapshot(tmp_path: Path) -> None:
     # A run killed mid-write leaves the marker (written first) but no leaves.
     # Because the marker proves ownership, a rerun overwrites it rather than
     # treating it as an unowned, un-repairable orphan.
@@ -507,7 +517,7 @@ def test_download_repairs_marker_only_partial_snapshot(tmp_path: Path):
 def test_write_no_follow_handles_short_writes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     # os.write may persist fewer bytes than requested; the writer must loop until
     # the whole payload lands rather than silently truncating a large file.
     target = tmp_path / "out.txt"
@@ -528,7 +538,7 @@ def test_write_no_follow_handles_short_writes(
 def test_download_refuses_dir_swapped_to_symlink_after_check(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     # Simulate the TOCTOU race the dir fd closes: the slug dir passes the
     # writability check but is a symlink by the time we open it to write. The
     # no-follow directory fd must reject it so writes can't escape the archive.
@@ -560,7 +570,7 @@ def test_download_refuses_dir_swapped_to_symlink_after_check(
     assert (blogs / "fresh-post").is_symlink()
 
 
-def test_download_refuses_symlinked_leaf_in_owned_dir(tmp_path: Path):
+def test_download_refuses_symlinked_leaf_in_owned_dir(tmp_path: Path) -> None:
     # A marked snapshot dir whose post.json was swapped for a symlink must not be
     # written through on rerun.
     blogs = tmp_path / "blogs"

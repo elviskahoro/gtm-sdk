@@ -1,4 +1,4 @@
-"""Dagger pipeline: file a Linear issue describing a failed CI run.
+r"""Dagger pipeline: file a Linear issue describing a failed CI run.
 
 Wraps ``scripts/ci-triage-linear-issue.py`` in a pinned container so the filing
 step is reproducible and its credential never touches the runner's shell. Invoked

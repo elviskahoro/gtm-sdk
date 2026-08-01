@@ -20,15 +20,10 @@ from libs.attio.companies import (
 from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope, WarningEntry
 from libs.attio.errors import SchemaMismatchError
 from libs.attio.meetings import find_or_create_meeting
-from src.attio.meeting_match import resolve_meeting_id_by_participants
 from libs.attio.mentions import upsert_mention as libs_upsert_mention
 from libs.attio.models import (
     CompanyInput,
-)
-from libs.attio.models import (
     MeetingExternalRef as LibMeetingExternalRef,
-)
-from libs.attio.models import (
     MeetingInput,
     MeetingLifecycleEventInput,
     MeetingLinkedRecord,
@@ -40,11 +35,7 @@ from libs.attio.models import (
 )
 from libs.attio.notes import (
     add_note as libs_add_note,
-)
-from libs.attio.notes import (
     find_note_by_title as libs_find_note_by_title,
-)
-from libs.attio.notes import (
     resolve_record_id_for_ref as libs_resolve_record_id_for_ref,
 )
 from libs.attio.people import (
@@ -59,6 +50,7 @@ from libs.attio.tracking_events import (
 )
 from libs.logging.structured import log
 from libs.telemetry import annotate_span, span
+from src.attio.meeting_match import resolve_meeting_id_by_participants
 from src.attio.ops import (
     AttioOp,
     CompanyRef,

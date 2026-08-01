@@ -59,7 +59,7 @@ def attio_add_person(
                     company_domain=query.company_domain,
                     notes=query.notes,
                     strict=query.strict,
-                    location_mode=cast(Literal["raw", "city"], query.location_mode),
+                    location_mode=cast("Literal['raw', 'city']", query.location_mode),
                 ),
             )
         except Exception as exc:
@@ -117,7 +117,7 @@ def attio_update_person(
                     company_domain=query.company_domain,
                     notes=query.notes,
                     strict=query.strict,
-                    location_mode=cast(Literal["raw", "city"], query.location_mode),
+                    location_mode=cast("Literal['raw', 'city']", query.location_mode),
                 ),
             )
         except Exception as exc:
@@ -151,7 +151,7 @@ def attio_upsert_person(
                     company_domain=query.company_domain,
                     notes=query.notes,
                     strict=query.strict,
-                    location_mode=cast(Literal["raw", "city"], query.location_mode),
+                    location_mode=cast("Literal['raw', 'city']", query.location_mode),
                 ),
                 strict=query.strict,
             )

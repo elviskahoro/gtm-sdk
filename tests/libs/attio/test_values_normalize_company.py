@@ -4,7 +4,7 @@ from libs.attio.values import normalize_company_name
 
 
 @pytest.mark.parametrize(
-    "raw,expected",
+    ("raw", "expected"),
     [
         ("Acme, Inc.", "acme"),
         ("Acme Inc", "acme"),

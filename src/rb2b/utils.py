@@ -50,7 +50,7 @@ def generate_gcs_filename(
     event_id: str,
     company_name: str | None,
 ) -> str:
-    """Generate GCS filename: {clean_timestamp}-{event_id}-{clean_company}.jsonl"""
+    """Generate GCS filename: {clean_timestamp}-{event_id}-{clean_company}.jsonl."""
     ts = clean_timestamp(timestamp)
     company = clean_string(company_name) if company_name else "unknown"
     return f"{ts}-{event_id}-{company}.jsonl"

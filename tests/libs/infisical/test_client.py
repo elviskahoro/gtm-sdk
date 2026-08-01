@@ -3,8 +3,11 @@ from __future__ import annotations
 import pytest
 
 from libs import infisical
-from libs.infisical import InfisicalAuthError, InfisicalFetchError
-from libs.infisical import client as infisical_client
+from libs.infisical import (
+    InfisicalAuthError,
+    InfisicalFetchError,
+    client as infisical_client,
+)
 
 
 def test_fetch_returns_env_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,9 +47,8 @@ def test_fetch_raises_when_bootstrap_creds_missing(
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.delenv("INFISICAL_TOKEN", raising=False)
     monkeypatch.delenv("INFISICAL_PROJECT_ID", raising=False)
-    with pytest.raises(InfisicalAuthError):
-        with infisical.fetch("ATTIO_API_KEY"):
-            pass
+    with pytest.raises(InfisicalAuthError), infisical.fetch("ATTIO_API_KEY"):
+        pass
 
 
 def test_fetch_raises_when_infisical_env_unset(
@@ -77,9 +79,8 @@ def test_fetch_raises_when_infisical_returns_empty(
         return ""
 
     monkeypatch.setattr(infisical_client, "_fetch_from_infisical", _empty)
-    with pytest.raises(InfisicalFetchError):
-        with infisical.fetch("ATTIO_API_KEY"):
-            pass
+    with pytest.raises(InfisicalFetchError), infisical.fetch("ATTIO_API_KEY"):
+        pass
 
 
 def test_fetch_all_resolves_each_name(monkeypatch: pytest.MonkeyPatch) -> None:

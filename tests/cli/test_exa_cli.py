@@ -128,7 +128,8 @@ def test_search_with_json_override(monkeypatch) -> None:
 def test_search_all_blank_domains_omitted_from_payload(monkeypatch) -> None:
     """Regression (roborev): ``--include-domains ","`` collapses to nothing
     after stripping. Omit the field entirely so it doesn't reach the model
-    as ``[]`` (which the new validator rejects as "must be non-empty")."""
+    as ``[]`` (which the new validator rejects as "must be non-empty").
+    """
     import cli.exa.search as exa_search
 
     registry = _patch_modal(monkeypatch, exa_search)
@@ -145,7 +146,8 @@ def test_search_all_blank_domains_omitted_from_payload(monkeypatch) -> None:
 
 def test_search_strips_empty_domain_segments(monkeypatch) -> None:
     """Regression (roborev): ``--include-domains "a,,b,"`` must drop empty
-    segments instead of sending empty strings to Exa."""
+    segments instead of sending empty strings to Exa.
+    """
     import cli.exa.search as exa_search
 
     registry = _patch_modal(monkeypatch, exa_search)

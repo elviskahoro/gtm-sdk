@@ -68,7 +68,7 @@ _token_var: ContextVar[str | None] = ContextVar("sanity_api_token", default=None
 
 
 @contextmanager
-def api_key_scope(token: str) -> Generator[None, None, None]:
+def api_key_scope(token: str) -> Generator[None]:
     """Bind ``token`` as the active Sanity bearer token for this context.
 
     Mirrors :func:`libs.exa.client.api_key_scope`. Reset on exit so concurrent

@@ -5,7 +5,6 @@ from pathlib import Path
 
 from src.fathom.webhook.message import Webhook
 
-
 FIXTURE = Path("api/samples/fathom.message.redacted.json")
 
 

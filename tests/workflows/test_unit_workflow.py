@@ -7,13 +7,14 @@ These tests validate the workflow changes from issues #296, #321, and #330:
 - No regression from previous setup
 """
 
-import runpy
 import re
+import runpy
 import tomllib
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "tests-unit.yml"
 PYTEST_DAGGER = (
@@ -132,7 +133,7 @@ def test_dependency_image_key_ignores_unrelated_project_metadata(
 ) -> None:
     namespace = runpy.run_path(str(PYTEST_DEPENDENCY_KEY))
     dependency_image_key = cast(
-        Callable[..., str],
+        "Callable[..., str]",
         namespace["dependency_image_key"],
     )
 
@@ -169,7 +170,7 @@ def test_dependency_image_key_covers_layout_and_packer(
 ) -> None:
     namespace = runpy.run_path(str(PYTEST_DEPENDENCY_KEY))
     dependency_image_key = cast(
-        Callable[..., str],
+        "Callable[..., str]",
         namespace["dependency_image_key"],
     )
 

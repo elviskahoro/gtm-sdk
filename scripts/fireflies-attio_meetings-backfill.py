@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill Attio Meeting records (+ a Fireflies summary note) from the personal
+r"""Backfill Attio Meeting records (+ a Fireflies summary note) from the personal
 MotherDuck ``fireflies-backfill`` database.
 
 Motivation: we switched meeting recording from Fireflies → Fathom. The

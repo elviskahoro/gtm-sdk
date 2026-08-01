@@ -1,4 +1,4 @@
-"""Dagger pipeline: run an Oz cloud agent to diagnose a failed CI run.
+r"""Dagger pipeline: run an Oz cloud agent to diagnose a failed CI run.
 
 Companion to ``triage_dagger.py`` (which files the result into Linear). Together
 they put the whole triage flow in containers -- there is no ``uses:`` agent action

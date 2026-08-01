@@ -46,10 +46,7 @@ def _print_envelope_and_exit(envelope: ReliabilityEnvelope) -> None:
 
 
 def _envelope_from_remote_result(result) -> ReliabilityEnvelope:
-    if hasattr(result, "model_dump"):
-        payload = result.model_dump()
-    else:
-        payload = result
+    payload = result.model_dump() if hasattr(result, "model_dump") else result
 
     if isinstance(payload, list):
         return ReliabilityEnvelope(

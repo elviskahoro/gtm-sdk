@@ -50,7 +50,8 @@ def test_execute_dispatches_upsert_mention() -> None:
 def test_github_plan_mention_lands_when_person_upsert_fails() -> None:
     """The literal ai-0ex acceptance criterion: a github octolens plan whose
     optional UpsertPerson fails (no github_handle attribute) still writes the
-    social_mention, with the endpoint reporting overall success=True."""
+    social_mention, with the endpoint reporting overall success=True.
+    """
     person_op = UpsertPerson(
         matching_attribute="github_handle",
         github_handle="elviskahoro",

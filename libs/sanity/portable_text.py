@@ -100,7 +100,7 @@ def _inline_code(text: str) -> str:
 
 
 def _escape_block_leading(text: str) -> str:
-    """Neutralize Markdown block syntax at the start of *every* line.
+    r"""Neutralize Markdown block syntax at the start of *every* line.
 
     Span text can contain hard line breaks, so a single anchored pass would only
     protect the first line and let ``foo\\n# bar`` render a real heading on the
