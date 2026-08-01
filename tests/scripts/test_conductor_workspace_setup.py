@@ -552,7 +552,9 @@ def test_beads_bootstrap_skips_agent_and_hook_setup() -> None:
         if "bd init" in line and not line.strip().startswith("#")
     ]
 
-    assert bd_init_lines, "expected at least one `bd init` invocation in the setup script"
+    assert bd_init_lines, (
+        "expected at least one `bd init` invocation in the setup script"
+    )
     for line in bd_init_lines:
         assert "--skip-agents" in line, line
         assert "--skip-hooks" in line, line
