@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["gtm-linear==0.1.0"]
 # ///
 """File (or bump) a Linear issue describing a failed CI run.
 
@@ -11,16 +11,23 @@ existing issue's metadata footer instead of filing a duplicate -- the nightly
 Integration tests were red 13 nights running (2026-07-15..2026-07-27), and that
 is one issue, not thirteen.
 
-Why stdlib-only, and why it does not import ``libs/linear``:
+How this stays runnable while CI is broken:
 
 This runs in the CI job that reacts to a broken build, so it must not depend on
-the repo's environment resolving. ``uv sync`` is itself a plausible cause of the
-failure being triaged -- if the triage tool needs the dependency graph to
-install, it dies in precisely the case it exists to report on. ``libs/linear``
-also buys little here: its ``IssueCreateInput`` only carries title/teamId/
-description, which is the same surface this script needs, and it cannot post
-comments. Same reasoning and precedent as ``scripts/docs-pages-lint.py``, which
-is deliberately standalone so CI can call it before ``uv sync`` finishes.
+the repo's environment resolving -- ``uv sync`` is itself a plausible cause of
+the failure being triaged. It gets its one dependency without ever reading
+``uv.lock``: the PEP 723 header above pins ``gtm-linear`` for the host path
+(``uv run --script`` resolves it into an ephemeral env, isolated from the
+project), and the Dagger container installs the same pin as its own ``pip``
+layer. Neither route resolves this repo's dependency graph, so a broken
+lockfile or a poisoned working tree still cannot stop a ticket being filed.
+What it does now depend on is PyPI being reachable -- a narrower exposure than
+hand-rolled GraphQL was worth.
+
+Do not reintroduce a raw-GraphQL fallback path. Every Linear call goes through
+``libs.linear.client``; that adapter is where the API surface belongs, and a
+second implementation that only runs when the first is missing is a code path
+CI can never tell you it took.
 
 In CI this runs inside a Dagger container -- see
 ``.github/workflows/ci/triage_dagger.py``, which is what
@@ -33,6 +40,9 @@ unavailable:
         --run-url https://github.com/o/r/actions/runs/123 \\
         --branch main --commit abc1234 \\
         --diagnosis-file tmp/diagnosis.md
+
+That path needs ``uv`` on PATH, which is why the workflow installs it before
+the fallback step runs.
 
 The target team is the hard-coded ``LINEAR_TEAM`` below; ``--team`` overrides it
 and accepts a key or a UUID.
@@ -48,22 +58,42 @@ import pathlib as _pathlib
 import sys as _sys
 
 _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
-from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 
-if __name__ == "__main__":
+# The bootstrap re-execs this file through a `[tool.uv] required-version`-
+# compatible `uv` so the PEP 723 header above is honoured. It is optional, not
+# required: the Dagger container mounts this script and `libs/linear/` and
+# nothing else, so `scripts/lib/` is absent there and its dependency is already
+# installed. Importing it unconditionally made the containerized filing path die
+# with ModuleNotFoundError before main() ran, silently routing every ticket
+# through the host fallback. OSError covers uv_resolve's import-time hunt for a
+# pyproject.toml, which has none to find in a minimal tree.
+try:
+    from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+except (ImportError, OSError):  # pragma: no cover - exercised by the container test
+    _bootstrap_uv = None  # type: ignore[assignment]
+
+if __name__ == "__main__" and _bootstrap_uv is not None:
     _bootstrap_uv(script_path=__file__, mode="script")
 
 import argparse
-import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-LINEAR_API_URL = "https://api.linear.app/graphql"
+import httpx
+from gtm_linear import IssueCreateInput, IssueUpdateInput
+from gtm_linear.exceptions import LinearError as _SdkLinearError
+from pydantic import ValidationError
+
+from libs.linear import client as linear
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from gtm_linear import Issue
 
 # Hard-coded on purpose: there is exactly one team that owns this repo's CI, so
 # routing it through a GitHub secret bought nothing but another value to forget to
@@ -86,101 +116,73 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
-_OCCURRENCES_RE = re.compile(r"^- Occurrences:\s*(\d+)", re.MULTILINE)
-_FIRST_SEEN_RE = re.compile(r"^- First seen:\s*(.+)$", re.MULTILINE)
+# `[-*]`, not `-`: Linear rewrites list markers to `*` when it stores a
+# description, so reading a footer back never sees the `-` build_footer wrote.
+# Anchoring on `-` made both lookups miss on every bump -- occurrences pinned
+# at the literal fallback of 2 (AI-1 and AI-2 sat there while the nightly suite
+# failed far more often than twice) and "First seen" silently rewritten to the
+# current run, which is the one field a human reads to judge how long something
+# has been broken.
+_OCCURRENCES_RE = re.compile(r"^[-*] Occurrences:\s*(\d+)", re.MULTILINE)
+_FIRST_SEEN_RE = re.compile(r"^[-*] First seen:\s*(.+)$", re.MULTILINE)
 
 
 class LinearError(RuntimeError):
     """A GraphQL error, transport error, or unexpected response shape."""
 
 
-def _graphql(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
-    """POST a GraphQL document and return its ``data`` payload.
+@contextmanager
+def _linear_errors(what: str) -> Generator[None]:
+    """Funnel every way an adapter call can fail into ``LinearError``.
 
-    Linear takes the raw personal API key as the Authorization header with no
-    ``Bearer`` prefix -- adding one yields an opaque 400.
+    The SDK raises ``LinearError`` subclasses for anything the API *answered*,
+    a bare ``ValueError`` when a 200 carries no issue, and ``ValidationError``
+    when a response does not match the generated model. Transport failures are
+    not wrapped at all and arrive as ``httpx.HTTPError``. Collapsing all four
+    here is what keeps ``main``'s single except clause -- and the exit-code-1
+    contract -- honest.
+
+    A context manager rather than a ``_call(thunk)`` helper so the call site
+    stays a plain call and keeps its inferred return type.
     """
-    request = urllib.request.Request(  # noqa: S310 - fixed https endpoint
-        LINEAR_API_URL,
-        data=json.dumps({"query": query, "variables": variables}).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": api_key,
-        },
-        method="POST",
-    )
     try:
-        # LINEAR_API_URL is a module constant with a literal https scheme, so no
-        # caller-supplied URL or alternate scheme can reach urlopen.
-        # trunk-ignore(bandit/B310)
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            payload = json.loads(response.read().decode())
-    except urllib.error.HTTPError as exc:  # pragma: no cover - network failure
-        body = exc.read().decode(errors="replace")[:500]
-        msg = f"Linear API returned HTTP {exc.code}: {body}"
+        yield
+    except (_SdkLinearError, httpx.HTTPError, ValidationError, ValueError) as exc:
+        msg = f"{what}: {type(exc).__name__}: {str(exc)[:500]}"
         raise LinearError(msg) from exc
-    except urllib.error.URLError as exc:  # pragma: no cover - network failure
-        msg = f"Could not reach the Linear API: {exc.reason}"
-        raise LinearError(msg) from exc
-
-    if errors := payload.get("errors"):
-        msg = f"Linear GraphQL errors: {json.dumps(errors)[:500]}"
-        raise LinearError(msg)
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        msg = f"Unexpected Linear response shape: {str(payload)[:300]}"
-        raise LinearError(msg)
-    return data
 
 
 def resolve_team_id(team: str, api_key: str) -> str:
     """Return a team UUID, accepting either a UUID or a team key."""
     if _UUID_RE.match(team):
         return team
-    query = """
-      query ResolveTeam($key: String!) {
-        teams(filter: { key: { eq: $key } }, first: 1) { nodes { id key } }
-      }
-    """
-    nodes = _graphql(query, {"key": team}, api_key)["teams"]["nodes"]
-    if not nodes:
+    with _linear_errors(f"resolving Linear team {team!r}"):
+        resolved = linear.get_team_by_key(team, api_key=api_key)
+    if resolved is None:
         msg = (
-            f"No Linear team with key {team!r}. Set LINEAR_TEAM_ID to a team key "
-            f"that exists, or to the team's UUID."
+            f"No Linear team with key {team!r}. Pass --team a team key that "
+            f"exists, or the team's UUID."
         )
         raise LinearError(msg)
-    return str(nodes[0]["id"])
+    return str(resolved.id)
 
 
 def find_existing_issue(
     team_id: str,
     marker: str,
     api_key: str,
-) -> dict[str, Any] | None:
+) -> Issue | None:
     """Return the newest un-finished issue carrying ``marker``, if any.
 
     Filtering happens client-side on the marker: Linear's ``description``
     comparator support has shifted over time, whereas team + state filtering is
     stable. 100 issues is a generous window for open CI-triage tickets.
     """
-    query = """
-      query FindTriageIssue($teamId: ID!) {
-        issues(
-          filter: {
-            team: { id: { eq: $teamId } }
-            state: { type: { nin: ["completed", "canceled"] } }
-          }
-          first: 100
-          orderBy: updatedAt
-        ) {
-          nodes { id identifier url title description }
-        }
-      }
-    """
-    nodes = _graphql(query, {"teamId": team_id}, api_key)["issues"]["nodes"]
-    for node in nodes:
-        if marker in (node.get("description") or ""):
-            return node
+    with _linear_errors("listing open Linear issues"):
+        issues = linear.list_open_team_issues(team_id, first=100, api_key=api_key)
+    for issue in issues:
+        if marker in (issue.description or ""):
+            return issue
     return None
 
 
@@ -224,23 +226,12 @@ def create_issue(
     title: str,
     description: str,
     api_key: str,
-) -> dict[str, Any]:
-    query = """
-      mutation CreateTriageIssue($input: IssueCreateInput!) {
-        issueCreate(input: $input) {
-          success
-          issue { id identifier url }
-        }
-      }
-    """
-    variables = {
-        "input": {"teamId": team_id, "title": title, "description": description},
-    }
-    result = _graphql(query, variables, api_key)["issueCreate"]
-    if not result.get("success") or not result.get("issue"):
-        msg = f"Linear declined to create the issue: {json.dumps(result)[:300]}"
-        raise LinearError(msg)
-    return dict(result["issue"])
+) -> Issue:
+    with _linear_errors("creating the Linear issue"):
+        return linear.create_issue(
+            IssueCreateInput(team_id=team_id, title=title, description=description),
+            api_key=api_key,
+        )
 
 
 def update_description(
@@ -249,19 +240,12 @@ def update_description(
     description: str,
     api_key: str,
 ) -> None:
-    query = """
-      mutation BumpTriageIssue($id: String!, $input: IssueUpdateInput!) {
-        issueUpdate(id: $id, input: $input) { success }
-      }
-    """
-    result = _graphql(
-        query,
-        {"id": issue_id, "input": {"description": description}},
-        api_key,
-    )["issueUpdate"]
-    if not result.get("success"):
-        msg = f"Linear declined to update issue {issue_id}"
-        raise LinearError(msg)
+    with _linear_errors(f"updating Linear issue {issue_id}"):
+        linear.update_issue(
+            issue_id,
+            IssueUpdateInput(description=description),
+            api_key=api_key,
+        )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -345,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             action = "created"
         else:
-            previous = existing.get("description") or ""
+            previous = existing.description or ""
             occurrence_match = _OCCURRENCES_RE.search(previous)
             occurrences = int(occurrence_match.group(1)) + 1 if occurrence_match else 2
             first_match = _FIRST_SEEN_RE.search(previous)
@@ -365,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
                 ],
             )
             update_description(
-                issue_id=str(existing["id"]),
+                issue_id=str(existing.id),
                 description=body,
                 api_key=api_key,
             )
@@ -375,8 +359,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    identifier = str(issue.get("identifier", "?"))
-    url = str(issue.get("url", ""))
+    identifier = str(issue.identifier)
+    url = str(issue.url)
     print(f"{action} {identifier}: {url}")
     if args.output is not None:
         with args.output.open("a", encoding="utf-8") as handle:

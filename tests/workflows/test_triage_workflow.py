@@ -1,3 +1,5 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
+
 """Static invariants for the CI-failure-triage workflow.
 
 Each guard here corresponds to a specific way this workflow could regress into
@@ -19,6 +21,7 @@ GitHub has warned on the pattern since 2026-01-29. Copying that shape into this
 repo is the regression this file exists to prevent.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +36,10 @@ FILING_SCRIPT = REPO_ROOT / "scripts" / "ci-triage-linear-issue.py"
 # Kept in lockstep with tests-unit.yml / tests-integration.yml and with the
 # dagger-io pin the workflow installs.
 DAGGER_VERSION = "0.21.7"
+
+# Install the pinned SDK, then run the filing script. Nothing else belongs in
+# the container.
+PIPELINE_EXEC_COUNT = 2
 
 
 @pytest.fixture(scope="module")
@@ -113,7 +120,8 @@ def test_checkout_never_materializes_the_failing_head(
     steps: list[dict[str, Any]],
 ) -> None:
     """Checking out the triggering commit in a secret-bearing workflow_run job is
-    the workflow-run-target-code-checkout weakness semgrep flags."""
+    the workflow-run-target-code-checkout weakness semgrep flags.
+    """
     checkouts = [s for s in steps if "actions/checkout" in str(s.get("uses", ""))]
     assert checkouts, "expected a checkout step"
     for step in checkouts:
@@ -129,7 +137,8 @@ def test_agent_step_holds_no_credential_that_can_change_anything(
 ) -> None:
     """The agent may hold WARP_API_KEY (it is the thing being called) but must never
     hold a Linear key or a GitHub token -- that is what keeps a prompt-injected
-    diagnosis from acting on either system."""
+    diagnosis from acting on either system.
+    """
     agent = _step(steps, "Diagnose with Oz")
     env = agent.get("env") or {}
     assert "LINEAR_API_KEY" not in env, "the agent must not be able to write Linear"
@@ -138,12 +147,13 @@ def test_agent_step_holds_no_credential_that_can_change_anything(
 
 
 def test_no_uses_action_runs_pipeline_logic(steps: list[dict[str, Any]]) -> None:
-    """Fully containerized: the only `uses:` steps may be checkout and Dagger setup.
+    """Fully containerized: `uses:` may install toolchains, never run logic.
 
     An agent invoked via `uses:` cannot run inside a container, which is the whole
-    reason this moved to oz-agent-sdk.
+    reason this moved to oz-agent-sdk. Checkout, the Dagger CLI and `uv` are all
+    provisioning steps -- they put a binary on PATH and decide nothing.
     """
-    allowed = ("actions/checkout", "dagger/dagger-for-github")
+    allowed = ("actions/checkout", "dagger/dagger-for-github", "astral-sh/setup-uv")
     for step in steps:
         uses = str(step.get("uses", ""))
         if not uses:
@@ -171,7 +181,8 @@ def test_agent_context_is_extracted_on_the_runner(
 
 def test_reporting_does_not_depend_on_the_agent(steps: list[dict[str, Any]]) -> None:
     """13 silent red nights is the motivating failure; a broken agent must not
-    reproduce it. A log-only stub is filed when no diagnosis comes back."""
+    reproduce it. A log-only stub is filed when no diagnosis comes back.
+    """
     diagnose = _step(steps, "Diagnose with Oz")
     assert diagnose.get("continue-on-error") is True, (
         "a failed agent must not fail the job"
@@ -183,7 +194,8 @@ def test_reporting_does_not_depend_on_the_agent(steps: list[dict[str, Any]]) -> 
 
 def test_no_github_context_interpolated_into_shell(steps: list[dict[str, Any]]) -> None:
     """Run metadata is attacker-influencable and `${{ }}` is substituted before the
-    shell parses it (semgrep run-shell-injection). It must arrive via `env:`."""
+    shell parses it (semgrep run-shell-injection). It must arrive via `env:`.
+    """
     offenders = [
         step.get("name")
         for step in steps
@@ -215,7 +227,8 @@ def test_host_fallback_exists_and_only_runs_when_dagger_failed(
 ) -> None:
     """registry.dagger.io brownouts (dagger/dagger#7548) already force six retries
     in tests-integration.yml. A reporter that dies with the registry is useless
-    exactly when CI is unhappy."""
+    exactly when CI is unhappy.
+    """
     fallback = _step(steps, "File or bump the Linear issue (host fallback)")
     condition = " ".join(str(fallback["if"]).split())
     assert "steps.linear_dagger.outcome != 'success'" in condition
@@ -253,22 +266,76 @@ def test_preflight_gates_on_both_credentials(steps: list[dict[str, Any]]) -> Non
             )
 
 
-def test_pipeline_mounts_only_the_filing_script(steps: list[dict[str, Any]]) -> None:
+def test_pipeline_mounts_only_the_script_and_its_adapter() -> None:
     """A broken lockfile or poisoned tree must not influence the filing step --
-    this pipeline runs precisely because something in CI is already broken."""
+    this pipeline runs precisely because something in CI is already broken.
+
+    The filing script reaches Linear through ``libs.linear`` rather than raw
+    GraphQL, so the container needs one pinned wheel and the adapter package.
+    What it must still never acquire is a route to this repo's *dependency
+    graph*: `uv sync` is itself a plausible cause of the failure being triaged.
+    """
     source = PIPELINE.read_text(encoding="utf-8")
+    body = source.split('"""', 2)[-1]
     assert 'dag.host().directory("scripts", include=[SCRIPT_NAME])' in source
+    assert 'dag.host().directory("libs", include=["__init__.py", "linear/**"])' in (
+        source
+    ), "mount the adapter, not the whole libs tree"
     assert "with_secret_variable" in source, "the key must not be an image layer"
 
-    # Exactly one exec, and it runs the filing script directly. No dependency
-    # install step: the script is stdlib-only, so there is nothing to resolve --
-    # which is the point, since `uv sync` is itself a plausible cause of the
-    # failure being triaged. (Checked on the code, not the prose: the module
-    # docstring legitimately mentions `uv sync` while explaining its absence.)
+    # Two execs: the dependency install, then the script. The install comes
+    # first so its layer caches on the base image and the pin alone -- a
+    # diagnosis file that changes every run must not re-resolve the wheel.
     execs = [line for line in source.splitlines() if ".with_exec(" in line]
-    assert len(execs) == 1, f"expected a single with_exec, found {execs}"
-    assert "sh" in execs[0], "the exec wraps the script so its exit code is captured"
-    for forbidden in ("uv sync", "pip install", "apt-get"):
-        assert forbidden not in source.split('"""', 2)[-1], (
-            f"{forbidden!r} in the pipeline body defeats the stdlib-only design"
+    assert len(execs) == PIPELINE_EXEC_COUNT, f"expected two with_exec, found {execs}"
+    assert "pip" in execs[0]
+    assert "GTM_LINEAR_PIN" in execs[0]
+    assert "sh" in execs[1], "the exec wraps the script so its exit code is captured"
+
+    for forbidden in ("uv sync", "apt-get", "uv.lock"):
+        assert forbidden not in body, (
+            f"{forbidden!r} would couple filing to the repo's dependency graph"
         )
+
+
+def test_gtm_linear_pin_agrees_everywhere_it_appears() -> None:
+    """The container pin, the script's PEP 723 pin, and the project floor.
+
+    Drift is invisible until a Linear failure in CI, and then the Dagger path
+    and the host fallback would file through different SDK versions.
+    """
+    pin = re.search(
+        r'GTM_LINEAR_PIN = "gtm-linear==([^"]+)"',
+        PIPELINE.read_text(encoding="utf-8"),
+    )
+    assert pin is not None, "the pipeline must pin gtm-linear"
+    version = pin.group(1)
+
+    script = FILING_SCRIPT.read_text(encoding="utf-8")
+    assert f'dependencies = ["gtm-linear=={version}"]' in script, (
+        "the PEP 723 header drives the host fallback; keep it on the container pin"
+    )
+
+    floor = re.search(
+        r'"gtm-linear>=([^"]+)"',
+        (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"),
+    )
+    assert floor is not None
+    assert floor.group(1) == version, "the project floor and the CI pin must not drift"
+
+
+def test_uv_is_installed_before_the_host_fallback(
+    steps: list[dict[str, Any]],
+) -> None:
+    """The fallback re-execs through `uv run --script` to honour its PEP 723 pin.
+
+    Without `uv` on PATH the bootstrap fails closed, so the fallback files
+    nothing -- and it only ever runs when the Dagger path has already failed.
+    """
+    setup = _step(steps, "Install uv")
+    assert str(setup["uses"]).startswith("astral-sh/setup-uv@")
+
+    names = [str(step.get("name", "")) for step in steps]
+    assert names.index(str(setup["name"])) < names.index(
+        "File or bump the Linear issue (host fallback)",
+    )
