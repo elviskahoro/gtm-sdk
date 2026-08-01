@@ -57,13 +57,15 @@ def test_cache_key_tag_changes_for_different_api_keys() -> None:
 
 def test_cache_key_tag_is_a_16_character_hex_tag_without_the_api_key() -> None:
     module = _load_script_module()
-    api_key = "attio-key-alpha"
+    api_key_v1 = "attio-key-alpha"
+    expected_v1_tag = "2cf0ad4a214fc3f7"
 
-    tag = module._cache_key_tag(api_key)
+    tag = module._cache_key_tag(api_key_v1)
 
+    assert tag == expected_v1_tag
     assert len(tag) == 16
     assert int(tag, 16) >= 0
-    assert api_key not in tag
+    assert api_key_v1 not in tag
 
 
 def test_missing_creds_shows_canonical_infisical_invocation(
