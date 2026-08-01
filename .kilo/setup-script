@@ -15,8 +15,7 @@ cd "${WORKTREE_PATH}"
 # instead of duplicating/reinitializing per worktree.
 #
 # .beads specifically is normally a symlink to ../.beads pointing at the
-# parent `ai/` repo's shared Dolt DB (see AGENTS.md: "This repo shares the
-# parent ai/ beads DB"). We resolve REPO_PATH/.beads to its real target
+# parent `ai/` repo's shared Dolt DB. We resolve REPO_PATH/.beads to its real target
 # rather than copying the `../.beads` relative link, since Kilo worktrees
 # live two levels deeper (.kilo/worktrees/<branch>/) and a naive relative
 # copy would resolve to a nonexistent path.

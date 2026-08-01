@@ -142,7 +142,8 @@ def test_infisical_env_env_var_is_honored_when_flag_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """INFISICAL_ENV stands in for --env, mirroring the repo convention
-    (see gtm-sdk/AGENTS.md: `export INFISICAL_ENV=dev` — explicit; no default)."""
+    (`export INFISICAL_ENV=dev` — explicit; no default, per
+    gtm-sdk/webhooks/AGENTS.md)."""
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-xyz")
     monkeypatch.setenv("INFISICAL_TOKEN", "tok-abc")

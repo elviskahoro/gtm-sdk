@@ -8,6 +8,8 @@ schema-version = "1.13.0"
 ## -------------------------------------------------------------------
 [install]
 uv.pkg-path = "uv"
+# Keep in lockstep with UV_PINNED_VERSION in scripts/conductor-workspace-setup.sh,
+# which installs this same version on macOS workspaces that have no Flox.
 uv.version = "0.11.26"
 dolt.pkg-path = "dolt"
 infisical.pkg-path = "infisical"

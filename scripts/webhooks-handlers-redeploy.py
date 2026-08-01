@@ -8,9 +8,10 @@ restore verification. The deploy itself is one recipe run by one of two
 executors, so the env that ships images to Modal is reproducible
 operator-to-operator.
 
-Every footgun catalogued in AGENTS.md "Scripted deploy pitfalls" is encoded
-here as an explicit preflight or cleanup step. Keep that section in sync
-with this file. The CI smoke test at ``tests/scripts/test_deploy_webhook.py``
+Every footgun this script exists to prevent is documented on the function
+that encodes it, as an explicit preflight or cleanup step -- this module is
+the catalogue, so add new rationale here rather than to a rules file that
+cannot be kept in sync. The CI smoke test at ``tests/scripts/test_deploy_webhook.py``
 exercises the substitute/restore loop, the EXIT-equivalent restore on deploy
 failure, the Modal-token pop at the preflight, and the environment scrub.
 
@@ -23,8 +24,9 @@ below. They differ only in the isolation layer; anything else is drift, and
 ``tests/scripts/test_deploy_webhook_dagger.py`` fails on it. Dagger runs the
 recipe in a container. ``GTM_DEPLOY_VIA_FLOX=1`` runs it under ``flox
 activate`` on the host instead, for environments where Dagger's engine cannot
-start at all (Conductor cloud sandboxes -- see "Webhook deploys" in AGENTS.md
-and issue #284, whose recorded cause is corrected there). Flox
+start at all (Conductor cloud sandboxes -- see ``_deploy_via_flox`` for the
+cause, and issue #284, whose originally-recorded cause is corrected in #443).
+Flox
 (`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix store rather than
 container namespaces, giving the same reproducibility guarantee. The test
 suite uses that path so CI needs no Dagger engine.
@@ -356,6 +358,10 @@ def _preflight_working_tree() -> None:
 
 def _preflight_modal_secrets() -> None:
     """Verify every named Modal secret exists in the active workspace.
+
+    Worth doing up front: a missing ``modal.Secret.from_name(...)`` does not
+    surface until *after* the image build, so without this the operator pays
+    a full build before learning the deploy cannot succeed.
 
     Uses ``--json`` because the default table renderer truncates long names
     like ``devx-gcp-202605260000`` with ``…``, which would make a substring
@@ -698,6 +704,10 @@ def _preflight_gcs_buckets(
 ) -> None:
     """Verify the per-source GCS bucket exists for handlers that write to gs://.
 
+    Worth doing up front: a missing bucket does not surface until the first
+    write, i.e. on the first live Hookdeck event after a deploy that reported
+    success.
+
     Auto-detects whether the handler routes to a per-source bucket by
     matching ``WebhookModel.<prefix>_get_bucket_name`` in its source. The
     Attio handler doesn't write to GCS, so this pattern is absent and the
@@ -765,6 +775,11 @@ def _preflight_gcs_buckets(
 def _acquire_lock() -> None:
     """Atomic advisory lock via ``mkdir`` semantics.
 
+    Serializes concurrent invocations. Two terminals can both pass the
+    clean-tree preflight and then race on the handler file and the shared
+    ``tmp/webhook-deploy-bak/``: one can delete the other's restore source,
+    or pick up its substitution and deploy the wrong source.
+
     ``Path.mkdir(exist_ok=False)`` raises ``FileExistsError`` atomically on
     every POSIX filesystem. Avoids ``flock`` (not installed by default on
     macOS) and the standard race window of ``if exists ... mkdir``.
@@ -810,12 +825,14 @@ def _write_backup(handler_file: Path) -> None:
 
 
 def _restore_handler() -> None:
-    """Restore the current handler from its backup.
+    r"""Restore the current handler from its backup.
 
     Gated on ``_backup_freshly_written`` so an early-failure path (e.g.
     Modal preflight error) cannot copy a stale backup from a prior run on
     top of a clean worktree. ``shutil.copyfile`` always overwrites — no
-    interactive-cp alias risk.
+    interactive-cp alias risk. Do not swap it for a helper that accepts
+    ``exist_ok=False``: that resurrects the ``cp -i`` footgun the bash
+    version needed ``\cp -f`` to dodge, where the restore silently refused.
     """
     if not _backup_freshly_written or _handler is None or _handler_file is None:
         return
@@ -1192,7 +1209,10 @@ def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
     sandboxes (issue #284): those kernels cannot load ``xt_comment``, CNI
     bridge setup fails, the engine falls back to ``networkMode = "host"``,
     and Dagger's per-exec telemetry proxy — which assumes a per-exec network
-    namespace — errors with no fallback branch. Flox pins ``uv``/``git`` via
+    namespace — errors with no fallback branch. Namespace creation itself
+    demonstrably works: the "nested runc fails at the kernel level" cause
+    recorded for this originally is wrong and dead-ends the next reader
+    (corrected in #443 — do not reinvestigate). Flox pins ``uv``/``git`` via
     the Nix store (``.flox/env/manifest.toml``) rather than container
     namespaces, so ``flox activate`` gives the same version-reproducibility
     guarantee without containerization.
@@ -1367,8 +1387,8 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
         description=(
             "Substitute the WebhookModelToReplace placeholder, deploy via "
             "Dagger-wrapped `modal deploy`, then restore the handler. "
-            "See AGENTS.md → 'Scripted deploy pitfalls' for the full set "
-            "of footguns this encodes."
+            "See webhooks/AGENTS.md, and this script's own docstrings, for "
+            "the full set of footguns this encodes."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
