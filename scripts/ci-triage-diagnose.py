@@ -32,6 +32,12 @@ field -- artifacts are the only channel. Three are tried in order:
    "no diagnosis" and still files a bare issue, because a red check must produce a
    ticket whether or not the agent cooperated.
 
+``uv run --script`` picks up the sibling ``ci-triage-diagnose.py.lock`` script
+lockfile automatically, so a direct run's full transitive closure is
+hash-verified too, not just the top-level pin. Regenerate it with
+``uv lock --script scripts/ci-triage-diagnose.py`` whenever the PEP 723
+``dependencies`` line changes.
+
 Usage:
 
     WARP_API_KEY=... scripts/ci-triage-diagnose.py \\

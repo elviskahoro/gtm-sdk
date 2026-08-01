@@ -19,16 +19,22 @@ CI resolves ``python`` to a dedicated dagger-io/anyio venv via ``$GITHUB_PATH``
 
 Why the container is deliberately tiny: it installs exactly one pinned wheel and
 mounts exactly two paths -- the filing script and the ``libs/linear`` adapter it
-calls. No ``uv sync``, no lockfile, no repo dependency graph, so a broken
+calls. No ``uv sync``, no ``uv.lock``, no repo dependency graph, so a broken
 lockfile or a poisoned working tree still cannot influence the filing step. That
 matters here more than usual: this pipeline runs *because* something in CI is
 already broken.
 
 The ``pip install`` is its own ``with_exec``, placed before the mounts so the
 layer caches on the base image and the pin alone -- a diagnosis file changing
-every run must not re-resolve the dependency. Keep ``GTM_LINEAR_PIN`` in lockstep
-with the PEP 723 header in ``scripts/ci-triage-linear-issue.py``; a test asserts
-they agree. Same shape as ``triage_diagnose_dagger.py``'s ``OZ_SDK_PIN``.
+every run must not re-resolve the dependency. It installs with
+``--require-hashes`` against the committed ``constraints/gtm-linear.txt``, so the
+full transitive closure (httpx, pydantic, ...), not just the top-level pin, is
+hash-verified rather than resolved fresh from PyPI on every triage run. Keep
+``GTM_LINEAR_PIN`` in lockstep with the PEP 723 header in
+``scripts/ci-triage-linear-issue.py`` and the first line of the constraints
+file; a test asserts all three agree. Regenerate the constraints file with the
+command in its own header comment whenever the pin changes. Same shape as
+``triage_diagnose_dagger.py``'s ``OZ_SDK_PIN``.
 
 The Linear key is forwarded as a Dagger secret, so it lands as an env var the
 script reads without being baked into an image layer or echoed into the build
@@ -54,8 +60,9 @@ from dagger import dag
 
 CONTAINER_IMAGE = "python:3.13-slim"
 
-# Keep in lockstep with the PEP 723 header in the filing script and with the
-# project's floor -- tests/workflows/test_triage_workflow.py enforces all three.
+# Keep in lockstep with the PEP 723 header in the filing script, the project's
+# floor, and the first requirement line of CONSTRAINTS_FILE --
+# tests/workflows/test_triage_workflow.py enforces all four.
 GTM_LINEAR_PIN = "gtm-linear==0.1.0"
 
 WORKDIR = "/work"
@@ -65,11 +72,36 @@ DIAGNOSIS_IN_CONTAINER = f"{WORKDIR}/diagnosis.md"
 OUTPUT_IN_CONTAINER = f"{WORKDIR}/linear-issue.tsv"
 RC_IN_CONTAINER = f"{WORKDIR}/triage_rc"
 
+# Hash-locked closure for GTM_LINEAR_PIN, regenerated via the command in its
+# own header comment. `--require-hashes` refuses to install anything --
+# including a transitive dependency -- that isn't listed here by hash.
+CONSTRAINTS_FILE = Path(__file__).parent / "constraints" / "gtm-linear.txt"
+CONSTRAINTS_IN_CONTAINER = f"{WORKDIR}/constraints.txt"
+
 # The trailing `echo $? > …` always exits 0 so the `with_exec` succeeds and the
 # output file stays exportable; main() reads the real code back and re-raises it.
 # Do NOT collapse this into a bare command or a `|| true` (see ai-eun for the
 # swallowed-exit-code failure mode this pattern exists to prevent).
 RC_SUFFIX = f"; echo $? > {RC_IN_CONTAINER}"
+
+
+def _assert_constraints_pin_matches() -> None:
+    """Fail fast if CONSTRAINTS_FILE drifts from GTM_LINEAR_PIN.
+
+    The pin-agreement test catches this too, but that only runs in CI; this
+    catches it the moment someone bumps the pin locally without regenerating
+    the constraints file. `pip-compile` output is sorted alphabetically, so
+    the pin is not necessarily the first requirement line.
+    """
+    package_name = GTM_LINEAR_PIN.split("==", 1)[0]
+    lines = CONSTRAINTS_FILE.read_text(encoding="utf-8").splitlines()
+    matches = [line for line in lines if line.startswith(f"{package_name}==")]
+    if not matches or matches[0].split(" \\", 1)[0].strip() != GTM_LINEAR_PIN:
+        msg = (
+            f"{CONSTRAINTS_FILE} does not pin {GTM_LINEAR_PIN!r}. Regenerate "
+            "the constraints file (see its header comment for the command)."
+        )
+        raise AssertionError(msg)
 
 
 def build_container(
@@ -79,12 +111,14 @@ def build_container(
     script_args: list[str],
 ) -> dagger.Container:
     """Build the filing container. Caller must be inside ``dagger.connection(...)``."""
+    _assert_constraints_pin_matches()
     scripts = dag.host().directory("scripts", include=[SCRIPT_NAME])
     # The adapter, and only the adapter. `libs/linear/client.py` imports nothing
     # but stdlib at runtime (every `gtm_linear` import is lazy or TYPE_CHECKING),
     # so this pulls in two small files rather than the `libs/` tree.
     libs = dag.host().directory("libs", include=["__init__.py", "linear/**"])
     diagnosis = dag.host().file(str(diagnosis_host_path))
+    constraints = dag.host().file(str(CONSTRAINTS_FILE))
     secret = dag.set_secret("linear-api-key", api_key)
 
     command = " ".join(
@@ -94,7 +128,20 @@ def build_container(
     return (
         dag.container()
         .from_(CONTAINER_IMAGE)
-        .with_exec(["pip", "install", "--no-cache-dir", "--quiet", GTM_LINEAR_PIN])
+        .with_file(CONSTRAINTS_IN_CONTAINER, constraints)
+        # GTM_LINEAR_PIN is pinned via CONSTRAINTS_FILE; --require-hashes refuses
+        # anything not listed there by hash, closure included.
+        .with_exec(
+            [
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--quiet",
+                "--require-hashes",
+                "-r",
+                CONSTRAINTS_IN_CONTAINER,
+            ],
+        )
         .with_directory(f"{WORKDIR}/scripts", scripts)
         .with_directory(f"{WORKDIR}/libs", libs)
         .with_file(DIAGNOSIS_IN_CONTAINER, diagnosis)
