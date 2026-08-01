@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import cast
-
-import modal
+from typing import TYPE_CHECKING, cast
 
 from src.accounts.models import (
     BatchMutationResult,
@@ -12,6 +10,9 @@ from src.accounts.models import (
     MapAccountHierarchyResult,
     ResearchResult,
 )
+
+if TYPE_CHECKING:
+    import modal
 
 
 def test_gtm_research_sets_and_clears_env(monkeypatch) -> None:

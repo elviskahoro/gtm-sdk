@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import cast
-
-import modal
+from typing import TYPE_CHECKING, cast
 
 from libs.attio.errors import ConflictError
 from src.attio import (
@@ -11,6 +9,9 @@ from src.attio import (
     notes as modal_notes,
     people as modal_people,
 )
+
+if TYPE_CHECKING:
+    import modal
 
 
 def test_company_add_http_returns_structured_409_on_conflict(monkeypatch) -> None:

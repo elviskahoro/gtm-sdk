@@ -1,11 +1,13 @@
+# ruff: noqa: S101 -- asserts are the point of a test file
 from __future__ import annotations
 
 import os
-from typing import cast
-
-import modal
+from typing import TYPE_CHECKING, cast
 
 from libs.attio.models import AttributeCreateResult
+
+if TYPE_CHECKING:
+    import modal
 
 
 def test_attio_create_companies_attribute_sets_and_clears_env_preview(

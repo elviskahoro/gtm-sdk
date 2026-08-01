@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import modal
+if TYPE_CHECKING:
+    import modal
 
 
 def test_parallel_search_sets_and_clears_env_and_forwards_mode(monkeypatch) -> None:

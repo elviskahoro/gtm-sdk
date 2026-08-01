@@ -1,3 +1,4 @@
+# ruff: noqa: S101 -- asserts are the point of a test file
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace

@@ -26,6 +26,7 @@ engine. Its CI value is ~zero — the mock-chain guard in
 executable proof of the fix and a local pre-merge check.
 """
 # trunk-ignore-all(bandit/B607): `docker` resolved via PATH on purpose (engine probe).
+# ruff: noqa: S101 -- asserts are the point of a test file
 
 from __future__ import annotations
 

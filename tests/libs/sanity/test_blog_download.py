@@ -203,7 +203,7 @@ def test_download_fails_fast_on_duplicate_slug(tmp_path: Path) -> None:
             "src.sanity.blog_download.fetch_blog_posts_raw",
             return_value=[first, second],
         ),
-        pytest.raises(DuplicateSlugError, match="post-A.*post-B|dupe"),
+        pytest.raises(DuplicateSlugError, match=r"post-A.*post-B|dupe"),
     ):
         download_blog_posts(tmp_path, config=SanityConfig())
 

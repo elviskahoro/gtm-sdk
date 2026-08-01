@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Generator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 _KEY_ENV_MAP: dict[str, str] = {
     "apollo_api_key": "APOLLO_API_KEY",

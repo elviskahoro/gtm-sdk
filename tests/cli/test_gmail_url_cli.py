@@ -1,3 +1,4 @@
+# ruff: noqa: S101 -- asserts are the point of a test file
 from __future__ import annotations
 
 import json

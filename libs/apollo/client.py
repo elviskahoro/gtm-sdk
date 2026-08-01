@@ -52,5 +52,5 @@ def get_client(api_key: str | None = None) -> Any:
             "(2) call inside libs.apollo.client.api_key_scope(...), "
             "(3) set APOLLO_API_KEY in the process environment.",
         )
-    apollo_client_class = apollo_sdk.ApolloSDK
+    apollo_client_class = apollo_sdk.ApolloSDK  # pyright: ignore[reportAttributeAccessIssue]
     return apollo_client_class(api_key=token)

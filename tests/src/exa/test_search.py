@@ -7,9 +7,8 @@ Mirrors tests/src/parallel/test_modal_wrappers.py: validate the payload-validati
 from __future__ import annotations
 
 import importlib
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import modal
 import pytest
 from pydantic import ValidationError
 
@@ -19,6 +18,9 @@ from libs.exa.models import SearchInput, SearchResponse
 from src.exa.companies import FindCompaniesQuery, exa_find_companies
 from src.exa.people import FindPeopleQuery, exa_find_people
 from src.exa.search import SearchQuery, exa_search
+
+if TYPE_CHECKING:
+    import modal
 
 
 def _stub_response() -> SearchResponse:

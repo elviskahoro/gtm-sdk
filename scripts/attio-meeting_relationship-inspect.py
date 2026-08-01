@@ -727,7 +727,7 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
     os.environ[_BOOTSTRAP_SENTINEL_ENV] = "1"
     # trunk-ignore(bandit/B606): argv is built from local config + the script's own path
     os.execvp(argv[0], argv)  # noqa: S606
-    return None
+    return 0
 
 
 def main() -> int:

@@ -67,13 +67,13 @@ def _get_client(api_key: str | None = None):
             "(2) call inside libs.parallel.client.api_key_scope(...), "
             "(3) set PARALLEL_API_KEY in the process environment.",
         )
-    parallel_client_class = parallel_sdk.Parallel
+    parallel_client_class = parallel_sdk.Parallel  # pyright: ignore[reportAttributeAccessIssue]
     return parallel_client_class(api_key=token)
 
 
 def extract_full_content(input: ExtractFullContentInput) -> ExtractResponse:
     client = _get_client()
-    response = client.beta.extract(
+    response = client.beta.extract(  # pyrefly: ignore[missing-attribute]
         urls=[input.url],
         excerpts=False,
         full_content=True,
@@ -83,7 +83,7 @@ def extract_full_content(input: ExtractFullContentInput) -> ExtractResponse:
 
 def extract_excerpts(input: ExtractExcerptsInput) -> ExtractResponse:
     client = _get_client()
-    response = client.beta.extract(
+    response = client.beta.extract(  # pyrefly: ignore[missing-attribute]
         urls=[input.url],
         objective=input.objective,
         excerpts=True,
@@ -94,7 +94,7 @@ def extract_excerpts(input: ExtractExcerptsInput) -> ExtractResponse:
 
 def search(input: SearchInput) -> SearchResponse:
     client = _get_client()
-    response = client.beta.search(
+    response = client.beta.search(  # pyrefly: ignore[missing-attribute]
         objective=input.objective,
         mode=input.mode,
         max_results=input.max_results,

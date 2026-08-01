@@ -4,6 +4,7 @@ The script filename is hyphenated, so it's loaded via ``importlib`` rather than
 imported. Tests cover the envelope mapper, the live-gate mirror, and the
 ``--dry-run`` path (which must not touch the network).
 """
+# ruff: noqa: S101 -- asserts are the point of a test file
 
 from __future__ import annotations
 

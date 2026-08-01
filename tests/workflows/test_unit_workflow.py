@@ -10,9 +10,11 @@ These tests validate the workflow changes from issues #296, #321, and #330:
 import re
 import runpy
 import tomllib
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "tests-unit.yml"
 PYTEST_DAGGER = (

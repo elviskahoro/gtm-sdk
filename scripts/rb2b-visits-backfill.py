@@ -57,7 +57,6 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -71,6 +70,9 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 import dlt  # noqa: E402
 import requests  # noqa: E402
 from dlt.destinations import duckdb as duckdb_destination  # noqa: E402
@@ -79,9 +81,9 @@ from cli.webhook._hookdeck import HOOKDECK_API_BASE, PAGE_LIMIT  # noqa: E402
 from cli.webhook._modal import modal_url_for_app  # noqa: E402
 from libs.dlt.bucket_naming import raw_bucket_name  # noqa: E402
 from libs.dlt.filesystem_gcp import GCPCredentials  # noqa: E402
-from libs.rb2b import (
-    Webhook as Rb2bWebhook,  # noqa: E402
-    compute_event_id,  # noqa: E402
+from libs.rb2b import (  # noqa: E402
+    Webhook as Rb2bWebhook,
+    compute_event_id,
 )
 
 # Reuse the model's timestamp normalizer so the synthesized envelope timestamp
