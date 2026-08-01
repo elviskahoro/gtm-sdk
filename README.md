@@ -28,14 +28,12 @@ gtm-sdk/
 └── uv.lock
 ```
 
-### Layer rules (enforced)
+### Layer rules
 
-- `libs/<x>/` wraps **one** external SDK or API. Idiomatic Python types/functions. **No `libs/<x>` may import from `libs/<y>`.**
-- `src/` chains adapters into workflows. Modal `@app.function` / `@modal.fastapi_endpoint` decorators live here.
-- `cli/` is Typer-only: parse args → preflight → call into `src/` → render. No business logic.
-- `data-gen/` products are independent; do not depend on each other.
-
-Anti-patterns: orchestration inside `libs/`; business logic inside `cli/`; cross-lib imports.
+The authoritative placement and boundary rules for contributors are in
+[`AGENTS.md`](AGENTS.md), with directory-specific guidance in
+[`webhooks/AGENTS.md`](webhooks/AGENTS.md), [`docs/AGENTS.md`](docs/AGENTS.md),
+and [`tests/AGENTS.md`](tests/AGENTS.md).
 
 ## Adapters (`libs/`)
 
@@ -127,12 +125,8 @@ trunk check --all                # lint + typecheck (ruff, etc.)
 uv run modal deploy deploy.py
 ```
 
-- `deploy.py` lives at the repo root **on purpose** — moving it under `src/` causes `src/attio/` to shadow the pip `attio` package.
-- App name resolves from `MODAL_APP` env var; falls back to `gtm-sdk`.
-- Image is debian_slim + Python 3.13 with a pinned subset of deps and local `libs/` + `src/` mounted via `add_local_python_source`.
-- Secrets: hydrated at call time from Infisical via `src/secrets_bootstrap.py` (`@with_secrets` + `bootstrap_secret()`) — no named Modal `Secret.from_name` bindings.
-- Free tier cap: **8 web endpoints** total. Parallel endpoints are gated behind a plan upgrade.
-- Endpoint modules are imported in `src/app.py` for decorator registration — when adding a new endpoint module, add the import there.
+Deployment constraints and Modal-specific gotchas are maintained in
+[`AGENTS.md`](AGENTS.md).
 
 Build env vars baked into the image: `AI_BUILD_GIT_SHA`, `AI_DEPLOYED_AT`.
 
@@ -149,37 +143,14 @@ Deploy with `scripts/webhooks-handlers-redeploy.py <handler> <source>` (or `--al
 
 ## Telemetry
 
-OTEL traces and logs via `libs/telemetry.py`. The default mode fans out through a collector Modal
-app (`src/otel_collector.py`, deployed standalone) to all configured providers — Dash0, HyperDX,
-Logfire, Grafana; a direct single-sink fallback (`TELEMETRY_COLLECTOR_APP=""`) exists for local
-dev. Neither configured → no-op; telemetry is never load-bearing.
+OTEL traces and logs are provided by `libs/telemetry.py`; see the
+[`telemetry documentation`](docs/telemetry/) for configuration and the
+authoritative contributor guidance in [`AGENTS.md`](AGENTS.md).
 
 Setup guides: [`docs/telemetry/`](docs/telemetry/) (Dash0, Grafana Cloud).
 
-## Conventions
+## Conventions, testing, and agent guidance
 
-- **Temp files**: `tmp/` only. Never alongside source.
-- **Branches**: `agent/<slug>` for agent-created branches. Never `claude/*`.
-- **Worktrees**: under `worktrees/<branch-name>`. Never use `.git/modules/*` paths as user-facing worktrees.
-- **Commits**: never add AI co-author trailers (`Co-Authored-By: Claude/Oz/...`). Human authors only.
-- **Documentation**: live in code (docstrings, README per major module); the published docs site lives in [`docs/`](docs/). Do **not** create summary/investigation `.md` files.
-- **Path anchoring in scripts**: anchor file I/O on `Path(__file__).resolve().parent`, never the CWD — `uv run path/to/script.py` does not chdir.
-
-## Testing
-
-- `pytest` with `--import-mode=importlib` (already in `pyproject.toml`).
-- Layout mirrors source: `tests/cli/`, `tests/libs/`, `tests/src/`, `tests/integration/`.
-- Integration smoke: `tests/integration/test_gtm_remote_smoke.py`.
-- `S101` (assert) is allowed in `tests/**` (ruff per-file ignore).
-
-## Agent guidance
-
-When adding functionality:
-
-1. **External SDK call?** → New file in `libs/<service>/`. Wrap one SDK only. No cross-lib imports.
-2. **Multi-step flow / Modal endpoint?** → `src/<service>/`. Register module import in `src/app.py` if it defines endpoints.
-3. **User-facing command?** → `cli/<group>/`. Typer subapp. Call into `src/`. Wire into `cli/main.py` via `app.add_typer(...)`.
-4. **Standalone data product?** → `data-gen/<product>/`. Self-contained.
-5. **Webhook handler?** → `webhooks/<name>.py`. Independent Modal app.
-
-See `AGENTS.md` (symlinked from `CLAUDE.md`) for the authoritative version of these rules.
+Repository conventions, testing requirements, and contributor workflow are
+maintained in [`AGENTS.md`](AGENTS.md) and the scoped guidance files linked
+there.
