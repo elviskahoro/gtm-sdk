@@ -18,6 +18,9 @@
       "infisical": {
         "pkg-path": "infisical"
       },
+      "jq": {
+        "pkg-path": "jq"
+      },
       "roborev": {
         "flake": "github:kenn-io/roborev/v0.62.1"
       },
@@ -385,6 +388,110 @@
       ],
       "outputs": {
         "out": "/nix/store/s2ihcvgkqikr5i6swqfry3ifc9qp81s6-infisical-0.41.90"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jq",
+      "broken": false,
+      "derivation": "/nix/store/rgi7g8yi9vakgqdj8h5fjs6ylzv4m8qz-jq-1.8.2.drv",
+      "description": "Lightweight and flexible command-line JSON processor",
+      "install_id": "jq",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "jq-1.8.2",
+      "pname": "jq",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:59.131778Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.8.2",
+      "outputs_to_install": [
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/w9rx3k3j6r1aijl9vbhdw0j8h6rzdwww-jq-1.8.2-bin",
+        "dev": "/nix/store/gwq87n1iz8fbhnd9g52aw4b6wb8vfal7-jq-1.8.2-dev",
+        "doc": "/nix/store/spgihyfnkcbdzwqk8661xlxgn7vp9lp3-jq-1.8.2-doc",
+        "man": "/nix/store/pgwzzdyic7mf4dzxxj0dw7j1la50gzb8-jq-1.8.2-man",
+        "out": "/nix/store/n0h3l9gvwsgxfkcrc4jy4mkf95b81gxy-jq-1.8.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jq",
+      "broken": false,
+      "derivation": "/nix/store/4grj7klflisi6z6j6l7zb4d7nh81kvwb-jq-1.8.2.drv",
+      "description": "Lightweight and flexible command-line JSON processor",
+      "install_id": "jq",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "jq-1.8.2",
+      "pname": "jq",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:53:05.735666Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.8.2",
+      "outputs_to_install": [
+        "bin",
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/5whqqvqs3bs1q85wvlh1s62xamjp2ddd-jq-1.8.2-bin",
+        "dev": "/nix/store/5vir0728vnqsgv0w4hbwid0w36pjzix8-jq-1.8.2-dev",
+        "doc": "/nix/store/97mmiwl3n44brlf1n52wlqn2ncq9l0q1-jq-1.8.2-doc",
+        "man": "/nix/store/j74grvap66q6g1nb2z1fai8gba6zn2r8-jq-1.8.2-man",
+        "out": "/nix/store/sllc59m9drvcawrlmsmw74ai9wkia9f1-jq-1.8.2"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jq",
+      "broken": false,
+      "derivation": "/nix/store/dfwn0131h6xq4nifhvrw7ivpf9ch9j7m-jq-1.8.2.drv",
+      "description": "Lightweight and flexible command-line JSON processor",
+      "install_id": "jq",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "jq-1.8.2",
+      "pname": "jq",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:45.454585Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.8.2",
+      "outputs_to_install": [
+        "bin",
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/1bp02949k0xdihbgphpwbzba1741pknk-jq-1.8.2-bin",
+        "dev": "/nix/store/gfgr11fc6rd0rnbalj2qk69s4jyy5rsb-jq-1.8.2-dev",
+        "doc": "/nix/store/ic07gi5rsjf4nq2ad3h40cpk92bfxb0f-jq-1.8.2-doc",
+        "man": "/nix/store/zcxx34cdvf8xbv26vw2hbgjmsjwxaj9h-jq-1.8.2-man",
+        "out": "/nix/store/mgrb1j6chhwmb7jwd6cjwihbni2szz1d-jq-1.8.2"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
