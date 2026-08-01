@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
 import argparse
 import asyncio
-import hmac
+import hashlib
 import json
 import os
 import sys
@@ -113,11 +113,11 @@ def extract_workspace_slug(body: str) -> str:
 
 def _cache_key_tag(api_key: str) -> str:
     """Return the stable, non-secret tag used to partition Dagger caches."""
-    return hmac.digest(
-        _CACHE_TAG_KEY,
+    return hashlib.blake2b(
         api_key.encode("utf-8"),
-        "sha256",
-    ).hex()[:16]
+        key=_CACHE_TAG_KEY,
+        digest_size=8,
+    ).hexdigest()
 
 
 async def probe(*, api_key: str, json_output: bool) -> str:
@@ -127,8 +127,8 @@ async def probe(*, api_key: str, json_output: bool) -> str:
     # mislead the operator (we hit this returning a dev workspace slug after
     # switching to prod). Derive a stable per-key tag and bind it both as the
     # secret's Dagger name and an env var so the cache key changes with the
-    # key. HMAC keeps this cache identity separate from a bare hash while
-    # retaining deterministic tags across runs for the same API key.
+    # key. Keyed BLAKE2b keeps this cache identity separate from a bare hash
+    # while retaining deterministic tags across runs for the same API key.
     key_tag = _cache_key_tag(api_key)
 
     async with dagger.connection(dagger.Config(log_output=sys.stderr)):
