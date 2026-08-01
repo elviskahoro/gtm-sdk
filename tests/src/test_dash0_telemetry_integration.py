@@ -18,7 +18,7 @@ from src.otel_collector import build_collector_config
 class TestDash0Configuration:
     """Verify Dash0 configuration is correctly built."""
 
-    def test_dash0_exporter_included_when_token_and_endpoint_set(self):
+    def test_dash0_exporter_included_when_token_and_endpoint_set(self) -> None:
         """Dash0 exporter is included in collector config when both token and endpoint are set."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -30,7 +30,7 @@ class TestDash0Configuration:
             f"Dash0 exporter not found in {exporters.keys()}"
         )
 
-    def test_dash0_exporter_missing_token_without_endpoint(self):
+    def test_dash0_exporter_missing_token_without_endpoint(self) -> None:
         """Dash0 exporter is not included when endpoint is missing."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -42,7 +42,7 @@ class TestDash0Configuration:
             "Dash0 exporter should not be included without endpoint"
         )
 
-    def test_dash0_exporter_missing_token(self):
+    def test_dash0_exporter_missing_token(self) -> None:
         """Dash0 exporter is not included when token is missing."""
         env = {
             # Missing DASH0_AUTH_TOKEN
@@ -54,7 +54,7 @@ class TestDash0Configuration:
             "Dash0 exporter should not be included without token"
         )
 
-    def test_dash0_exporter_headers_include_authorization(self):
+    def test_dash0_exporter_headers_include_authorization(self) -> None:
         """Dash0 exporter includes Bearer authorization header."""
         env = {
             "DASH0_AUTH_TOKEN": "test-auth-token-123",  # nosec: test token
@@ -72,7 +72,7 @@ class TestDash0Configuration:
             f"Auth header should reference env var; got {auth_value!r}"
         )
 
-    def test_dash0_exporter_headers_include_dataset(self):
+    def test_dash0_exporter_headers_include_dataset(self) -> None:
         """Dash0 exporter includes dataset header when configured."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -87,7 +87,7 @@ class TestDash0Configuration:
         assert "Dash0-Dataset" in headers
         assert headers["Dash0-Dataset"] == "my-dataset"
 
-    def test_dash0_exporter_uses_default_dataset(self):
+    def test_dash0_exporter_uses_default_dataset(self) -> None:
         """Dash0 exporter uses 'default' dataset when not specified."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -102,7 +102,7 @@ class TestDash0Configuration:
         assert "Dash0-Dataset" in headers
         assert headers["Dash0-Dataset"] == "default"
 
-    def test_dash0_endpoint_stripped_of_signal_suffix(self):
+    def test_dash0_endpoint_stripped_of_signal_suffix(self) -> None:
         """Dash0 endpoint has /v1/{signal} suffix stripped."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -117,7 +117,7 @@ class TestDash0Configuration:
             f"Endpoint should have /v1/traces stripped; got {endpoint!r}"
         )
 
-    def test_dash0_with_us_endpoint(self):
+    def test_dash0_with_us_endpoint(self) -> None:
         """US Dash0 endpoint is correctly configured."""
         env = {
             "DASH0_AUTH_TOKEN": "us-token",  # nosec: test token
@@ -131,7 +131,7 @@ class TestDash0Configuration:
         assert dash0_config.get("endpoint") == "https://otel-ingest.us.dash0.com"
         assert dash0_config.get("headers", {}).get("Dash0-Dataset") == "us-region-data"
 
-    def test_dash0_with_eu_endpoint(self):
+    def test_dash0_with_eu_endpoint(self) -> None:
         """EU Dash0 endpoint is correctly configured."""
         env = {
             "DASH0_AUTH_TOKEN": "eu-token",  # nosec: test token
@@ -145,7 +145,7 @@ class TestDash0Configuration:
         assert dash0_config.get("endpoint") == "https://otel-ingest.eu.dash0.com"
         assert dash0_config.get("headers", {}).get("Dash0-Dataset") == "eu-region-data"
 
-    def test_dash0_exporter_in_traces_pipeline(self):
+    def test_dash0_exporter_in_traces_pipeline(self) -> None:
         """Dash0 exporter is wired into the traces pipeline."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -161,7 +161,7 @@ class TestDash0Configuration:
             f"Dash0 not in traces pipeline exporters: {exporters}"
         )
 
-    def test_dash0_exporter_in_logs_pipeline(self):
+    def test_dash0_exporter_in_logs_pipeline(self) -> None:
         """Dash0 exporter is wired into the logs pipeline."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -175,7 +175,7 @@ class TestDash0Configuration:
             f"Dash0 not in logs pipeline exporters: {exporters}"
         )
 
-    def test_dash0_with_retry_and_queue_enabled(self):
+    def test_dash0_with_retry_and_queue_enabled(self) -> None:
         """Dash0 exporter has retry and sending queue enabled."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -189,7 +189,7 @@ class TestDash0Configuration:
         assert dash0_config.get("retry_on_failure", {}).get("enabled") is True
         assert dash0_config.get("sending_queue", {}).get("enabled") is True
 
-    def test_all_providers_together(self):
+    def test_all_providers_together(self) -> None:
         """All three providers (HyperDX, Dash0, Logfire) can coexist."""
         env = {
             "HYPERDX_API_KEY": "hx-key",  # nosec: test token
@@ -228,7 +228,7 @@ class TestDash0Configuration:
 class TestDash0EndpointVariants:
     """Test various Dash0 endpoint URL formats."""
 
-    def test_dash0_endpoint_with_trailing_slash(self):
+    def test_dash0_endpoint_with_trailing_slash(self) -> None:
         """Trailing slash in endpoint is handled correctly."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token
@@ -243,7 +243,7 @@ class TestDash0EndpointVariants:
             "https://otel-ingest.us.dash0.com/",
         ]
 
-    def test_dash0_endpoint_full_v1_logs_url(self):
+    def test_dash0_endpoint_full_v1_logs_url(self) -> None:
         """Full /v1/logs URL is normalized correctly."""
         env = {
             "DASH0_AUTH_TOKEN": "test-token",  # nosec: test token

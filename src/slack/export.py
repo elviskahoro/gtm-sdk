@@ -27,7 +27,8 @@ def _with_mention(
     """Prepend a Slack ``<@user_id>`` mention so the host is pinged. The mention
     must live in a ``section`` (header ``plain_text`` can't notify), so insert one
     right after the header; also prepend it to the fallback ``text`` so the push
-    notification names them."""
+    notification names them.
+    """
     mention = f"<@{user_id}>"
     new_blocks = list(blocks)
     after_header = bool(new_blocks) and new_blocks[0].get("type") == "header"

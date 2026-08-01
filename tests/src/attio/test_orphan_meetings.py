@@ -40,7 +40,7 @@ def _cand(
     )
 
 
-def test_identical_participants_same_minute_is_confident():
+def test_identical_participants_same_minute_is_confident() -> None:
     rows = detect_orphans(
         [
             _cand("api", emails=["a@dlthub.com", "b@acme.com"], actor="api-token"),
@@ -55,7 +55,7 @@ def test_identical_participants_same_minute_is_confident():
     assert row.confidence == "confident"
 
 
-def test_partial_overlap_is_review():
+def test_partial_overlap_is_review() -> None:
     # Share 1 of 2 participants → overlap 0.5 → review band, not confident.
     rows = detect_orphans(
         [
@@ -68,14 +68,14 @@ def test_partial_overlap_is_review():
     assert rows[0].confidence == "review"
 
 
-def test_no_system_in_bucket_yields_no_orphan():
+def test_no_system_in_bucket_yields_no_orphan() -> None:
     rows = detect_orphans(
         [_cand("api", emails=["a@dlthub.com", "b@acme.com"], actor="api-token")],
     )
     assert rows == []
 
 
-def test_system_only_bucket_yields_no_orphan():
+def test_system_only_bucket_yields_no_orphan() -> None:
     rows = detect_orphans(
         [
             _cand("s1", emails=["a@dlthub.com"], actor="system"),
@@ -85,7 +85,7 @@ def test_system_only_bucket_yields_no_orphan():
     assert rows == []
 
 
-def test_different_minute_not_grouped():
+def test_different_minute_not_grouped() -> None:
     # api-token and system 2 minutes apart are NOT the same slot — no pairing.
     rows = detect_orphans(
         [
@@ -96,7 +96,7 @@ def test_different_minute_not_grouped():
     assert rows == []
 
 
-def test_best_system_chosen_as_canonical():
+def test_best_system_chosen_as_canonical() -> None:
     # api-token overlaps two system meetings (1.0 and 0.5) → canonical is the 1.0.
     rows = detect_orphans(
         [
@@ -122,7 +122,7 @@ def test_best_system_chosen_as_canonical():
     assert rows[0].overlap == 1.0
 
 
-def test_same_minute_subset_is_review_not_confident():
+def test_same_minute_subset_is_review_not_confident() -> None:
     # orphan attendees are a strict SUBSET of the system meeting's — overlap is
     # 1.0 but the sets are not equal, so it could be a different meeting. Must be
     # review, never auto-deletable.
@@ -141,7 +141,7 @@ def test_same_minute_subset_is_review_not_confident():
     assert rows[0].confidence == "review"
 
 
-def test_same_minute_superset_is_review_not_confident():
+def test_same_minute_superset_is_review_not_confident() -> None:
     # orphan attendees are a strict SUPERSET — overlap 1.0, sets unequal → review.
     rows = detect_orphans(
         [
@@ -158,7 +158,7 @@ def test_same_minute_superset_is_review_not_confident():
     assert rows[0].confidence == "review"
 
 
-def test_exact_match_preferred_as_canonical_over_subset():
+def test_exact_match_preferred_as_canonical_over_subset() -> None:
     # Two same-slot system meetings both score overlap 1.0: one is an exact set
     # match, the other a subset. The exact one wins as canonical AND makes the
     # row confident.
@@ -174,7 +174,7 @@ def test_exact_match_preferred_as_canonical_over_subset():
     assert rows[0].confidence == "confident"
 
 
-def test_no_participant_overlap_below_floor_is_dropped():
+def test_no_participant_overlap_below_floor_is_dropped() -> None:
     rows = detect_orphans(
         [
             _cand("api", emails=["x@other.com", "y@other.com"], actor="api-token"),
@@ -184,7 +184,7 @@ def test_no_participant_overlap_below_floor_is_dropped():
     assert rows == []
 
 
-def test_missing_created_by_type_raises():
+def test_missing_created_by_type_raises() -> None:
     # created_by_type is the only reliable actor discriminator; a candidate
     # without it would be silently mis-bucketed, so detection fails fast instead.
     untyped = MeetingCandidate(
@@ -198,7 +198,7 @@ def test_missing_created_by_type_raises():
         detect_orphans([untyped])
 
 
-def test_non_utc_start_buckets_by_same_instant():
+def test_non_utc_start_buckets_by_same_instant() -> None:
     # Same instant expressed in a non-UTC tz must bucket into the same minute as
     # its UTC counterpart, or the orphan/system pair is missed.
     plus_two = timezone(timedelta(hours=2))
@@ -221,7 +221,7 @@ def test_non_utc_start_buckets_by_same_instant():
     assert rows[0].confidence == "confident"
 
 
-def test_classify_split_counts():
+def test_classify_split_counts() -> None:
     rows = detect_orphans(
         [
             # confident slot
@@ -249,7 +249,7 @@ def test_classify_split_counts():
     assert review[0].orphan_meeting_id == "api2"
 
 
-def test_attio_url_format():
+def test_attio_url_format() -> None:
     rows = detect_orphans(
         [
             _cand("api", emails=["a@x.com"], actor="api-token"),
@@ -259,7 +259,7 @@ def test_attio_url_format():
     assert rows[0].attio_url == "https://app.attio.com/dlthub/meetings/record/api"
 
 
-def test_csv_columns_and_files(tmp_path):
+def test_csv_columns_and_files(tmp_path) -> None:
     rows = detect_orphans(
         [
             _cand("api", emails=["a@x.com", "b@x.com"], actor="api-token"),

@@ -52,7 +52,8 @@ def _booking_url(uid: str | None) -> str | None:
     redirects it to the correct tab (upcoming / unconfirmed / past / cancelled)
     based on the booking's current state, so one link works for every lifecycle
     event (a requested booking lands on 'unconfirmed', a cancelled one on
-    'cancelled', etc.)."""
+    'cancelled', etc.).
+    """
     return f"{CALCOM_APP_BASE_URL}/bookings/?uid={uid}" if uid else None
 
 
@@ -77,7 +78,8 @@ def _fmt_time(dt: datetime | None) -> str:
 def _attendees_with_tz(attendees: list[Any]) -> str:
     """Render attendees as ``email (timezone)`` so the on-call host sees the
     attendee's local time zone at a glance. Falls back to just the email when
-    cal.com omits the time zone."""
+    cal.com omits the time zone.
+    """
     parts: list[str] = []
     for a in attendees:
         email = getattr(a, "email", None)
@@ -148,7 +150,9 @@ def _msg_for_booking(
     subtype: str,
 ) -> SlackMessage:
     """Shared builder for BOOKING_CREATED ('scheduled') and BOOKING_REQUESTED
-    ('requested') — identical payload shape, only the lifecycle label differs."""
+    ('requested') — identical payload shape, only the lifecycle label differ
+    s.
+    """
     title = payload.title or "Cal.com Booking"
     fallback, blocks = _blocks(
         subtype=subtype,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from libs.resend.email import SendEmailInput
 
 
-def test_send_email_input_defaults():
+def test_send_email_input_defaults() -> None:
     inp = SendEmailInput(
         to=["test@example.com"],
         subject="Test",

@@ -151,14 +151,14 @@ def test_upsert_person_github_handle_construction() -> None:
 
 
 def _valid_tracking_event_kwargs() -> dict[str, Any]:
-    return dict(
-        external_id="rb2b:abc123",
-        source="rb2b",
-        name="https://example.test/pricing",
-        event_type="rb2b_visit",
-        event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
-        body_json='{"raw": "payload"}',
-    )
+    return {
+        "external_id": "rb2b:abc123",
+        "source": "rb2b",
+        "name": "https://example.test/pricing",
+        "event_type": "rb2b_visit",
+        "event_timestamp": datetime(2026, 5, 14, tzinfo=timezone.utc),
+        "body_json": '{"raw": "payload"}',
+    }
 
 
 def test_upsert_tracking_event_minimal_valid() -> None:
@@ -173,7 +173,9 @@ def test_upsert_tracking_event_minimal_valid() -> None:
 
 def test_upsert_tracking_event_source_is_required() -> None:
     """``source`` must be set so the tracking_events row can be filtered by
-    emitter in Attio without parsing the external_id prefix — ai-ztm."""
+    emitter in Attio without parsing the external_id prefix — ai-zt
+    m.
+    """
     from src.attio.ops import UpsertTrackingEvent
 
     kwargs = _valid_tracking_event_kwargs()

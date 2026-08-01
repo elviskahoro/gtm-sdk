@@ -142,7 +142,8 @@ def test_log_includes_iso8601_timestamp_with_timezone(
 
 class _CaptureLogger:
     """OTLP logger stand-in that records every emit so severity tests can
-    assert on the LogRecord without spinning up a real exporter."""
+    assert on the LogRecord without spinning up a real exporter.
+    """
 
     def __init__(self) -> None:
         self.records: list[Any] = []
@@ -190,7 +191,8 @@ def test_log_otlp_severity_inference_generalizes_beyond_webhooks(
     """Severity classification is suffix-based so any emitter — webhook
     handlers, src/attio/export.py, src/enrichment.py, future call sites —
     gets useful OTLP severities without adding per-event-name special
-    cases. Errors must still alert; warnings must still warn."""
+    cases. Errors must still alert; warnings must still warn.
+    """
     set_source("severity-test")
     set_request_id("req-severity")
     log(event)
@@ -206,7 +208,8 @@ def test_log_otlp_severity_honors_explicit_status_error_field(
 ) -> None:
     """The webhook.completed taxonomy maps to ERROR when ``status='error'``
     is set as a field; preserve that contract for non-suffix-matched
-    events that still convey failure via a status field."""
+    events that still convey failure via a status field.
+    """
     set_source("severity-status-test")
     set_request_id("req-status")
     log("webhook.completed", status="error")

@@ -71,7 +71,8 @@ def test_search_people_raw_translates_unknown_filter_attribute(mock_get_client) 
     """Querying people by an undefined slug (the `github` slug if archived/absent)
     yields a `filter_error` the SDK can't unmarshal; _search_people_raw must
     surface a typed SchemaMismatchError, not a raw ResponseValidationError
-    (ai-0ex). The github handle is searched via the `github` Attio slug (ai-0jg)."""
+    (ai-0ex). The github handle is searched via the `github` Attio slug (ai-0jg).
+    """
     client = mock_get_client.return_value.__enter__.return_value
     client.records.post_v2_objects_object_records_query.side_effect = _ErrWithBody(
         '{"status_code": 400, "type": "invalid_request_error",'

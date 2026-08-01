@@ -7,7 +7,10 @@ from pydantic import BaseModel, Field
 
 from libs.attio.values import normalize_linkedin_url
 from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
-from libs.octolens import RelevanceScore, Webhook as OctolensMentionWebhook
+from libs.octolens import (
+    RelevanceScore,
+    Webhook as OctolensMentionWebhook,
+)
 from libs.webhook.filter import WebhookFilter, WebhookFilters
 from src.octolens.utils import generate_gcs_filename
 
@@ -380,5 +383,5 @@ def _sentiment_or_none(
         return None
     normalized = value.strip().title()
     if normalized in _SENTIMENT_VALUES:
-        return cast(Literal["Positive", "Neutral", "Negative"], normalized)
+        return cast("Literal['Positive', 'Neutral', 'Negative']", normalized)
     return None

@@ -29,7 +29,6 @@ from typing import Any
 import pytest
 import yaml
 
-
 WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "tests-integration.yml"
 PYTEST_INTEGRATION_DAGGER = (
     Path(__file__).parents[2]

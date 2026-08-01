@@ -14,8 +14,8 @@ from src.enrichment import (
     HarvestProfile,
     build_enrichment_tasks,
     harvest_profile_from_task,
-    profile_to_person_input,
     load_enrichment_config,
+    profile_to_person_input,
 )
 
 app = typer.Typer(help="Enrich records from LinkedIn via Harvest API.")
@@ -45,10 +45,9 @@ def fetch(
         help="Path to write enriched records JSON",
     ),
 ) -> None:
-    """Fetch enrichment from Harvest API and write to file (no Attio changes).
+    r"""Fetch enrichment from Harvest API and write to file (no Attio changes).
 
     Example:
-
         gtm enrichment enrich fetch \\
             --config enrichment_config.json \\
             --records records.json \\
@@ -153,10 +152,9 @@ def upsert(
         help="Preview changes without updating Attio",
     ),
 ) -> None:
-    """Batch upsert enriched records to Attio CRM.
+    r"""Batch upsert enriched records to Attio CRM.
 
     Example:
-
         gtm enrichment enrich upsert \\
             --input enriched_output.json
 

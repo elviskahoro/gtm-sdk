@@ -52,7 +52,7 @@ def generate_gcs_filename(
     recording_id: int,
     meeting_title: str,
 ) -> str:
-    """Generate GCS filename: {clean_timestamp}-{recording_id}-{clean_title}.jsonl"""
+    """Generate GCS filename: {clean_timestamp}-{recording_id}-{clean_title}.jsonl."""
     timestamp = clean_timestamp(recording_start_time)
     clean_title = clean_string(meeting_title)
     return f"{timestamp}-{recording_id}-{clean_title}.jsonl"

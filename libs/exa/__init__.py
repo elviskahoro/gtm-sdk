@@ -13,14 +13,14 @@ from .people import find_people
 from .search import search
 
 __all__ = [
-    "search",
-    "find_companies",
-    "find_people",
-    "SearchInput",
-    "SearchResponse",
-    "ExaError",
     "ExaAuthError",
     "ExaBadRequestError",
+    "ExaError",
     "ExaRateLimitError",
     "ExaServerError",
+    "SearchInput",
+    "SearchResponse",
+    "find_companies",
+    "find_people",
+    "search",
 ]

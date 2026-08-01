@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from libs.exa.models import SearchInput
 
 
-def test_num_results_bounds():
+def test_num_results_bounds() -> None:
     """Test num_results validation (1-100 bounds)."""
     # Valid: 1
     SearchInput(query="test", num_results=1)
@@ -26,7 +26,7 @@ def test_num_results_bounds():
     assert "num_results must be between 1 and 100" in str(exc_info.value)
 
 
-def test_category_restriction_start_published_date():
+def test_category_restriction_start_published_date() -> None:
     """Test that start_published_date is rejected with category=company."""
     # Valid without category restriction
     SearchInput(query="test", start_published_date="2025-01-01")
@@ -50,7 +50,7 @@ def test_category_restriction_start_published_date():
     assert "start_published_date" in str(exc_info.value)
 
 
-def test_category_restriction_end_published_date():
+def test_category_restriction_end_published_date() -> None:
     """Test that end_published_date is rejected with category=company/people."""
     # Valid without category restriction
     SearchInput(query="test", end_published_date="2025-12-31")
@@ -65,7 +65,7 @@ def test_category_restriction_end_published_date():
     assert "end_published_date" in str(exc_info.value)
 
 
-def test_category_restriction_exclude_domains():
+def test_category_restriction_exclude_domains() -> None:
     """Test that exclude_domains is rejected with category=company/people."""
     # Valid without category restriction
     SearchInput(query="test", exclude_domains=["spam.com"])
@@ -80,7 +80,7 @@ def test_category_restriction_exclude_domains():
     assert "exclude_domains" in str(exc_info.value)
 
 
-def test_extra_forbid_rejects_unknown_fields():
+def test_extra_forbid_rejects_unknown_fields() -> None:
     """Test that extra="forbid" rejects unknown or deprecated fields."""
     # Valid
     SearchInput(query="test", type="auto", num_results=10)
@@ -128,36 +128,38 @@ def test_extra_forbid_rejects_unknown_fields():
     )
 
 
-def test_include_domains_strips_whitespace():
+def test_include_domains_strips_whitespace() -> None:
     """Regression (roborev): ``include_domains`` entries are normalized in the
     model so all entry points (CLI flag, ``--json``, direct construction) get
-    the same cleanup, not just the CLI flag path."""
+    the same cleanup, not just the CLI flag path.
+    """
     si = SearchInput(query="x", include_domains=["  a.com ", "b.com"])
     assert si.include_domains == ["a.com", "b.com"]
 
 
-def test_include_domains_rejects_blank_entries():
+def test_include_domains_rejects_blank_entries() -> None:
     with pytest.raises(ValidationError, match="non-empty string"):
         SearchInput(query="x", include_domains=["a.com", "   "])
 
 
-def test_exclude_domains_strips_and_rejects_blank():
+def test_exclude_domains_strips_and_rejects_blank() -> None:
     si = SearchInput(query="x", exclude_domains=[" c.com "])
     assert si.exclude_domains == ["c.com"]
     with pytest.raises(ValidationError, match="non-empty string"):
         SearchInput(query="x", exclude_domains=[""])
 
 
-def test_include_domains_rejects_empty_list():
+def test_include_domains_rejects_empty_list() -> None:
     """Regression (roborev): an explicitly empty domain list is a caller
-    bug, not "no filter". Send None / omit the field instead."""
+    bug, not "no filter". Send None / omit the field instead.
+    """
     with pytest.raises(ValidationError, match="non-empty when set"):
         SearchInput(query="x", include_domains=[])
     with pytest.raises(ValidationError, match="non-empty when set"):
         SearchInput(query="x", exclude_domains=[])
 
 
-def test_multiple_restrictions_together():
+def test_multiple_restrictions_together() -> None:
     """Test multiple category restrictions together."""
     # All three restrictions should fail together
     with pytest.raises(ValidationError) as exc_info:

@@ -21,8 +21,8 @@ from urllib.parse import quote
 
 import yaml
 
-from libs.sanity.client import SanityConfig
 from libs.sanity.blog import fetch_blog_posts_raw
+from libs.sanity.client import SanityConfig
 from libs.sanity.errors import DuplicateSlugError, UnsafeArchiveDirError
 from libs.sanity.models import BlogPost
 from libs.sanity.portable_text import escape_text, escape_trailing_atx, to_markdown
@@ -58,7 +58,7 @@ _WINDOWS_RESERVED_NAMES = frozenset(
 
 
 def is_safe_slug(slug: str) -> bool:
-    """Reject slugs that are not a single, portable, safe path segment.
+    r"""Reject slugs that are not a single, portable, safe path segment.
 
     Slugs come from untrusted CMS content and are joined into a filesystem
     path. Beyond traversal (``/``, ``\\``, ``.``/``..``), this also rejects

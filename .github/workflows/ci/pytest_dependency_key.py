@@ -6,7 +6,6 @@ import json
 import tomllib
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
 DEFAULT_UV_LOCK = REPOSITORY_ROOT / "uv.lock"

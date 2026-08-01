@@ -9,12 +9,12 @@ from src.modal_app import MODAL_APP
 
 
 def test_runtime_metadata_includes_fingerprint_and_capabilities() -> None:
-    fn = cast(modal.Function, modal_people.attio_people_runtime_metadata)  # type: ignore[arg-type]
-    payload = cast(dict[str, Any], fn.local())
+    fn = cast("modal.Function", modal_people.attio_people_runtime_metadata)  # type: ignore[arg-type]
+    payload = cast("dict[str, Any]", fn.local())
     assert payload["app"] == MODAL_APP
     assert "build_git_sha" in payload
     assert "deployed_at" in payload
-    capabilities = cast(dict[str, Any], payload["capabilities"])
+    capabilities = cast("dict[str, Any]", payload["capabilities"])
     assert capabilities["attio_people_upsert.additional_emails"] is True
 
 
@@ -40,7 +40,7 @@ def test_attio_upsert_person_wrapper_forwards_flags(monkeypatch) -> None:
 
     monkeypatch.setattr(modal_people, "upsert_person", _fake_upsert)
 
-    fn = cast(modal.Function, modal_people.attio_upsert_person)  # type: ignore
+    fn = cast("modal.Function", modal_people.attio_upsert_person)  # type: ignore
     result = fn.local(
         payload={
             "email": "a@example.com",
@@ -51,7 +51,8 @@ def test_attio_upsert_person_wrapper_forwards_flags(monkeypatch) -> None:
         api_keys={"attio_api_key": "ak"},
     )
 
-    assert hasattr(result, "success") and result.success is True
+    assert hasattr(result, "success")
+    assert result.success is True
     assert captured["strict"] is True
     assert captured["location_mode"] == "raw"
     assert captured["notes"] == "hello"
@@ -78,7 +79,7 @@ def test_attio_add_person_wrapper_cleans_env(monkeypatch) -> None:
 
     monkeypatch.setattr(modal_people, "add_person", _fake_add)
 
-    fn = cast(modal.Function, modal_people.attio_add_person)  # type: ignore
+    fn = cast("modal.Function", modal_people.attio_add_person)  # type: ignore
     _ = fn.local(
         payload={"email": "a@example.com"},
         api_keys={"attio_api_key": "ak"},

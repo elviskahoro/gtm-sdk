@@ -42,7 +42,8 @@ def _load_deploy_script() -> ModuleType:
         _DEPLOY_MODULE_NAME,
         _DEPLOY_SCRIPT_PATH,
     )
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[_DEPLOY_MODULE_NAME] = module
     spec.loader.exec_module(module)
@@ -73,7 +74,8 @@ def _load_substituted_handler(
     target.write_text(substituted)
     module_name = f"_test_webhook_{handler_name}_{source_alias}"
     spec = importlib.util.spec_from_file_location(module_name, target)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
@@ -315,7 +317,8 @@ def test_attio_handle_wraps_export_with_request_context_and_completed(
     """`_handle()` is what `web()` delegates to; covers request_id binding +
     `webhook.completed` timing that `_export` alone doesn't reach. Stubs the
     downstream Attio call so the test never depends on credentials or
-    network reachability."""
+    network reachability.
+    """
     payload = _load_caldotcom_payload()
     webhook = attio_caldotcom_handler.WebhookModel.model_validate(payload)
     request = _make_request({"X-Request-Id": "handle-attio"})
@@ -506,7 +509,8 @@ def _matrix() -> list[tuple[str, str]]:
     """Discover (handler, source_alias) pairs the same way the deploy script
     does. This guarantees the test covers exactly what
     `webhooks-handlers-redeploy.py` would deploy — not a hand-maintained list
-    that drifts."""
+    that drifts.
+    """
     pairs: list[tuple[str, str]] = []
     for handler_name in _discover_handlers():
         handler_path = HANDLERS_DIR / f"{handler_name}.py"
@@ -768,7 +772,8 @@ def test_substituted_handler_mirrors_to_otlp_when_sink_wired(
 ) -> None:
     """Every (handler, source) combo: when an OTLP logger is wired, each
     structured.log() call also fires an OTLP LogRecord with matching
-    attributes (source, request_id, event in body)."""
+    attributes (source, request_id, event in body).
+    """
     module = _load_substituted_handler(handler_name, source_alias, tmp_path)
     _STUBS[handler_name](module, monkeypatch)
 
@@ -849,7 +854,8 @@ def test_otlp_mirror_json_encodes_mixed_primitive_lists(
     """OTLP requires homogeneous primitive arrays. A list like ``[1, "2"]``
     passes the primitive-element check but still violates the spec, so the
     sanitizer must JSON-encode it rather than pass it through and risk the
-    exporter rejecting the record."""
+    exporter rejecting the record.
+    """
     capsys.readouterr()
     structured.set_source("sanitize-mixed")
     structured.set_request_id("req-mixed")
@@ -879,7 +885,8 @@ def test_log_does_not_emit_otlp_when_no_sink_wired(
     writes the stdout JSON line and the in-memory capture stays empty.
 
     Guards the no-op gate that keeps OTLP additive — we never want a
-    misconfigured init to swallow stdout logging."""
+    misconfigured init to swallow stdout logging.
+    """
     import libs.telemetry as telemetry_module
 
     monkeypatch.setattr(telemetry_module, "_otlp_loggers", {}, raising=False)

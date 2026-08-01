@@ -60,12 +60,12 @@ def test_init_tracer_degrades_when_opentelemetry_missing(monkeypatch) -> None:
     assert init_tracer("rb2b-visits") is None
 
 
-def test_emit_cli_event_noop_without_init():
+def test_emit_cli_event_noop_without_init() -> None:
     # Should not raise even when tracer not initialized
     emit_cli_event("cli.test_event", {"key": "value"})
 
 
-def test_init_tracer_returns_tracer_with_env(monkeypatch):
+def test_init_tracer_returns_tracer_with_env(monkeypatch) -> None:
     monkeypatch.setenv("HYPERDX_API_KEY", "test-key")
     tracer = init_tracer()
     assert tracer is not None
@@ -82,7 +82,7 @@ def _reset_log_exporter(monkeypatch) -> None:
     monkeypatch.setattr(telemetry_module, "_otlp_loggers", {}, raising=False)
 
 
-def test_init_log_exporter_noop_without_env(monkeypatch):
+def test_init_log_exporter_noop_without_env(monkeypatch) -> None:
     _reset_log_exporter(monkeypatch)
     for key in (
         "HYPERDX_API_KEY",
@@ -95,7 +95,7 @@ def test_init_log_exporter_noop_without_env(monkeypatch):
     assert get_otlp_logger() is None
 
 
-def test_init_log_exporter_degrades_when_opentelemetry_missing(monkeypatch):
+def test_init_log_exporter_degrades_when_opentelemetry_missing(monkeypatch) -> None:
     """A sink env var must not crash import when ``opentelemetry`` is absent.
 
     Regression: ``export-to-attio-from-rb2b-visits`` crash-looped because its
@@ -121,7 +121,7 @@ def test_init_log_exporter_degrades_when_opentelemetry_missing(monkeypatch):
     assert get_otlp_logger("rb2b-visits") is None
 
 
-def test_init_log_exporter_returns_logger_with_hyperdx_key(monkeypatch):
+def test_init_log_exporter_returns_logger_with_hyperdx_key(monkeypatch) -> None:
     _reset_log_exporter(monkeypatch)
     for key in (
         "HYPERDX_OTLP_ENDPOINT",
@@ -138,7 +138,7 @@ def test_init_log_exporter_returns_logger_with_hyperdx_key(monkeypatch):
     assert get_otlp_logger() is None
 
 
-def test_init_log_exporter_returns_logger_with_logs_endpoint(monkeypatch):
+def test_init_log_exporter_returns_logger_with_logs_endpoint(monkeypatch) -> None:
     _reset_log_exporter(monkeypatch)
     for key in (
         "HYPERDX_API_KEY",
@@ -154,7 +154,7 @@ def test_init_log_exporter_returns_logger_with_logs_endpoint(monkeypatch):
     assert logger is not None
 
 
-def test_init_log_exporter_returns_logger_with_base_endpoint(monkeypatch):
+def test_init_log_exporter_returns_logger_with_base_endpoint(monkeypatch) -> None:
     _reset_log_exporter(monkeypatch)
     for key in (
         "HYPERDX_API_KEY",
@@ -168,7 +168,7 @@ def test_init_log_exporter_returns_logger_with_base_endpoint(monkeypatch):
     assert logger is not None
 
 
-def test_init_log_exporter_is_idempotent(monkeypatch):
+def test_init_log_exporter_is_idempotent(monkeypatch) -> None:
     _reset_log_exporter(monkeypatch)
     monkeypatch.setenv("HYPERDX_API_KEY", "test-key")
     first = init_log_exporter()
@@ -176,12 +176,13 @@ def test_init_log_exporter_is_idempotent(monkeypatch):
     assert first is second
 
 
-def test_init_log_exporter_distinct_loggers_per_service_name(monkeypatch):
+def test_init_log_exporter_distinct_loggers_per_service_name(monkeypatch) -> None:
     """Two service names get two independent providers so a process that
     initializes more than one service doesn't attribute records to the
     wrong service.name Resource. Lookup is strict in both directions:
     an unknown name returns None, and a no-arg lookup returns None.
-    Callers must bind the source contextvar to match their init key."""
+    Callers must bind the source contextvar to match their init key.
+    """
     _reset_log_exporter(monkeypatch)
     monkeypatch.setenv("HYPERDX_API_KEY", "test-key")
     a = init_log_exporter("service-a")
@@ -199,13 +200,13 @@ def test_init_log_exporter_distinct_loggers_per_service_name(monkeypatch):
     assert get_otlp_logger() is None
 
 
-def test_get_otlp_logger_returns_none_without_init(monkeypatch):
+def test_get_otlp_logger_returns_none_without_init(monkeypatch) -> None:
     _reset_log_exporter(monkeypatch)
     assert get_otlp_logger() is None
     assert get_otlp_logger("any-name") is None
 
 
-def test_init_log_exporter_installs_sigterm_bridge_when_default(monkeypatch):
+def test_init_log_exporter_installs_sigterm_bridge_when_default(monkeypatch) -> None:
     """SIGTERM with Python's default disposition skips atexit, so the OTLP
     batch buffer would be dropped on Modal container recycle. The bridge
     installs ``sys.exit(0)`` as the SIGTERM handler so atexit fires.
@@ -242,10 +243,11 @@ def test_init_log_exporter_installs_sigterm_bridge_when_default(monkeypatch):
     assert installed, "SIGTERM bridge must install when SIGTERM is at SIG_DFL"
 
 
-def test_init_log_exporter_leaves_existing_sigterm_handler_alone(monkeypatch):
+def test_init_log_exporter_leaves_existing_sigterm_handler_alone(monkeypatch) -> None:
     """If another framework has installed a SIGTERM handler, we must NOT
     overwrite it. They presumably have their own graceful-shutdown path
-    that will end up running our atexit."""
+    that will end up running our atexit.
+    """
     import signal as signal_module
 
     import libs.telemetry as telemetry_module
@@ -281,11 +283,12 @@ def test_init_log_exporter_leaves_existing_sigterm_handler_alone(monkeypatch):
     )
 
 
-def test_init_log_exporter_registers_atexit_shutdown(monkeypatch):
+def test_init_log_exporter_registers_atexit_shutdown(monkeypatch) -> None:
     """The BatchLogRecordProcessor buffers records on a background thread;
     without an explicit shutdown the last batch is dropped when a short-
     lived CLI run exits or a Modal container is recycled. Verify atexit
-    sees the registration so the buffer flushes on normal process exit."""
+    sees the registration so the buffer flushes on normal process exit.
+    """
     from collections.abc import Callable
 
     _reset_log_exporter(monkeypatch)
@@ -310,12 +313,13 @@ def test_init_log_exporter_registers_atexit_shutdown(monkeypatch):
     )
 
 
-def test_init_log_exporter_normalizes_traces_endpoint_to_logs(monkeypatch):
+def test_init_log_exporter_normalizes_traces_endpoint_to_logs(monkeypatch) -> None:
     """Regression: a common operator footgun is setting
     ``OTEL_EXPORTER_OTLP_ENDPOINT=.../v1/traces`` (copy-paste from a traces
     example). Without normalization, the SDK would mangle this to
     ``.../v1/traces/v1/logs`` and OTLP log export would fail silently.
-    The exporter must receive the logs-signal URL ``.../v1/logs``."""
+    The exporter must receive the logs-signal URL ``.../v1/logs``.
+    """
     from unittest.mock import patch
 
     _reset_log_exporter(monkeypatch)
@@ -342,11 +346,12 @@ def test_init_log_exporter_normalizes_traces_endpoint_to_logs(monkeypatch):
         )
 
 
-def test_init_log_exporter_appends_logs_signal_to_base_endpoint(monkeypatch):
+def test_init_log_exporter_appends_logs_signal_to_base_endpoint(monkeypatch) -> None:
     """An ``OTEL_EXPORTER_OTLP_ENDPOINT`` base URL (no signal suffix) gets
     ``/v1/logs`` appended so we hand the exporter a complete URL rather
     than relying on the SDK's auto-append. This keeps the runtime URL
-    deterministic from our side."""
+    deterministic from our side.
+    """
     from unittest.mock import patch
 
     _reset_log_exporter(monkeypatch)
@@ -369,10 +374,11 @@ def test_init_log_exporter_appends_logs_signal_to_base_endpoint(monkeypatch):
         )
 
 
-def test_init_log_exporter_passes_through_full_logs_endpoint(monkeypatch):
+def test_init_log_exporter_passes_through_full_logs_endpoint(monkeypatch) -> None:
     """An ``OTEL_EXPORTER_OTLP_ENDPOINT`` that already ends in ``/v1/logs``
     (someone treating the base var like a per-signal var) is passed through
-    without doubling the signal path."""
+    without doubling the signal path.
+    """
     from unittest.mock import patch
 
     _reset_log_exporter(monkeypatch)
@@ -398,13 +404,16 @@ def test_init_log_exporter_passes_through_full_logs_endpoint(monkeypatch):
         )
 
 
-def test_init_tracer_does_not_leak_hyperdx_auth_to_generic_endpoint(monkeypatch):
+def test_init_tracer_does_not_leak_hyperdx_auth_to_generic_endpoint(
+    monkeypatch,
+) -> None:
     """Regression: ai-uir's secret propagation now ships ``HYPERDX_API_KEY``
     into containers that may also have ``OTEL_EXPORTER_OTLP_ENDPOINT`` set
     to a non-HyperDX sink (Datadog OTLP intake, Grafana Cloud, etc.). The
     tracer must NOT inject the HyperDX Bearer header for those endpoints,
     otherwise every trace batch is rejected. Mirrors the log-exporter
-    auth-isolation contract for symmetry."""
+    auth-isolation contract for symmetry.
+    """
     from unittest.mock import patch
 
     monkeypatch.setenv("HYPERDX_API_KEY", "stale-hyperdx-key")
@@ -428,11 +437,14 @@ def test_init_tracer_does_not_leak_hyperdx_auth_to_generic_endpoint(monkeypatch)
         )
 
 
-def test_init_log_exporter_injects_hyperdx_auth_via_generic_endpoint(monkeypatch):
+def test_init_log_exporter_injects_hyperdx_auth_via_generic_endpoint(
+    monkeypatch,
+) -> None:
     """An operator who targets HyperDX via the standard OTel env vars
     (e.g. OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=https://in-otel.hyperdx.io/v1/logs
     + HYPERDX_API_KEY=...) must still get Bearer auth injected. HyperDX
-    detection is host-aware, not bound to which env var supplied the URL."""
+    detection is host-aware, not bound to which env var supplied the URL.
+    """
     from unittest.mock import patch
 
     _reset_log_exporter(monkeypatch)
@@ -458,12 +470,13 @@ def test_init_log_exporter_injects_hyperdx_auth_via_generic_endpoint(monkeypatch
 
 def test_init_log_exporter_does_not_leak_hyperdx_auth_to_generic_endpoint(
     monkeypatch,
-):
+) -> None:
     """Regression: a stale ``HYPERDX_API_KEY`` in the process env must not
     inject a Bearer header into requests bound for a generic OTLP endpoint
     (Datadog OTLP intake, Grafana Cloud, local collector). The HyperDX
     Bearer header is only valid against HyperDX endpoints — leaking it
-    elsewhere causes those sinks to reject every log batch."""
+    elsewhere causes those sinks to reject every log batch.
+    """
     from unittest.mock import patch
 
     _reset_log_exporter(monkeypatch)
@@ -488,11 +501,12 @@ def test_init_log_exporter_does_not_leak_hyperdx_auth_to_generic_endpoint(
         )
 
 
-def test_init_log_exporter_returns_logger_with_headers_only(monkeypatch):
+def test_init_log_exporter_returns_logger_with_headers_only(monkeypatch) -> None:
     """A standard OTLP config that supplies only headers (relying on the
     SDK default endpoint at ``http://localhost:4318/v1/logs``) is a
     legitimate setup — typical for local OTel Collector / agent deployments.
-    The exporter must initialize, not silently fall back to stdout-only."""
+    The exporter must initialize, not silently fall back to stdout-only.
+    """
     _reset_log_exporter(monkeypatch)
     for key in (
         "HYPERDX_API_KEY",
@@ -512,11 +526,12 @@ def test_init_log_exporter_returns_logger_with_headers_only(monkeypatch):
 
 def test_init_log_exporter_headers_only_with_stale_hyperdx_key_uses_sdk_default(
     monkeypatch,
-):
+) -> None:
     """Regression: a stale ``HYPERDX_API_KEY`` in the env must not hijack a
     legitimate headers-only OTel config. The exporter should NOT route to
     HyperDX; it should let the SDK use its default endpoint and the
-    operator-supplied OTel headers reach the configured backend."""
+    operator-supplied OTel headers reach the configured backend.
+    """
     from unittest.mock import patch
 
     _reset_log_exporter(monkeypatch)
@@ -553,11 +568,12 @@ def test_init_log_exporter_headers_only_with_stale_hyperdx_key_uses_sdk_default(
         )
 
 
-def test_endpoint_is_hyperdx_url_matches_host_not_substring():
+def test_endpoint_is_hyperdx_url_matches_host_not_substring() -> None:
     """Regression: the HyperDX detector must match the URL's hostname
     component, not a substring of the full URL. A non-HyperDX URL that
     happens to contain ``hyperdx.io`` in a path/query is NOT HyperDX
-    and must not get Bearer auth injected."""
+    and must not get Bearer auth injected.
+    """
     from libs.telemetry import (
         _endpoint_is_hyperdx_url,  # trunk-ignore(pyright/reportPrivateUsage): exercising the host-match invariant directly is more focused than driving init_log_exporter for each of these URL shapes.
     )
@@ -610,7 +626,7 @@ def _clear_collector_env(monkeypatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
 
-def test_collector_function_reads_env(monkeypatch):
+def test_collector_function_reads_env(monkeypatch) -> None:
     _clear_collector_env(monkeypatch)
     # Collector mode is the default: an unset app resolves to the hard-coded name.
     assert _collector_function() == ("otel-collector", "fan_out")
@@ -632,7 +648,7 @@ def _patch_modal_function(monkeypatch):
     spawned: list[tuple[object, ...]] = []
 
     class _Handle:
-        def spawn(self, *args):
+        def spawn(self, *args) -> None:
             spawned.append(args)
 
     def _from_name(app_name, fn_name, *_a, **_k):
@@ -643,7 +659,10 @@ def _patch_modal_function(monkeypatch):
     return spawned
 
 
-def test_spawn_span_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders):
+def test_spawn_span_exporter_encodes_and_spawns(
+    monkeypatch,
+    real_spawn_builders,
+) -> None:
     spawned = _patch_modal_function(monkeypatch)
     from opentelemetry.sdk.trace.export import SpanExportResult
 
@@ -658,7 +677,10 @@ def test_spawn_span_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders
     assert isinstance(payload, bytes)
 
 
-def test_spawn_log_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders):
+def test_spawn_log_exporter_encodes_and_spawns(
+    monkeypatch,
+    real_spawn_builders,
+) -> None:
     spawned = _patch_modal_function(monkeypatch)
     from opentelemetry.sdk._logs.export import LogRecordExportResult
 
@@ -673,10 +695,9 @@ def test_spawn_log_exporter_encodes_and_spawns(monkeypatch, real_spawn_builders)
     assert isinstance(payload, bytes)
 
 
-def test_spawn_exporter_swallows_spawn_error(monkeypatch, real_spawn_builders):
+def test_spawn_exporter_swallows_spawn_error(monkeypatch, real_spawn_builders) -> None:
     """A failed spawn must not raise out of export() — telemetry non-load-bearing."""
     import modal
-
     from opentelemetry.sdk.trace.export import SpanExportResult
 
     def _boom(*_a, **_k):
@@ -690,11 +711,12 @@ def test_spawn_exporter_swallows_spawn_error(monkeypatch, real_spawn_builders):
 def test_conftest_neuters_module_level_spawn_exporter_builders(
     real_spawn_builders,
 ) -> None:
-    """conftest's ``pytest_configure`` must keep the module-level builder
+    """Conftest's ``pytest_configure`` must keep the module-level builder
     attributes patched to no-op factories: a real Modal-spawn exporter wired
     into a BatchProcessor hangs interpreter exit ~6.5 min in credential-less
     CI (issue #305). The ``real_spawn_builders`` fixture intentionally keeps
-    the REAL builders testable."""
+    the REAL builders testable.
+    """
     import libs.telemetry as telemetry_module
 
     assert (
@@ -715,7 +737,8 @@ def test_collection_time_src_app_log_exporter_is_neutered() -> None:
     wires a REAL Modal-spawn log exporter whose atexit batch flush blocks ~28s
     on a credential-less ``modal.Function.spawn()`` RPC (issue #310). Walks the
     OTEL SDK's private attrs (pinned via uv.lock) to assert the exporter that
-    actually got registered is the conftest no-op, not the real one."""
+    actually got registered is the conftest no-op, not the real one.
+    """
     from src.modal_app import MODAL_APP
 
     logger = telemetry_module._otlp_loggers.get(MODAL_APP)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
@@ -741,10 +764,11 @@ def test_collection_time_src_app_log_exporter_is_neutered() -> None:
         )
 
 
-def test_init_tracer_uses_collector_when_configured(monkeypatch):
+def test_init_tracer_uses_collector_when_configured(monkeypatch) -> None:
     """Collector path is taken (and takes precedence over a direct HyperDX key)
     when TELEMETRY_COLLECTOR_APP is set. The spawn itself happens later on the
-    BatchProcessor flush, so we spy on the collector branch directly."""
+    BatchProcessor flush, so we spy on the collector branch directly.
+    """
     _clear_collector_env(monkeypatch)
     # HyperDX key present too — collector path must take precedence over it.
     monkeypatch.setenv("HYPERDX_API_KEY", "hx")
@@ -752,7 +776,7 @@ def test_init_tracer_uses_collector_when_configured(monkeypatch):
 
     calls: list[tuple[object, ...]] = []
 
-    def _spy(service_name, collector):
+    def _spy(service_name, collector) -> str:
         calls.append((service_name, collector))
         return "TRACER_SENTINEL"
 
@@ -762,7 +786,7 @@ def test_init_tracer_uses_collector_when_configured(monkeypatch):
     assert calls == [("collector-trace-test", ("otel-collector", "fan_out"))]
 
 
-def test_init_log_exporter_uses_collector_when_configured(monkeypatch):
+def test_init_log_exporter_uses_collector_when_configured(monkeypatch) -> None:
     _patch_modal_function(monkeypatch)
     _reset_log_exporter(monkeypatch)
     _clear_collector_env(monkeypatch)
@@ -772,7 +796,7 @@ def test_init_log_exporter_uses_collector_when_configured(monkeypatch):
     assert get_otlp_logger("collector-log-test") is logger
 
 
-def test_init_tracer_collector_degrades_without_opentelemetry(monkeypatch):
+def test_init_tracer_collector_degrades_without_opentelemetry(monkeypatch) -> None:
     monkeypatch.setattr(telemetry_module, "_tracer", None, raising=False)
     _clear_collector_env(monkeypatch)
     monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "otel-collector")
@@ -790,10 +814,11 @@ def test_init_tracer_collector_degrades_without_opentelemetry(monkeypatch):
     assert init_tracer("collector-degrade-test") is None
 
 
-def test_init_tracer_via_collector_registers_atexit_shutdown(monkeypatch):
+def test_init_tracer_via_collector_registers_atexit_shutdown(monkeypatch) -> None:
     """The collector tracer branch must flush the BatchSpanProcessor on exit,
     mirroring the log path — otherwise a short-lived CLI run drops its last
-    span batch."""
+    span batch.
+    """
     from collections.abc import Callable
 
     _patch_modal_function(monkeypatch)

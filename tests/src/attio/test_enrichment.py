@@ -32,7 +32,8 @@ def _envelope(
 ) -> ReliabilityEnvelope:
     """Build a fake envelope. ``meta_flag`` lets a test stamp the disambiguating
     meta key (``domain_invalid`` / ``domains_already_set``) the orchestrator
-    branches on for noop translations."""
+    branches on for noop translations.
+    """
     meta: dict[str, Any] = {"output_schema_version": "v1"}
     if meta_flag is not None:
         meta[meta_flag] = True
@@ -102,8 +103,7 @@ def _patched_pipeline(
         return company_records[rid]
 
     def fake_iter(_filter: dict[str, Any]):
-        for rid in company_id_iter or []:
-            yield rid
+        yield from company_id_iter or []
 
     search_mock = MagicMock(return_value=exa_response)
     set_domain_mock = MagicMock(
@@ -173,7 +173,8 @@ def test_already_has_domain_noop_skips_exa() -> None:
 
 def test_envelope_noop_with_domains_already_set_meta_is_noop_had_domain() -> None:
     """Helper read showed populated domains between our scan and write — that's
-    a domains_already_set race against another writer, not a generic race."""
+    a domains_already_set race against another writer, not a generic race.
+    """
     with _patched_pipeline(
         company_records={"rec_1": ("Acme", False)},
         exa_response=_search_response_hit("acme.com"),
@@ -191,7 +192,8 @@ def test_envelope_noop_with_domains_already_set_meta_is_noop_had_domain() -> Non
 
 def test_envelope_noop_with_domain_invalid_meta_is_unresolved() -> None:
     """Exa returned a domain that couldn't be formatted — surface as unresolved,
-    not skipped_race. Regression for roborev finding about noop misclassification."""
+    not skipped_race. Regression for roborev finding about noop misclassification.
+    """
     with _patched_pipeline(
         company_records={"rec_1": ("Acme", False)},
         exa_response=_search_response_hit("bad-domain-format"),
@@ -305,7 +307,8 @@ def test_company_ids_path_strips_and_dedupes_at_function_boundary() -> None:
     """Regression (roborev): direct programmatic callers must also get
     strip + dedupe + non-empty-string validation, not just the
     ``BackfillCompanyDomainsQuery`` Modal-boundary wrapper. Otherwise
-    ``" rec_1 "`` and ``"rec_1"`` are treated as distinct ids."""
+    ``" rec_1 "`` and ``"rec_1"`` are treated as distinct ids.
+    """
     with _patched_pipeline(
         company_records={"rec_1": ("Acme", True)},  # already has domain
     ) as mocks:
@@ -321,7 +324,8 @@ def test_company_ids_path_strips_and_dedupes_at_function_boundary() -> None:
 
 def test_company_ids_path_rejects_blank_entry() -> None:
     """Whitespace-only id in the direct path raises rather than silently
-    skipping (roborev finding)."""
+    skipping (roborev finding).
+    """
     with pytest.raises(ValueError, match="non-empty string"):
         backfill_company_domains_via_exa(
             company_ids=["rec_1", "   "],
@@ -345,7 +349,8 @@ def test_neither_selector_set_raises() -> None:
 
 def test_query_model_rejects_both_selectors() -> None:
     """Pydantic model_validator catches invalid --json payloads at the boundary
-    (roborev finding) so callers don't crash inside the Modal function."""
+    (roborev finding) so callers don't crash inside the Modal function.
+    """
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="Exactly one of"):
@@ -363,7 +368,9 @@ def test_query_model_rejects_neither_selector() -> None:
 
 def test_query_model_rejects_empty_company_ids_list() -> None:
     """Regression (roborev): ``company_ids=[]`` is technically present but
-    represents zero work — must be rejected at the model boundary."""
+    represents zero work — must be rejected at the model boundar
+    y.
+    """
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="company_ids must be a non-empty"):
@@ -372,7 +379,8 @@ def test_query_model_rejects_empty_company_ids_list() -> None:
 
 def test_query_model_rejects_empty_ext_tam_filter() -> None:
     """Empty filter ``{}`` would page through every ext_tam record — almost
-    certainly a mistake; reject at the model boundary."""
+    certainly a mistake; reject at the model boundary.
+    """
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="ext_tam_filter must be a non-empty"):
@@ -382,7 +390,8 @@ def test_query_model_rejects_empty_ext_tam_filter() -> None:
 def test_query_model_accepts_limit_zero_as_noop() -> None:
     """``limit=0`` is a valid "do nothing" signal; the orchestrator's
     short-circuit ensures it isn't silently coerced to "unlimited". Only
-    negative limits are caller errors (roborev finding)."""
+    negative limits are caller errors (roborev finding).
+    """
     query = BackfillCompanyDomainsQuery.model_validate(
         {"company_ids": ["rec_1"], "limit": 0},
     )
@@ -402,7 +411,8 @@ def test_query_model_rejects_empty_filter_combined_with_company_ids() -> None:
     """Regression (roborev): a payload like
     ``{"ext_tam_filter": {}, "company_ids": ["x"]}`` would have silently passed
     the exactly-one rule (``{}`` is falsy). Now caught by the independent
-    empty-selector check that runs first."""
+    empty-selector check that runs first.
+    """
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="ext_tam_filter must be a non-empty"):
@@ -413,7 +423,8 @@ def test_query_model_rejects_empty_filter_combined_with_company_ids() -> None:
 
 def test_query_model_normalizes_whitespace_in_company_ids() -> None:
     """Regression (roborev): caller-supplied ``" rec_1 "`` must be normalized
-    to ``"rec_1"`` so the downstream Attio lookup uses the canonical id."""
+    to ``"rec_1"`` so the downstream Attio lookup uses the canonical id.
+    """
     query = BackfillCompanyDomainsQuery.model_validate(
         {"company_ids": [" rec_1 ", "rec_2", "\trec_3\n"]},
     )
@@ -422,7 +433,8 @@ def test_query_model_normalizes_whitespace_in_company_ids() -> None:
 
 def test_query_model_rejects_blank_company_id() -> None:
     """Whitespace-only or empty strings in ``company_ids`` are caller error;
-    surface at validation time rather than crashing on a downstream lookup."""
+    surface at validation time rather than crashing on a downstream lookup.
+    """
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="non-empty string"):
@@ -454,7 +466,8 @@ def test_ext_tam_filter_routes_through_iterator() -> None:
 def test_domain_with_spaces_treated_as_unresolved() -> None:
     """Regression (roborev): malformed-shape domain (e.g. ``"acme com"``)
     must be classified as unresolved instead of sent to Attio (where the
-    PATCH would fail and surface as a generic ``failed`` outcome)."""
+    PATCH would fail and surface as a generic ``failed`` outcome).
+    """
     response = SearchResponse(
         request_id="req",
         search_type="auto",
@@ -482,7 +495,8 @@ def test_domain_with_spaces_treated_as_unresolved() -> None:
 
 def test_domain_with_scheme_treated_as_unresolved() -> None:
     """Exa sometimes returns full URLs (``"https://acme.com/about"``). We
-    need a real bare domain; let Attio guard the rest."""
+    need a real bare domain; let Attio guard the rest.
+    """
     response = SearchResponse(
         request_id="req",
         search_type="auto",
@@ -511,7 +525,8 @@ def test_attio_validation_error_treated_as_unresolved() -> None:
     """Regression for malformed Exa output that slips past upstream checks:
     the live PATCH path must map Attio validation failures back to the
     unresolved/domain_invalid classification instead of surfacing a generic
-    row failure."""
+    row failure.
+    """
     with _patched_pipeline(
         company_records={"rec_1": ("Acme", False)},
         exa_response=_search_response_hit("acme.com"),
@@ -531,7 +546,8 @@ def test_attio_validation_error_treated_as_unresolved() -> None:
 def test_non_string_domain_treated_as_unresolved() -> None:
     """Regression (roborev): if Exa returns a non-string for ``domain``
     (e.g. a list or number), the resolver must classify as unresolved instead
-    of letting truthy non-string values flow into the Attio write path."""
+    of letting truthy non-string values flow into the Attio write path.
+    """
     response = SearchResponse(
         request_id="req",
         search_type="auto",
@@ -558,7 +574,8 @@ def test_non_string_domain_treated_as_unresolved() -> None:
 
 def test_whitespace_only_domain_treated_as_unresolved() -> None:
     """Regression (roborev): whitespace-only domain must NOT be classified
-    as ``would_patch`` (preview) or sent to Attio (apply)."""
+    as ``would_patch`` (preview) or sent to Attio (apply).
+    """
     response = SearchResponse(
         request_id="req",
         search_type="auto",
@@ -587,7 +604,8 @@ def test_preview_with_invalid_domain_classified_as_unresolved() -> None:
     """Regression (roborev): preview must apply the same domain-format check
     as the write path, otherwise the same record produces ``would_patch`` in
     preview but ``unresolved`` under apply — misleading the operator about
-    how much real work is queued."""
+    how much real work is queued.
+    """
     # Empty/falsy domain string is what ``format_company_domains`` rejects.
     response = SearchResponse(
         request_id="req",
@@ -624,7 +642,8 @@ def test_preview_with_invalid_domain_classified_as_unresolved() -> None:
 def test_limit_zero_short_circuits_before_iterator() -> None:
     """Regression (roborev): ``limit=0`` must not consume the iterator at all.
     Otherwise an ``ext_tam_filter`` path triggers an Attio query the caller
-    explicitly asked us to skip."""
+    explicitly asked us to skip.
+    """
     iter_called = False
 
     def fake_iter(_filter: dict[str, Any]):
@@ -669,7 +688,8 @@ def test_limit_zero_processes_zero_records() -> None:
 def test_limit_does_not_consume_extra_iterator_item() -> None:
     """Regression (roborev): hitting the limit must not advance the iterator
     one extra step (which Python's for-loop semantics would otherwise do).
-    Verified by counting how many ids the iterator actually yields."""
+    Verified by counting how many ids the iterator actually yields.
+    """
     yielded: list[str] = []
 
     def fake_iter(_filter: dict[str, Any]):
@@ -710,7 +730,8 @@ def test_limit_respected() -> None:
 def test_confidence_read_from_output_content_not_citation() -> None:
     """Regression (roborev): exa_confidence must come from the structured
     output (which the outputSchema explicitly requested) rather than citation
-    metadata, which may not reflect the LLM's own confidence."""
+    metadata, which may not reflect the LLM's own confidence.
+    """
     response = SearchResponse(
         request_id="req",
         search_type="auto",
@@ -745,7 +766,8 @@ def test_confidence_read_from_output_content_not_citation() -> None:
 
 def test_explicit_company_ids_deduped() -> None:
     """Regression (roborev): caller-supplied ``company_ids`` list must dedupe
-    so the same Company isn't processed twice."""
+    so the same Company isn't processed twice.
+    """
     with _patched_pipeline(
         company_records={"rec_1": ("Acme", False)},
         exa_response=_search_response_hit("acme.com"),
@@ -764,7 +786,8 @@ def test_explicit_company_ids_deduped() -> None:
 def test_exa_auth_error_short_circuits_run() -> None:
     """Regression (roborev): service-level Exa failures (auth, rate limit, 5xx)
     are not per-row errors — they recur for every record. Must short-circuit
-    the run instead of recording N false 'failed' outcomes."""
+    the run instead of recording N false 'failed' outcomes.
+    """
     auth_error = ExaAuthError("bad token", status=401, request_id="req")
 
     with (
@@ -785,7 +808,8 @@ def test_exa_auth_error_short_circuits_run() -> None:
 def test_exa_bad_request_error_short_circuits_run() -> None:
     """Regression (roborev): a 400/422 from Exa means our query/outputSchema
     is malformed — same shape for every record, so abort instead of generating
-    N false 'failed' outcomes."""
+    N false 'failed' outcomes.
+    """
     bad_request = ExaBadRequestError("schema bad", status=400, request_id="req")
 
     with (
@@ -806,7 +830,8 @@ def test_base_exa_error_also_short_circuits_run() -> None:
     """Regression (roborev): the orchestrator must catch the BASE
     ``ExaError`` too, not just the four named subclasses. Otherwise an
     HTTP code that ``from_http_status`` maps to plain ``ExaError`` (e.g.
-    403, 408) would slip into the per-row handler and burn every record."""
+    403, 408) would slip into the per-row handler and burn every record.
+    """
     from libs.exa.errors import ExaError
 
     err = ExaError("teapot", status=418, request_id="req")
@@ -829,7 +854,8 @@ def test_exa_api_key_missing_error_short_circuits_run() -> None:
     """Regression (roborev): ``ExaAPIKeyMissingError`` is a ``ValueError``
     subclass, not an ``ExaError``. Must be listed explicitly in the
     short-circuit handler or it falls through to the per-row failure path
-    and burns through every record with the same config error."""
+    and burns through every record with the same config error.
+    """
     missing = ExaAPIKeyMissingError("Exa API key not resolved.")
 
     with (
@@ -867,7 +893,8 @@ def test_sleep_seconds_runs_on_every_outcome_branch(monkeypatch) -> None:
     """Regression (roborev): the inter-row sleep must fire once per processed
     company, regardless of outcome (noop_had_domain, unresolved, would_patch,
     patched). Previously the sleep was at the bottom of the loop body and
-    early-``continue`` branches skipped it entirely."""
+    early-``continue`` branches skipped it entirely.
+    """
     sleep_calls: list[float] = []
 
     def _capture_sleep(s: float) -> None:

@@ -18,15 +18,15 @@ from libs.logging.structured import (
 )
 from libs.slack import get_client
 from libs.telemetry import init_log_exporter
-from src.secrets_bootstrap import bootstrap_secret, hydrate
-from src.slack.export import execute
-from src.slack.thread_store import modal_dict_thread_store
 
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
 from src.caldotcom.webhook.booking import (
     Webhook as CaldotcomBookingWebhook,
 )
+from src.secrets_bootstrap import bootstrap_secret, hydrate
+from src.slack.export import execute
+from src.slack.thread_store import modal_dict_thread_store
 
 # fmt: on
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
@@ -127,7 +127,8 @@ def _export(webhook: WebhookModel) -> str:
 def _handle(webhook: WebhookModel, request: Request) -> str:
     """Webhook request lifecycle. Kept separate from the endpoint so the
     request-context wiring and timing log are reachable from plain-Python
-    tests without Modal's local-call machinery."""
+    tests without Modal's local-call machinery.
+    """
     with webhook_request_context(request):
         started = time.perf_counter()
         try:

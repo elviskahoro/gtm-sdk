@@ -104,7 +104,8 @@ def test_execute_report_surfaces_action_and_matched_existing(
     tmp_path: Path,
 ) -> None:
     """The --execute report must expose per-op action + matched_existing — the
-    empirical dedup proof for the smoke test (ai-av8)."""
+    empirical dedup proof for the smoke test (ai-av8).
+    """
     module = _load_script_module()
     _stub_source(
         module,
@@ -159,7 +160,9 @@ def test_failed_meeting_not_counted_in_tally(
     tmp_path: Path,
 ) -> None:
     """A failed UpsertMeeting (action=failed) must not be bucketed as a
-    successful meeting outcome — it belongs only in the failed count."""
+    successful meeting outcome — it belongs only in the failed coun
+    t.
+    """
     module = _load_script_module()
     _stub_source(module, monkeypatch, tmp_path, rows=[{"id": "ff-1"}])
 

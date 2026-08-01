@@ -121,7 +121,7 @@ def test_execute_dispatches_each_meeting(
     # One execute() call per meeting (2 in the sample).
     assert len(plans) == 2
     # First meeting carries meeting + 2 notes; second carries meeting only.
-    assert [op.op_type for op in plans[0]][0] == "upsert_meeting"
+    assert next(op.op_type for op in plans[0]) == "upsert_meeting"
     assert any(op.op_type == "upsert_note" for op in plans[0])
 
 

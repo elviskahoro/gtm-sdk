@@ -24,7 +24,7 @@ def generate_gcs_filename(
     author: str,
     source_id: str,
 ) -> str:
-    """Generate GCS filename: {source}-{keyword}-{timestamp}-{author}-{source_id}.jsonl
+    """Generate GCS filename: {source}-{keyword}-{timestamp}-{author}-{source_id}.jsonl.
 
     ``source_id`` is the Octolens-supplied stable mention identifier and is
     included to prevent collisions when two mentions share the same

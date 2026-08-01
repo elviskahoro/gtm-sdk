@@ -52,7 +52,7 @@ app.add_typer(sanity_app, name="sanity")
 app.add_typer(webhook_app, name="webhook")
 
 
-def run():
+def run() -> None:
     init_tracer(_CLI_SERVICE_NAME)
     # Bind the `source` contextvar so structured.log() calls in CLI flows
     # find the right OTLP logger via get_otlp_logger(source). The same

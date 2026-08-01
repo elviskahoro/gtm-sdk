@@ -25,11 +25,13 @@ exact silent misattribution its docstring promises to avoid.
 from __future__ import annotations
 
 import pycountry
-from hypothesis import event, given
-from hypothesis import strategies as st
+from hypothesis import (
+    event,
+    given,
+    strategies as st,
+)
 
 from libs.parsers.countries import country_name_to_iso2
-
 
 # Hypothesis's @given is not typed in a way pyright's strict mode can see
 # through, so every property test would otherwise need its own

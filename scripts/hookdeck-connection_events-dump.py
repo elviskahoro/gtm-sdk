@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dump all Hookdeck events attached to a single connection.
+r"""Dump all Hookdeck events attached to a single connection.
 
 By default, runs the `hookdeck` CLI inside a Dagger-managed container so the
 dump is reproducible and the host machine does not need `hookdeck`/`jq`

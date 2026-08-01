@@ -334,10 +334,7 @@ def looks_like_domain(value: object) -> bool:
     else:
         return False  # IPv4 literal, not a hostname
     labels = value.split(".")
-    for label in labels:
-        if not _DOMAIN_LABEL_RE.match(label):
-            return False  # empty label, invalid chars, or leading/trailing hyphen
-    return True
+    return all(_DOMAIN_LABEL_RE.match(label) for label in labels)
 
 
 def format_company_domains(domain: str | None) -> list[dict[str, str]] | None:

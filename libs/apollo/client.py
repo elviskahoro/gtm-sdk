@@ -24,7 +24,7 @@ _api_key_var: ContextVar[str | None] = ContextVar(
 
 
 @contextmanager
-def api_key_scope(api_key: str) -> Generator[None, None, None]:
+def api_key_scope(api_key: str) -> Generator[None]:
     """Bind ``api_key`` as the active Apollo key for this async/sync context.
 
     Mirrors :func:`libs.attio.client.api_key_scope`. The scope is reset on
@@ -52,5 +52,5 @@ def get_client(api_key: str | None = None) -> Any:
             "(2) call inside libs.apollo.client.api_key_scope(...), "
             "(3) set APOLLO_API_KEY in the process environment.",
         )
-    apollo_client_class = getattr(apollo_sdk, "ApolloSDK")
+    apollo_client_class = apollo_sdk.ApolloSDK
     return apollo_client_class(api_key=token)

@@ -172,7 +172,8 @@ def test_post_does_not_retry_deterministic_body_failure(
     client = httpx.Client(transport=httpx.MockTransport(respond))
     code, err = module._post_with_retry(client, "https://x/hook", {"a": 1})  # noqa: SLF001
     assert code == 200
-    assert err is not None and "UpsertMeeting" in err
+    assert err is not None
+    assert "UpsertMeeting" in err
     assert calls["n"] == 1  # deterministic 404 → no retry, straight to dead-letter
 
 
@@ -312,7 +313,8 @@ def test_unknown_status_normalized_to_accepted(
     tmp_path: Path,
 ) -> None:
     """An unfamiliar status string normalizes to 'accepted' (as the webhook does),
-    so `--status accepted` includes it rather than silently dropping it."""
+    so `--status accepted` includes it rather than silently dropping it.
+    """
     module = _load_module()
     weird = _sample_booking().model_copy(update={"uid": "w-1", "status": "brand_new"})
     _FakeClient.bookings = [weird]
@@ -337,7 +339,9 @@ def test_local_validation_failure_dead_letters_and_exits_nonzero(
     tmp_path: Path,
 ) -> None:
     """Records that fail local Webhook validation must land in failures.jsonl
-    and force a non-zero exit — never silently dropped."""
+    and force a non-zero exit — never silently droppe
+    d.
+    """
     module = _load_module()
     _FakeClient.bookings = [_sample_booking()]
 

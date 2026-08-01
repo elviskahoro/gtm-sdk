@@ -22,17 +22,17 @@ from libs.attio.tracking_events import find_or_create_meeting_lifecycle_event
 
 
 def _valid_input(**overrides: object) -> MeetingLifecycleEventInput:
-    base: dict[str, object] = dict(
-        external_id="ical-uid-abc",
-        meeting_title="Acme × dlt pricing call",
-        company_domain="acme.com",
-        event_subtype="cancelled",
-        timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
-        body_json='{"reason":"redacted"}',
-        details_line="2026-05-14T00:00:00Z cancelled — by host@dlthub.com: reason",
-        host_person_record_id="pe_host_1",
-        owner_member_id="wm_test_owner",
-    )
+    base: dict[str, object] = {
+        "external_id": "ical-uid-abc",
+        "meeting_title": "Acme × dlt pricing call",
+        "company_domain": "acme.com",
+        "event_subtype": "cancelled",
+        "timestamp": datetime(2026, 5, 14, tzinfo=timezone.utc),
+        "body_json": '{"reason":"redacted"}',
+        "details_line": "2026-05-14T00:00:00Z cancelled — by host@dlthub.com: reason",
+        "host_person_record_id": "pe_host_1",
+        "owner_member_id": "wm_test_owner",
+    }
     base.update(overrides)
     return MeetingLifecycleEventInput(**base)  # type: ignore[arg-type]
 
@@ -205,7 +205,7 @@ def test_hit_then_patch_appends_details_cumulatively(
     mock_get_client: MagicMock,
     mock_ensure_options: MagicMock,  # noqa: ARG001
 ) -> None:
-    """Existing row → PATCH with appended details (existing + "\\n" + new line)."""
+    r"""Existing row → PATCH with appended details (existing + "\\n" + new line)."""
     client = MagicMock()
     existing = MagicMock()
     existing.id.record_id = "te_existing"

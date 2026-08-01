@@ -35,7 +35,7 @@ _api_key_var: ContextVar[str | None] = ContextVar(
 
 
 @contextmanager
-def api_key_scope(api_key: str) -> Generator[None, None, None]:
+def api_key_scope(api_key: str) -> Generator[None]:
     """Bind ``api_key`` as the active Attio key for this async/sync context.
 
     Used by the webhook flow: the endpoint resolves the key via Infisical

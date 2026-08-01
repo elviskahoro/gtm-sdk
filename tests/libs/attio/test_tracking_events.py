@@ -7,14 +7,14 @@ from pydantic import ValidationError
 
 
 def _valid_kwargs() -> dict[str, Any]:
-    return dict(
-        external_id="rb2b:abc123",
-        source="rb2b",
-        name="https://example.test/pricing",
-        event_type="rb2b_visit",
-        event_timestamp=datetime(2026, 5, 14, tzinfo=timezone.utc),
-        body_json='{"raw": "payload"}',
-    )
+    return {
+        "external_id": "rb2b:abc123",
+        "source": "rb2b",
+        "name": "https://example.test/pricing",
+        "event_type": "rb2b_visit",
+        "event_timestamp": datetime(2026, 5, 14, tzinfo=timezone.utc),
+        "body_json": '{"raw": "payload"}',
+    }
 
 
 def test_tracking_event_input_minimal() -> None:
@@ -125,7 +125,8 @@ def test_find_or_create_tracking_event_sdk_error_returns_envelope(
 
     assert env.success is False
     assert env.action == "failed"
-    assert env.errors and env.errors[0].fatal in (True, False)  # classified, not raised
+    assert env.errors
+    assert env.errors[0].fatal in (True, False)
 
 
 @patch("libs.attio.tracking_events.ensure_select_options")
@@ -135,7 +136,8 @@ def test_find_or_create_tracking_event_jit_seeds_event_type_and_subtype(
     mock_ensure_options,
 ) -> None:
     """event_type and event_subtype options self-register on first write so
-    new sources never need a manual bootstrap step."""
+    new sources never need a manual bootstrap step.
+    """
     client = MagicMock()
     client.records.post_v2_objects_object_records_query.return_value.data = []
     create_resp = MagicMock()
@@ -168,9 +170,10 @@ def test_find_or_create_tracking_event_jit_seeds_source(
     mock_get_client,
     mock_ensure_options,
 ) -> None:
-    """source self-registers on first write per ai-ztm so new emitters
+    """Source self-registers on first write per ai-ztm so new emitters
     (rb2b, caldotcom, future fathom/form/...) never need a manual
-    bootstrap step before their first tracking_events row lands."""
+    bootstrap step before their first tracking_events row lands.
+    """
     client = MagicMock()
     client.records.post_v2_objects_object_records_query.return_value.data = []
     create_resp = MagicMock()

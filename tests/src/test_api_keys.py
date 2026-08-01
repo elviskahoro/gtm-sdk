@@ -5,14 +5,14 @@ import os
 from src.api_keys import inject_api_keys
 
 
-def test_inject_sets_env_vars():
+def test_inject_sets_env_vars() -> None:
     os.environ.pop("ATTIO_API_KEY", None)
     with inject_api_keys({"attio_api_key": "sk-test"}):
         assert os.environ["ATTIO_API_KEY"] == "sk-test"
     assert "ATTIO_API_KEY" not in os.environ
 
 
-def test_inject_restores_original():
+def test_inject_restores_original() -> None:
     os.environ["ATTIO_API_KEY"] = "sk-original"
     with inject_api_keys({"attio_api_key": "sk-override"}):
         assert os.environ["ATTIO_API_KEY"] == "sk-override"
@@ -20,13 +20,13 @@ def test_inject_restores_original():
     os.environ.pop("ATTIO_API_KEY", None)
 
 
-def test_inject_empty_dict_is_noop():
+def test_inject_empty_dict_is_noop() -> None:
     os.environ.pop("ATTIO_API_KEY", None)
     with inject_api_keys({}):
         assert "ATTIO_API_KEY" not in os.environ
 
 
-def test_inject_multiple_keys():
+def test_inject_multiple_keys() -> None:
     os.environ.pop("ATTIO_API_KEY", None)
     os.environ.pop("PARALLEL_API_KEY", None)
     with inject_api_keys({"attio_api_key": "sk-a", "parallel_api_key": "sk-p"}):
@@ -36,14 +36,14 @@ def test_inject_multiple_keys():
     assert "PARALLEL_API_KEY" not in os.environ
 
 
-def test_inject_linear_api_key():
+def test_inject_linear_api_key() -> None:
     os.environ.pop("LINEAR_API_KEY", None)
     with inject_api_keys({"linear_api_key": "sk-linear"}):
         assert os.environ["LINEAR_API_KEY"] == "sk-linear"
     assert "LINEAR_API_KEY" not in os.environ
 
 
-def test_inject_restores_on_exception():
+def test_inject_restores_on_exception() -> None:
     os.environ["ATTIO_API_KEY"] = "sk-original"
     try:
         with inject_api_keys({"attio_api_key": "sk-boom"}):
@@ -54,7 +54,7 @@ def test_inject_restores_on_exception():
     os.environ.pop("ATTIO_API_KEY", None)
 
 
-def test_inject_rejects_unknown_keys_without_mutation():
+def test_inject_rejects_unknown_keys_without_mutation() -> None:
     os.environ["ATTIO_API_KEY"] = "sk-original"
 
     try:

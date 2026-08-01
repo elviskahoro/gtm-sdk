@@ -215,7 +215,7 @@ def _spawn_collector(
 def _build_spawn_span_exporter(collector: tuple[str, str]):
     """A ``SpanExporter`` that serializes each batch and spawns the collector."""
     from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
-    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+    from opentelemetry.sdk.trace.export import SpanExportResult, SpanExporter
 
     class _ModalSpawnSpanExporter(SpanExporter):
         def export(self, spans: Any) -> Any:
@@ -239,8 +239,8 @@ def _build_spawn_log_exporter(collector: tuple[str, str]):
     """A ``LogRecordExporter`` that serializes each batch and spawns the collector."""
     from opentelemetry.exporter.otlp.proto.common._log_encoder import encode_logs
     from opentelemetry.sdk._logs.export import (
-        LogRecordExporter,
         LogRecordExportResult,
+        LogRecordExporter,
     )
 
     class _ModalSpawnLogExporter(LogRecordExporter):

@@ -111,7 +111,8 @@ def script_module() -> Iterator[ModuleType]:
     image constant single-sourced — the test cannot drift from production.
     """
     spec = importlib.util.spec_from_file_location(_MODULE_NAME, SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[_MODULE_NAME] = module
     spec.loader.exec_module(module)
@@ -125,7 +126,7 @@ def script_module() -> Iterator[ModuleType]:
 async def test_git_present_in_base_image_after_install(
     script_module: ModuleType,
 ) -> None:
-    """git is installed in the real deploy image so `uv sync` can clone deps.
+    """Git is installed in the real deploy image so `uv sync` can clone deps.
 
     Builds from the production ``DAGGER_BASE_IMAGE`` and runs the same
     git-install step the deploy path uses, then proves git resolves. Catches

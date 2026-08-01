@@ -175,7 +175,8 @@ def test_execute_handler_exception_becomes_failed_outcome(monkeypatch) -> None:
 
 def test_execute_optional_op_failure_does_not_abort(monkeypatch) -> None:
     """A failed optional op is recorded but does not abort the plan or flip
-    overall success; downstream ops still run (ai-0ex)."""
+    overall success; downstream ops still run (ai-0ex).
+    """
     person = MagicMock(return_value=_fail("schema_mismatch"))
     mention = MagicMock(return_value=_ok("mention-1"))
     monkeypatch.setattr(
@@ -213,7 +214,9 @@ def test_execute_optional_op_failure_does_not_abort(monkeypatch) -> None:
 
 def test_execute_optional_op_failure_omitted_from_lookup_table(monkeypatch) -> None:
     """A failed optional person op is not recorded, so a later ref to it
-    resolves to None (and the mention handler degrades) — ai-0ex."""
+    resolves to None (and the mention handler degrades) — ai-0e
+    x.
+    """
     person = MagicMock(return_value=_fail("schema_mismatch"))
     upsert_mention_mock = MagicMock(return_value=_ok("mention-1"))
     # Use the real mention handler so the LookupTable miss → degrade path runs.
@@ -288,7 +291,8 @@ def test_execute_required_op_failure_still_aborts(monkeypatch) -> None:
 
 def test_handle_upsert_person_schema_mismatch_is_classified(monkeypatch) -> None:
     """A SchemaMismatchError from the lib layer becomes a `schema_mismatch`
-    failed envelope, not a `handler_exception` (ai-0ex)."""
+    failed envelope, not a `handler_exception` (ai-0ex).
+    """
     from libs.attio.errors import SchemaMismatchError
     from src.attio.export import OP_HANDLERS
 
@@ -433,7 +437,8 @@ def test_handle_upsert_note_creates_when_same_title_different_meeting(
     """A shared Person parent accumulates notes across meetings: a same-titled
     note from a *different* meeting must NOT dedup away the new one (ai-gez).
     find_note_by_title scopes the match to this meeting, so it returns None and
-    a fresh note is created."""
+    a fresh note is created.
+    """
     from src.attio.export import OP_HANDLERS
 
     _handle_upsert_note = OP_HANDLERS[UpsertNote]
@@ -530,7 +535,8 @@ def test_handle_upsert_note_resolves_parent_via_query_when_table_misses(
     monkeypatch,
 ) -> None:
     """Fathom emits no UpsertPerson; the /v2/meetings upsert auto-creates the
-    Person, so an unresolved table entry falls back to a live email lookup."""
+    Person, so an unresolved table entry falls back to a live email lookup.
+    """
     from src.attio.export import OP_HANDLERS
 
     _handle_upsert_note = OP_HANDLERS[UpsertNote]
@@ -693,7 +699,8 @@ def test_handle_upsert_mention_unresolved_ref_failed_write_stays_failed(
     monkeypatch,
 ) -> None:
     """If the mention write itself FAILS while the person ref was unresolved,
-    the failed envelope must not be reflagged as a partial success (ai-0ex)."""
+    the failed envelope must not be reflagged as a partial success (ai-0ex).
+    """
     from src.attio.export import OP_HANDLERS
 
     _handle_upsert_mention = OP_HANDLERS[UpsertMention]
@@ -729,7 +736,8 @@ def test_handle_upsert_mention_unresolved_ref_hard_fails_by_default(
     monkeypatch,
 ) -> None:
     """Without opt-in best-effort, an unresolved related_person stays a hard
-    failure so genuine missing-reference bugs in other plans stay loud (ai-0ex)."""
+    failure so genuine missing-reference bugs in other plans stay loud (ai-0ex).
+    """
     from src.attio.export import OP_HANDLERS
 
     _handle_upsert_mention = OP_HANDLERS[UpsertMention]
@@ -766,7 +774,8 @@ def test_handle_upsert_mention_unresolved_ref_hard_fails_by_default(
 def test_execution_result_body_surfaces_degradation_warning(monkeypatch) -> None:
     """A mention written WITHOUT its person link must not look like a plain
     success in the response body — the warning/partial_success is surfaced so
-    the degradation is visible to callers (ai-0ex)."""
+    the degradation is visible to callers (ai-0ex).
+    """
     import orjson
 
     from src.attio.export import OP_HANDLERS as _REAL  # noqa: N811
@@ -1002,7 +1011,8 @@ def test_handle_upsert_person_merge_uses_github_handle_lookup(
     mock_get_values,
 ) -> None:
     """T3 (Bug 2): matching_attribute=github_handle routes lookup correctly
-    and protected fields on the github-matched record are honored."""
+    and protected fields on the github-matched record are honored.
+    """
     mock_get_values.return_value = {"title": [{"value": "CTO"}]}
     mock_upsert.return_value.success = True
     mock_upsert.return_value.record_id = "pe_1"
@@ -1037,7 +1047,8 @@ def test_handle_upsert_person_merge_lookup_aligned_with_matching_attribute(
 ) -> None:
     """T4 (Bug 3): matching_attribute=linkedin with both email and linkedin on
     the op. Helper must be called with matching_attribute=linkedin so the read
-    targets the same record the write will touch."""
+    targets the same record the write will touch.
+    """
     mock_get_values.return_value = {"title": [{"value": "Existing"}]}
     mock_upsert.return_value.success = True
     mock_upsert.return_value.record_id = "pe_1"
@@ -1307,7 +1318,7 @@ def test_handle_upsert_meeting_resolves_links_via_live_lookup(monkeypatch) -> No
 
     _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
 
-    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+    def _resolve(*, parent_object, attempts, email=None, domain=None) -> str | None:  # noqa: ARG001
         if parent_object == "people" and email == "buyer@acme.com":
             return "person-1"
         if parent_object == "companies" and domain == "acme.com":
@@ -1412,7 +1423,7 @@ def test_handle_upsert_meeting_relinks_company_on_transient_miss(monkeypatch) ->
 
     _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
 
-    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+    def _resolve(*, parent_object, attempts, email=None, domain=None) -> str | None:  # noqa: ARG001
         if parent_object == "companies" and domain == "acme.com" and attempts == 3:
             return "company-late"
         return None
@@ -1560,7 +1571,7 @@ def test_handle_upsert_meeting_relinks_autocreated_participant(monkeypatch) -> N
 
     _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
 
-    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+    def _resolve(*, parent_object, attempts, email=None, domain=None) -> str | None:  # noqa: ARG001
         if parent_object == "companies" and domain == "acme.com":
             return "company-1"  # pre-existing company, resolves in phase 1
         if parent_object == "people" and email == "buyer@acme.com" and attempts == 3:
@@ -1607,7 +1618,7 @@ def test_handle_upsert_meeting_relink_failure_degrades_to_warning(monkeypatch) -
 
     _handle_upsert_meeting = OP_HANDLERS[UpsertMeeting]
 
-    def _resolve(*, parent_object, attempts, email=None, domain=None):  # noqa: ARG001
+    def _resolve(*, parent_object, attempts, email=None, domain=None) -> str | None:  # noqa: ARG001
         if attempts == 3 and email == "buyer@acme.com":
             return "person-autocreated"
         return None

@@ -8,14 +8,14 @@ from libs.attio.models import ExtTamInput
 
 
 def _make_input(**overrides: object) -> ExtTamInput:
-    defaults: dict[str, object] = dict(
-        name="Acme (Jane Doe @ Snowflake)",
-        person_self_id="11111111-1111-1111-1111-111111111111",
-        employer_id="22222222-2222-2222-2222-222222222222",
-        account_ids=["33333333-3333-3333-3333-333333333333"],
-        source="snowflake_scored_accounts_csv",
-        source_snapshot_date=date(2026, 5, 25),
-    )
+    defaults: dict[str, object] = {
+        "name": "Acme (Jane Doe @ Snowflake)",
+        "person_self_id": "11111111-1111-1111-1111-111111111111",
+        "employer_id": "22222222-2222-2222-2222-222222222222",
+        "account_ids": ["33333333-3333-3333-3333-333333333333"],
+        "source": "snowflake_scored_accounts_csv",
+        "source_snapshot_date": date(2026, 5, 25),
+    }
     defaults.update(overrides)
     return ExtTamInput(**defaults)  # type: ignore[arg-type]
 

@@ -19,11 +19,10 @@ Cal.com adding fields without versioning.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 import orjson
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
-
 
 # ---------- Sub-models reused across variants ----------
 
@@ -36,7 +35,8 @@ class EventType(BaseModel):
 class BookingHost(BaseModel):
     """Host participant. Real cal.com v2 payloads use ``organizer`` instead and
     omit ``hosts`` entirely, so every field beyond identity is optional and
-    ``extra="allow"`` keeps unknown keys."""
+    ``extra="allow"`` keeps unknown keys.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -51,7 +51,8 @@ class BookingHost(BaseModel):
 class BookingAttendee(BaseModel):
     """Attendee. Real cal.com v2 attendees carry ``name``/``email``/``timeZone``
     but NOT ``displayEmail``/``absent`` (those were in the synthetic fixtures),
-    so make them optional. ``timeZone`` is surfaced in the Slack card."""
+    so make them optional. ``timeZone`` is surfaced in the Slack card.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -193,7 +194,8 @@ class BookingRequestedPayload(BookingCreatedPayload):
     pending host acceptance. Same payload shape as BOOKING_CREATED (startTime,
     organizer, attendees, ...), so it inherits all fields + ``creator_email``;
     only the discriminator differs. cal.com fires this immediately on request
-    and follows with BOOKING_CREATED once the host accepts."""
+    and follows with BOOKING_CREATED once the host accepts.
+    """
 
     triggerEvent: Literal["BOOKING_REQUESTED"]  # type: ignore[assignment]
 
@@ -331,16 +333,14 @@ class PingPayload(BaseModel):
 
 
 CalcomPayload = Annotated[
-    Union[
-        BookingCreatedPayload,
-        BookingRequestedPayload,
-        BookingCancelledPayload,
-        BookingRescheduledPayload,
-        BookingNoShowPayload,
-        MeetingStartedPayload,
-        MeetingEndedPayload,
-        PingPayload,
-    ],
+    BookingCreatedPayload
+    | BookingRequestedPayload
+    | BookingCancelledPayload
+    | BookingRescheduledPayload
+    | BookingNoShowPayload
+    | MeetingStartedPayload
+    | MeetingEndedPayload
+    | PingPayload,
     Field(discriminator="triggerEvent"),
 ]
 

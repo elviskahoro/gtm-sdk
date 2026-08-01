@@ -391,7 +391,8 @@ def test_build_tracking_event_values_truncates_timestamp_to_day() -> None:
 
 def test_build_tracking_event_values_source_is_select_shape() -> None:
     """``source`` must use the Attio select shape ``[{"option": ...}]`` so
-    Attio-side filters and views can group by emitter. ai-ztm."""
+    Attio-side filters and views can group by emitter. ai-ztm.
+    """
     from libs.attio.models import TrackingEventInput
     from libs.attio.values import build_tracking_event_values
 
@@ -536,7 +537,8 @@ def test_build_tracking_event_values_full_surface() -> None:
 
 def test_build_tracking_event_values_is_repeat_visit_false_emits() -> None:
     """Explicit False is meaningful (this visit is NOT a repeat) and must
-    land on the row; only None suppresses the write."""
+    land on the row; only None suppresses the write.
+    """
     from libs.attio.models import TrackingEventInput
     from libs.attio.values import build_tracking_event_values
 

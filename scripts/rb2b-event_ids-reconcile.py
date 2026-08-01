@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile pre-refactor rb2b tracking events that carry random external_ids.
+r"""Reconcile pre-refactor rb2b tracking events that carry random external_ids.
 
 Before the deterministic-id refactor (``libs/rb2b/models.py``), the rb2b webhook
 minted a *random* ``evt_<uuid4().hex>`` for every flat visit, which became the

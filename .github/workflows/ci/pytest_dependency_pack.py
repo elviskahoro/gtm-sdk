@@ -6,7 +6,6 @@ import zipfile
 from collections.abc import Iterable
 from pathlib import Path
 
-
 ARCHIVE_NAME = "pytest-deps.zip"
 PATH_FILE_NAME = "pytest-deps.pth"
 PACKABLE_SUFFIXES = frozenset({".py", ".pyi"})

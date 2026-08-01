@@ -25,21 +25,21 @@ def _make_sdk_error(status_code: int, message: str = "boom") -> SDKError:
 
 
 def _input(**overrides: Any) -> MeetingInput:
-    base: dict[str, Any] = dict(
-        external_ref=MeetingExternalRef(
+    base: dict[str, Any] = {
+        "external_ref": MeetingExternalRef(
             ical_uid="fathom-call-1",
             provider="google",
             is_recurring=False,
         ),
-        title="t",
-        description="d",
-        start=datetime(2026, 5, 12, 14, 0, tzinfo=timezone.utc),
-        end=datetime(2026, 5, 12, 15, 0, tzinfo=timezone.utc),
-        is_all_day=False,
-        participants=[
+        "title": "t",
+        "description": "d",
+        "start": datetime(2026, 5, 12, 14, 0, tzinfo=timezone.utc),
+        "end": datetime(2026, 5, 12, 15, 0, tzinfo=timezone.utc),
+        "is_all_day": False,
+        "participants": [
             MeetingParticipantInput(email_address="a@example.com", is_organizer=True),
         ],
-    )
+    }
     base.update(overrides)
     return MeetingInput(**base)
 
@@ -166,7 +166,9 @@ def _sdk_meeting(
     created_at: str,
 ) -> SimpleNamespace:
     """A duck-typed stand-in for an SDK ``Meeting`` as ``get_v2_meetings`` returns
-    it — only the attributes ``_candidate_from_meeting`` reads."""
+    it — only the attributes ``_candidate_from_meeting`` read
+    s.
+    """
     return SimpleNamespace(
         id=SimpleNamespace(meeting_id=meeting_id),
         title=f"m-{meeting_id}",
@@ -239,7 +241,8 @@ def test_iter_meetings_in_range_paginates_and_maps(monkeypatch) -> None:
     assert calls[0]["cursor"] is None
     assert calls[1]["cursor"] == "1"
     # Server-side bounds sent for both supplied bounds.
-    assert "starts_before" in calls[0] and "ends_from" in calls[0]
+    assert "starts_before" in calls[0]
+    assert "ends_from" in calls[0]
 
     assert [m.meeting_id for m in out] == ["m1", "m2"]
     m1, m2 = out

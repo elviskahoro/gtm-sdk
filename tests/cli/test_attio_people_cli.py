@@ -75,7 +75,7 @@ class _FakeModalRegistry:
 
 
 def test_preflight_missing_modal_token_returns_configuration_error(monkeypatch) -> None:
-    import cli.attio.preflight as preflight
+    from cli.attio import preflight
 
     monkeypatch.setenv("ATTIO_API_KEY", "ak_test")
     monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
@@ -378,8 +378,8 @@ def test_upsert_modal_sync_skip_bypasses_parity_gate(monkeypatch) -> None:
 
     def _preflight(**kwargs):
         assert kwargs["modal_sync"] == "skip"
-        modal_id = "".join(["m", "id"])
-        modal_secret = "".join(["m", "token"])
+        modal_id = "mid"
+        modal_secret = "mtoken"
         return (
             {
                 "ATTIO_API_KEY": "ak_test",
@@ -420,8 +420,8 @@ def test_upsert_modal_sync_deploy_retries_once_then_succeeds(monkeypatch) -> Non
     def _preflight(**kwargs):
         calls["count"] += 1
         assert kwargs["modal_sync"] == "deploy"
-        modal_id = "".join(["m", "id"])
-        modal_secret = "".join(["m", "token"])
+        modal_id = "mid"
+        modal_secret = "mtoken"
         return (
             {
                 "ATTIO_API_KEY": "ak_test",
@@ -456,7 +456,7 @@ def test_timeout_error_returns_connectivity_envelope(monkeypatch) -> None:
     import cli.attio.people as people_cli
 
     class _TimeoutFunctionCall:
-        def __init__(self):
+        def __init__(self) -> None:
             self.timeout = None
 
         def get(self, timeout: int | None = None):
@@ -464,7 +464,7 @@ def test_timeout_error_returns_connectivity_envelope(monkeypatch) -> None:
             raise modal.exception.TimeoutError("timeout")
 
     class _TimeoutFunction:
-        def __init__(self, name: str):
+        def __init__(self, name: str) -> None:
             self.name = name
 
         def spawn(self, **kwargs):
@@ -500,16 +500,16 @@ def test_output_expired_error_returns_connectivity_envelope(monkeypatch) -> None
     import cli.attio.people as people_cli
 
     class _ExpiredFunctionCall:
-        def __init__(self):
+        def __init__(self) -> None:
             self.timeout = None
 
         def get(self, timeout: int | None = None):
             self.timeout = timeout
             # Create a real OutputExpiredError from modal
-            raise modal.exception.OutputExpiredError()
+            raise modal.exception.OutputExpiredError
 
     class _ExpiredFunction:
-        def __init__(self, name: str):
+        def __init__(self, name: str) -> None:
             self.name = name
 
         def spawn(self, **kwargs):
@@ -544,7 +544,7 @@ def test_env_override_changes_timeout(monkeypatch) -> None:
     import cli.attio.people as people_cli
 
     class _TimeoutRecordingFunctionCall:
-        def __init__(self):
+        def __init__(self) -> None:
             self.timeout = None
 
         def get(self, timeout: int | None = None):
@@ -561,7 +561,7 @@ def test_env_override_changes_timeout(monkeypatch) -> None:
             }
 
     class _TimeoutRecordingFunction:
-        def __init__(self, name: str):
+        def __init__(self, name: str) -> None:
             self.name = name
             self.call = None
 
@@ -602,7 +602,7 @@ def test_invalid_env_override_falls_back_to_default(monkeypatch) -> None:
     import cli.attio.people as people_cli
 
     class _TimeoutRecordingFunctionCall:
-        def __init__(self):
+        def __init__(self) -> None:
             self.timeout = None
 
         def get(self, timeout: int | None = None):
@@ -619,7 +619,7 @@ def test_invalid_env_override_falls_back_to_default(monkeypatch) -> None:
             }
 
     class _TimeoutRecordingFunction:
-        def __init__(self, name: str):
+        def __init__(self, name: str) -> None:
             self.name = name
             self.call = None
 

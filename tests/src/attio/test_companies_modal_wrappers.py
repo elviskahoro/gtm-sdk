@@ -30,7 +30,7 @@ def test_attio_create_companies_attribute_sets_and_clears_env_preview(
 
     monkeypatch.setattr("src.attio.companies.create_companies_attribute", _create)
 
-    fn = cast(modal.Function, attio_create_companies_attribute)  # type: ignore
+    fn = cast("modal.Function", attio_create_companies_attribute)  # type: ignore
     result = fn.local(
         payload={
             "title": "GTM Tool Type",
@@ -45,7 +45,8 @@ def test_attio_create_companies_attribute_sets_and_clears_env_preview(
         api_keys={"attio_api_key": "ak_test"},
     )
 
-    assert hasattr(result, "mode") and result.mode == "preview"
+    assert hasattr(result, "mode")
+    assert result.mode == "preview"
     assert "ATTIO_API_KEY" not in os.environ
 
 
@@ -71,7 +72,7 @@ def test_attio_create_companies_attribute_sets_and_clears_env_apply(
 
     monkeypatch.setattr("src.attio.companies.create_companies_attribute", _create)
 
-    fn = cast(modal.Function, attio_create_companies_attribute)  # type: ignore
+    fn = cast("modal.Function", attio_create_companies_attribute)  # type: ignore
     result = fn.local(
         payload={
             "title": "GTM Tool Type",
@@ -86,8 +87,8 @@ def test_attio_create_companies_attribute_sets_and_clears_env_apply(
         api_keys={"attio_api_key": "ak_test"},
     )
 
-    assert hasattr(result, "mode") and result.mode == "apply"
-    assert (
-        hasattr(result, "attribute_slug") and result.attribute_slug == "gtm_tool_type"
-    )
+    assert hasattr(result, "mode")
+    assert result.mode == "apply"
+    assert hasattr(result, "attribute_slug")
+    assert result.attribute_slug == "gtm_tool_type"
     assert "ATTIO_API_KEY" not in os.environ

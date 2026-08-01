@@ -200,7 +200,8 @@ def test_attio_creator_email_falls_back_to_organizer() -> None:
 def test_unknown_booking_status_does_not_drop_payload() -> None:
     """Cal.com may add new status strings; permissive ``status: str | None``
     plus ``_caldotcom_status_to_attio`` keeps unknowns mapping to ``accepted``
-    instead of failing the discriminator and silently dropping the event."""
+    instead of failing the discriminator and silently dropping the event.
+    """
     w = _mutated_created_webhook(status="rescheduled_pending_review")
     assert w.attio_is_valid_webhook() is True
     op = _find_upsert_meeting(w.attio_get_operations())
@@ -211,7 +212,8 @@ def test_unknown_booking_status_does_not_drop_payload() -> None:
 def test_hostless_cancelled_organizer_mirrors_booking_status() -> None:
     """Hostless CREATED with status=cancelled should map the organizer
     participant to ``declined`` (matching the prior behavior), not the
-    hard-coded ``accepted`` that the first fix shipped with."""
+    hard-coded ``accepted`` that the first fix shipped with.
+    """
     w = _mutated_created_webhook(
         hosts=[],
         organizer={"email": "organizer@example.com"},
@@ -286,7 +288,7 @@ def test_attio_get_operations_marks_absent_attendee_declined() -> None:
 def test_attio_get_operations_maps_cancelled_status_to_declined() -> None:
     """If the BOOKING_CREATED payload arrives with status=cancelled, attendees
     inherit declined. (Edge case — cancellation usually arrives as its own
-    BOOKING_CANCELLED webhook, but the field is still on the CREATED model.)
+    BOOKING_CANCELLED webhook, but the field is still on the CREATED model.).
     """
     w = _mutated_created_webhook(status="cancelled")
     op = _find_upsert_meeting(w.attio_get_operations())

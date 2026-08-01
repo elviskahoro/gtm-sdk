@@ -19,10 +19,10 @@ from libs.meetings import canonical_meeting_uid
 from src.fathom.utils import (
     build_meeting_description,
     fathom_summary_title,
-    render_action_items_markdown,
-    select_note_parent_email,
     generate_gcs_filename,
     recording_to_jsonl,
+    render_action_items_markdown,
+    select_note_parent_email,
 )
 
 
@@ -162,12 +162,12 @@ class Webhook(FathomWebhook):
     def attio_get_operations(self) -> list[Any]:
         from src.attio.ops import (
             CompanyRef,
-            UpsertNote,
             MeetingExternalRef,
             MeetingParticipant,
             MeetingRef,
             PersonRef,
             UpsertMeeting,
+            UpsertNote,
         )
 
         description: str = build_meeting_description(

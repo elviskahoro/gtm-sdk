@@ -148,23 +148,24 @@ def test_attio_get_operations_tracking_event_drops_location_when_payload_empty()
     None
 ):
     """No city/state/zipcode → no location attribute. Avoids overwriting
-    human-curated CRM data on subsequent visits with empty location."""
+    human-curated CRM data on subsequent visits with empty location.
+    """
     raw = _load_raw("rb2b.visit.person_and_company.redacted.json")
     raw["payload"]["City"] = None
     raw["payload"]["State"] = None
     raw["payload"]["Zipcode"] = None
     w = Webhook.model_validate(raw)
-    te = [
+    te = next(
         o for o in w.attio_get_operations() if type(o).__name__ == "UpsertTrackingEvent"
-    ][0]
+    )
     assert te.location is None
 
 
 def test_attio_get_operations_repeat_visit_sets_subtype() -> None:
     w = _load("rb2b.visit.repeat_visit.redacted.json")
-    te = [
+    te = next(
         o for o in w.attio_get_operations() if type(o).__name__ == "UpsertTrackingEvent"
-    ][0]
+    )
     assert te.event_subtype == "repeat_visit"
 
 
@@ -173,9 +174,9 @@ def test_attio_get_operations_first_visit_sets_subtype() -> None:
     for the "is this a hot-prospect first touch?" query.
     """
     w = _load("rb2b.visit.person_only.redacted.json")
-    te = [
+    te = next(
         o for o in w.attio_get_operations() if type(o).__name__ == "UpsertTrackingEvent"
-    ][0]
+    )
     assert te.event_subtype == "first_visit"
 
 

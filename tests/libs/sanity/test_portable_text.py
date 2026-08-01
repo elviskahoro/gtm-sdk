@@ -15,7 +15,7 @@ def _block(style: str, text: str, **extra: Any) -> dict[str, Any]:
     }
 
 
-def test_headings_and_paragraph():
+def test_headings_and_paragraph() -> None:
     blocks = [
         _block("h2", "Summary"),
         _block("normal", "Hello world."),
@@ -23,7 +23,7 @@ def test_headings_and_paragraph():
     assert to_markdown(blocks) == "## Summary\n\nHello world."
 
 
-def test_marks_strong_em_code():
+def test_marks_strong_em_code() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -38,7 +38,7 @@ def test_marks_strong_em_code():
     assert to_markdown([block]) == "**bold** and _italic_`code`"
 
 
-def test_link_mark_def():
+def test_link_mark_def() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -48,7 +48,7 @@ def test_link_mark_def():
     assert to_markdown([block]) == "[dltHub](https://dlthub.com)"
 
 
-def test_bullet_and_numbered_lists_with_nesting():
+def test_bullet_and_numbered_lists_with_nesting() -> None:
     blocks = [
         _block("normal", "Item A", listItem="bullet", level=1),
         _block("normal", "Nested", listItem="bullet", level=2),
@@ -57,11 +57,11 @@ def test_bullet_and_numbered_lists_with_nesting():
     assert to_markdown(blocks) == "- Item A\n\n  - Nested\n\n1. Step 1"
 
 
-def test_blockquote():
+def test_blockquote() -> None:
     assert to_markdown([_block("blockquote", "quoted")]) == "> quoted"
 
 
-def test_image_block_uses_resolved_url():
+def test_image_block_uses_resolved_url() -> None:
     blocks = [
         {
             "_type": "image",
@@ -72,27 +72,27 @@ def test_image_block_uses_resolved_url():
     assert to_markdown(blocks) == "![diagram](https://cdn.sanity.io/images/x/y/z.png)"
 
 
-def test_image_without_url_is_skipped():
+def test_image_without_url_is_skipped() -> None:
     assert to_markdown([{"_type": "image"}]) == ""
 
 
-def test_unknown_block_type_is_surfaced_as_comment():
+def test_unknown_block_type_is_surfaced_as_comment() -> None:
     blocks = [{"_type": "mysteryWidget", "foo": "bar"}, _block("normal", "kept")]
     assert to_markdown(blocks) == (
         "<!-- unsupported Portable Text block: mysteryWidget -->\n\nkept"
     )
 
 
-def test_empty_body():
+def test_empty_body() -> None:
     assert to_markdown([]) == ""
 
 
-def test_reserved_chars_are_escaped():
+def test_reserved_chars_are_escaped() -> None:
     block = _block("normal", "a*b_c[d](e) f\\g")
     assert to_markdown([block]) == r"a\*b\_c\[d\]\(e\) f\\g"
 
 
-def test_code_span_is_not_escaped():
+def test_code_span_is_not_escaped() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -102,7 +102,7 @@ def test_code_span_is_not_escaped():
     assert to_markdown([block]) == "`a*b_c`"
 
 
-def test_inline_code_with_backtick_uses_longer_fence():
+def test_inline_code_with_backtick_uses_longer_fence() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -112,12 +112,12 @@ def test_inline_code_with_backtick_uses_longer_fence():
     assert to_markdown([block]) == "`` a`b ``"
 
 
-def test_image_alt_text_is_escaped():
+def test_image_alt_text_is_escaped() -> None:
     blocks = [{"_type": "image", "url": "https://x.io/z.png", "alt": "a]b[c"}]
     assert to_markdown(blocks) == r"![a\]b\[c](https://x.io/z.png)"
 
 
-def test_underline_mark_rendered_as_html():
+def test_underline_mark_rendered_as_html() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -127,7 +127,7 @@ def test_underline_mark_rendered_as_html():
     assert to_markdown([block]) == "<u>under</u>"
 
 
-def test_link_text_escaped_and_href_with_parens_angle_bracketed():
+def test_link_text_escaped_and_href_with_parens_angle_bracketed() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -137,7 +137,7 @@ def test_link_text_escaped_and_href_with_parens_angle_bracketed():
     assert to_markdown([block]) == r"[a\*b](<https://x.io/(a)_b>)"
 
 
-def test_simple_href_left_bare():
+def test_simple_href_left_bare() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -147,7 +147,7 @@ def test_simple_href_left_bare():
     assert to_markdown([block]) == "[link](https://dlthub.com/x)"
 
 
-def test_leading_block_syntax_is_escaped():
+def test_leading_block_syntax_is_escaped() -> None:
     blocks = [
         _block("normal", "# not a heading"),
         _block("normal", "> not a quote"),
@@ -162,37 +162,37 @@ def test_leading_block_syntax_is_escaped():
     )
 
 
-def test_list_item_leading_syntax_is_escaped():
+def test_list_item_leading_syntax_is_escaped() -> None:
     blocks = [_block("normal", "# nope", listItem="bullet", level=1)]
     assert to_markdown(blocks) == "- \\# nope"
 
 
-def test_code_block_fenced_with_language():
+def test_code_block_fenced_with_language() -> None:
     blocks = [{"_type": "code", "code": "print('hi')", "language": "python"}]
     assert to_markdown(blocks) == "```python\nprint('hi')\n```"
 
 
-def test_code_block_fence_grows_past_inner_backticks():
+def test_code_block_fence_grows_past_inner_backticks() -> None:
     blocks = [{"_type": "code", "code": "a ``` b", "language": ""}]
     assert to_markdown(blocks) == "````\na ``` b\n````"
 
 
-def test_markdown_block_emitted_verbatim():
+def test_markdown_block_emitted_verbatim() -> None:
     md = "| a | b |\n|---|---|\n| 1 | 2 |"
     assert to_markdown([{"_type": "markdownBlock", "markdown": md}]) == md
 
 
-def test_iframe_emitted_verbatim():
+def test_iframe_emitted_verbatim() -> None:
     html = '<iframe src="https://embed.example/x"></iframe>'
     assert to_markdown([{"_type": "iframe", "code": html}]) == html
 
 
-def test_youtube_rendered_as_link():
+def test_youtube_rendered_as_link() -> None:
     blocks = [{"_type": "youtube", "url": "https://youtube.com/watch?v=abc"}]
     assert to_markdown(blocks) == "[Watch on YouTube](https://youtube.com/watch?v=abc)"
 
 
-def test_html_sensitive_chars_escaped_in_text():
+def test_html_sensitive_chars_escaped_in_text() -> None:
     # Literal <, >, & in prose must become entities so a Markdown renderer
     # treats them as text, not as HTML tags.
     blocks = [_block("normal", "use a < b && c > d in <script>code</script>")]
@@ -201,13 +201,13 @@ def test_html_sensitive_chars_escaped_in_text():
     )
 
 
-def test_html_chars_escaped_in_heading_and_alt():
+def test_html_chars_escaped_in_heading_and_alt() -> None:
     assert to_markdown([_block("h2", "A & B <ok>")]) == "## A &amp; B &lt;ok&gt;"
     img = [{"_type": "image", "url": "https://x/i.png", "alt": "a & <b>"}]
     assert to_markdown(img) == "![a &amp; &lt;b&gt;](https://x/i.png)"
 
 
-def test_verbatim_paths_keep_raw_html():
+def test_verbatim_paths_keep_raw_html() -> None:
     # markdownBlock, iframe, and fenced code are intentionally raw and must NOT
     # be entity-escaped.
     html = '<iframe src="https://embed.example/x?a=1&b=2"></iframe>'
@@ -218,13 +218,13 @@ def test_verbatim_paths_keep_raw_html():
     assert to_markdown(code) == "```js\nx = a < b && c\n```"
 
 
-def test_thematic_break_line_is_escaped():
+def test_thematic_break_line_is_escaped() -> None:
     # A paragraph that is only dashes would render as a horizontal rule.
     assert to_markdown([_block("normal", "---")]) == "\\---"
     assert to_markdown([_block("normal", "===")]) == "\\==="
 
 
-def test_escape_text_neutralizes_inline_syntax():
+def test_escape_text_neutralizes_inline_syntax() -> None:
     # Inline metacharacters and HTML are escaped; a leading ``#`` is not, since
     # this helper feeds text that is not at a line start (e.g. after ``# `` in a
     # title heading).
@@ -235,30 +235,30 @@ def test_escape_text_neutralizes_inline_syntax():
     )
 
 
-def test_verbatim_block_trailing_whitespace_preserved():
+def test_verbatim_block_trailing_whitespace_preserved() -> None:
     # The document-wide strip is gone, so a markdownBlock's significant trailing
     # whitespace survives byte-for-byte.
     md = "| a |\n|---|\n\n"
     assert to_markdown([{"_type": "markdownBlock", "markdown": md}]) == md
 
 
-def test_unknown_block_type_cannot_break_out_of_comment():
+def test_unknown_block_type_cannot_break_out_of_comment() -> None:
     out = to_markdown([{"_type": "a-->b<c>"}])
     assert out == "<!-- unsupported Portable Text block: a-bc -->"
     assert "-->" not in out[:-3]  # no early comment close
 
 
-def test_empty_code_block_preserved_as_empty_fence():
+def test_empty_code_block_preserved_as_empty_fence() -> None:
     assert (
         to_markdown([{"_type": "code", "code": "", "language": "py"}]) == "```py\n\n```"
     )
 
 
-def test_code_block_without_code_key_is_skipped():
+def test_code_block_without_code_key_is_skipped() -> None:
     assert to_markdown([{"_type": "code"}]) == ""
 
 
-def test_empty_markdown_block_preserved_between_blocks():
+def test_empty_markdown_block_preserved_between_blocks() -> None:
     blocks = [
         _block("normal", "a"),
         {"_type": "markdownBlock", "markdown": ""},
@@ -269,50 +269,50 @@ def test_empty_markdown_block_preserved_between_blocks():
     assert to_markdown(blocks) == "a\n\n\n\nb"
 
 
-def test_code_block_drops_unsafe_language():
+def test_code_block_drops_unsafe_language() -> None:
     blocks = [{"_type": "code", "code": "x", "language": "py thon`"}]
     assert to_markdown(blocks) == "```\nx\n```"
 
 
-def test_code_block_keeps_valid_language_with_symbols():
+def test_code_block_keeps_valid_language_with_symbols() -> None:
     blocks = [{"_type": "code", "code": "x", "language": "c++"}]
     assert to_markdown(blocks) == "```c++\nx\n```"
 
 
-def test_span_newline_becomes_hard_break():
+def test_span_newline_becomes_hard_break() -> None:
     blocks = [_block("normal", "line one\nline two")]
     assert to_markdown(blocks) == "line one  \nline two"
 
 
-def test_block_syntax_escaped_on_every_line_of_a_span():
+def test_block_syntax_escaped_on_every_line_of_a_span() -> None:
     blocks = [_block("normal", "foo\n# bar\n- baz")]
     assert to_markdown(blocks) == "foo  \n\\# bar  \n\\- baz"
 
 
-def test_heading_block_trailing_hash_escaped():
+def test_heading_block_trailing_hash_escaped() -> None:
     assert to_markdown([_block("h2", "Release #")]) == "## Release \\#"
 
 
-def test_heading_block_collapses_hard_breaks():
+def test_heading_block_collapses_hard_breaks() -> None:
     assert to_markdown([_block("h2", "line one\nline two")]) == "## line one line two"
 
 
-def test_multiline_blockquote_prefixes_every_line():
+def test_multiline_blockquote_prefixes_every_line() -> None:
     blocks = [_block("blockquote", "line one\nline two")]
     assert to_markdown(blocks) == "> line one  \n> line two"
 
 
-def test_multiline_list_item_indents_continuation():
+def test_multiline_list_item_indents_continuation() -> None:
     blocks = [_block("normal", "line one\nline two", listItem="bullet", level=1)]
     assert to_markdown(blocks) == "- line one  \n  line two"
 
 
-def test_multiline_numbered_item_indents_continuation():
+def test_multiline_numbered_item_indents_continuation() -> None:
     blocks = [_block("normal", "a\nb", listItem="number", level=1)]
     assert to_markdown(blocks) == "1. a  \n   b"
 
 
-def test_inline_code_with_edge_spaces_is_padded():
+def test_inline_code_with_edge_spaces_is_padded() -> None:
     block = {
         "_type": "block",
         "style": "normal",
@@ -323,7 +323,7 @@ def test_inline_code_with_edge_spaces_is_padded():
     assert to_markdown([block]) == "`  x  `"
 
 
-def test_inline_code_all_spaces_is_not_padded():
+def test_inline_code_all_spaces_is_not_padded() -> None:
     block = {
         "_type": "block",
         "style": "normal",

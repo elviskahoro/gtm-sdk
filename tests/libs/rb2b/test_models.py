@@ -136,7 +136,8 @@ def test_event_id_no_delimiter_collision() -> None:
 
 def test_anonymous_visits_do_not_collide() -> None:
     """Visits with no identity fields fall back to a full-payload hash so they
-    don't all collapse onto one id."""
+    don't all collapse onto one id.
+    """
     a = compute_event_id({"City": "Brooklyn", "State": "NY"})
     b = compute_event_id({"City": "Austin", "State": "TX"})
     assert a != b

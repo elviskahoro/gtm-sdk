@@ -6,7 +6,6 @@ import zipfile
 from pathlib import Path
 from typing import cast
 
-
 PACKER = (
     Path(__file__).parents[2]
     / ".github"
@@ -38,7 +37,7 @@ def _write_distribution(
 def _pack(site_packages: Path) -> dict[str, int]:
     namespace = runpy.run_path(str(PACKER))
     pack_site_packages = namespace["pack_site_packages"]
-    return cast(dict[str, int], pack_site_packages(site_packages))
+    return cast("dict[str, int]", pack_site_packages(site_packages))
 
 
 def test_packer_archives_pure_python_and_preserves_metadata(tmp_path: Path) -> None:

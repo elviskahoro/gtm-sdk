@@ -14,7 +14,6 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-
 # Anchored on this file's path (not CWD) so `uv run python -m cli.main webhook list`
 # resolves the same registry regardless of where the user invoked it from.
 # cli/webhook/registry.py → repo root is parents[2].

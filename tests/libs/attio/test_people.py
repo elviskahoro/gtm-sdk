@@ -12,7 +12,8 @@ import pytest
 def test_get_person_values_email_match_uses_email_only(mock_search) -> None:
     """T6: matching_attribute=email selects on the email identity only, never
     OR-ing in linkedin/github_handle. Asserting the underlying search runs with
-    only `email` populated captures the single-identity contract."""
+    only `email` populated captures the single-identity contract.
+    """
     mock_search.return_value = []  # no match -> short-circuits before any GET
 
     from libs.attio.people import get_person_values
@@ -64,7 +65,8 @@ def test_get_person_values_github_handle_picks_canonical_on_multimatch(
     The read must select the SAME canonical record upsert_person writes to (the
     lexicographically-smallest record_id), then read THAT record's values — not
     whichever row Attio yields first — so merge_only_if_empty stays aligned with
-    the write."""
+    the write.
+    """
     from libs.attio.models import PersonSearchResult
     from libs.attio.people import get_person_values
 
@@ -93,7 +95,8 @@ def test_get_person_values_raises_when_required_identifier_missing(
     mock_get_client,
 ) -> None:
     """T8: ValueError when matching_attribute is set but the corresponding
-    identifier is None. Attio client must not be invoked."""
+    identifier is None. Attio client must not be invoked.
+    """
     from libs.attio.people import get_person_values
 
     with pytest.raises(ValueError, match="github_handle"):
@@ -146,7 +149,9 @@ def test_get_person_values_linkedin_expands_url_variants(mock_get_client) -> Non
 @patch("libs.attio.people.get_client")
 def test_update_person_missing_selector_is_validation_error(mock_get_client) -> None:
     """A missing id+email is a client-input error (→400), not a lookup miss
-    (→404). Guards the AttioNotFoundError→AttioValidationError split (ai-h5y)."""
+    (→404). Guards the AttioNotFoundError→AttioValidationError split (ai-h
+    5y).
+    """
     from libs.attio.errors import AttioValidationError
     from libs.attio.models import PersonInput
     from libs.attio.people import update_person

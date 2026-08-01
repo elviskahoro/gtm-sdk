@@ -9,11 +9,11 @@ from libs.fathom.models import ActionItem, Assignee
 from libs.meetings import canonical_meeting_uid
 from src.attio.ops import (
     CompanyRef,
-    UpsertNote,
     MeetingExternalRef,
     MeetingRef,
     PersonRef,
     UpsertMeeting,
+    UpsertNote,
 )
 from src.fathom.webhook.call import Webhook
 

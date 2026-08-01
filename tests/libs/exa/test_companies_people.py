@@ -6,7 +6,7 @@ from libs.exa.companies import find_companies
 from libs.exa.people import find_people
 
 
-def test_find_companies_pins_category():
+def test_find_companies_pins_category() -> None:
     """Test that find_companies pins category='company'."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -23,7 +23,7 @@ def test_find_companies_pins_category():
         assert search_input.query == "Snowflake"
 
 
-def test_find_companies_default_num_results():
+def test_find_companies_default_num_results() -> None:
     """Test that find_companies uses num_results=5 by default."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -35,7 +35,7 @@ def test_find_companies_default_num_results():
         assert search_input.num_results == 5
 
 
-def test_find_companies_custom_num_results():
+def test_find_companies_custom_num_results() -> None:
     """Test that find_companies respects custom num_results."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -47,7 +47,7 @@ def test_find_companies_custom_num_results():
         assert search_input.num_results == 20
 
 
-def test_find_companies_include_highlights():
+def test_find_companies_include_highlights() -> None:
     """Test that find_companies sets highlights when include_highlights=True."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -63,7 +63,7 @@ def test_find_companies_include_highlights():
         )
 
 
-def test_find_companies_output_schema():
+def test_find_companies_output_schema() -> None:
     """Test that find_companies accepts output_schema."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -77,7 +77,7 @@ def test_find_companies_output_schema():
         assert search_input.output_schema == schema
 
 
-def test_find_people_pins_category():
+def test_find_people_pins_category() -> None:
     """Test that find_people pins category='people'."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -94,7 +94,7 @@ def test_find_people_pins_category():
         assert search_input.query == "CEO of Anthropic"
 
 
-def test_find_people_default_num_results():
+def test_find_people_default_num_results() -> None:
     """Test that find_people uses num_results=5 by default."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05
@@ -106,7 +106,7 @@ def test_find_people_default_num_results():
         assert search_input.num_results == 5
 
 
-def test_find_people_custom_num_results():
+def test_find_people_custom_num_results() -> None:
     """Test that find_people respects custom num_results."""
     mock_search = MagicMock()
     mock_search.return_value.cost_dollars = 0.05

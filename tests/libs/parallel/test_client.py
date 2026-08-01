@@ -18,13 +18,13 @@ from libs.parallel.models import (
 )
 
 
-def test_search_input_defaults():
+def test_search_input_defaults() -> None:
     inp = SearchInput(objective="find acme")
     assert inp.mode == "one-shot"
     assert inp.max_results == 10
 
 
-def test_findall_create_input_requires_fields():
+def test_findall_create_input_requires_fields() -> None:
     inp = FindAllCreateInput(
         objective="find",
         entity_type="company",
@@ -34,17 +34,17 @@ def test_findall_create_input_requires_fields():
     assert inp.generator == "base"
 
 
-def test_extract_excerpts_input():
+def test_extract_excerpts_input() -> None:
     inp = ExtractExcerptsInput(url="https://acme.com", objective="funding")
     assert inp.url == "https://acme.com"
 
 
-def test_extract_full_content_input():
+def test_extract_full_content_input() -> None:
     inp = ExtractFullContentInput(url="https://acme.com")
     assert inp.url == "https://acme.com"
 
 
-def test_findall_lookup_input():
+def test_findall_lookup_input() -> None:
     inp = FindAllLookupInput(findall_id="fa_123")
     assert inp.findall_id == "fa_123"
 

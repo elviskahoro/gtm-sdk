@@ -142,7 +142,7 @@ def bootstrap_secret() -> modal.Secret:
 
 
 @contextmanager
-def _activate_key_scopes(resolved: dict[str, str]) -> Generator[None, None, None]:
+def _activate_key_scopes(resolved: dict[str, str]) -> Generator[None]:
     with ExitStack() as stack:
         for name, value in resolved.items():
             scope_fn = KEY_SCOPES.get(name)
@@ -153,7 +153,7 @@ def _activate_key_scopes(resolved: dict[str, str]) -> Generator[None, None, None
 
 
 @contextmanager
-def hydrate(*keys: str) -> Generator[dict[str, str], None, None]:
+def hydrate(*keys: str) -> Generator[dict[str, str]]:
     """Fetch ``keys`` from Infisical and bind them into per-lib scopes.
 
     Usage:

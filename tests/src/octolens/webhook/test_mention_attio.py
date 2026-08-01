@@ -502,7 +502,8 @@ def test_sentiment_or_none_normalizes_case_and_whitespace(
 
 def test_lowercase_sentiment_label_reaches_attio_mention() -> None:
     """Lower-case sentiment labels (as sent by live Octolens payloads) must
-    survive normalization and land on the Attio UpsertMention op."""
+    survive normalization and land on the Attio UpsertMention op.
+    """
     payload = json.loads((SAMPLES_DIR / SAMPLE_FILES[0]).read_text())
     payload["data"]["sentimentLabel"] = "neutral"
     payload["data"]["relevanceScore"] = "high"

@@ -32,7 +32,6 @@ from .models import (
     SearchResultItem,
 )
 
-
 _api_key_var: ContextVar[str | None] = ContextVar(
     "parallel_api_key",
     default=None,
@@ -40,7 +39,7 @@ _api_key_var: ContextVar[str | None] = ContextVar(
 
 
 @contextmanager
-def api_key_scope(api_key: str) -> Generator[None, None, None]:
+def api_key_scope(api_key: str) -> Generator[None]:
     """Bind ``api_key`` as the active Parallel key for this async/sync context.
 
     Mirrors :func:`libs.attio.client.api_key_scope`. The scope is reset on
@@ -68,7 +67,7 @@ def _get_client(api_key: str | None = None):
             "(2) call inside libs.parallel.client.api_key_scope(...), "
             "(3) set PARALLEL_API_KEY in the process environment.",
         )
-    parallel_client_class = getattr(parallel_sdk, "Parallel")
+    parallel_client_class = parallel_sdk.Parallel
     return parallel_client_class(api_key=token)
 
 

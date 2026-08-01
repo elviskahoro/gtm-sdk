@@ -44,7 +44,7 @@ def patch_candidates(monkeypatch):
     return _set
 
 
-def test_no_candidates_returns_none(patch_candidates):
+def test_no_candidates_returns_none(patch_candidates) -> None:
     patch_candidates([])
     assert (
         meeting_match.resolve_meeting_id_by_participants(
@@ -55,7 +55,7 @@ def test_no_candidates_returns_none(patch_candidates):
     )
 
 
-def test_single_overlapping_candidate_matches(patch_candidates):
+def test_single_overlapping_candidate_matches(patch_candidates) -> None:
     patch_candidates(
         [_candidate("m1", minute_offset=0, emails=["a@dlthub.com", "b@acme.com"])],
     )
@@ -68,7 +68,9 @@ def test_single_overlapping_candidate_matches(patch_candidates):
     )
 
 
-def test_subset_participants_still_match_via_overlap_coefficient(patch_candidates):
+def test_subset_participants_still_match_via_overlap_coefficient(
+    patch_candidates,
+) -> None:
     # Calendar meeting has MORE attendees than Fathom captured — overlap
     # coefficient is 1.0 (Fathom set ⊆ calendar set), so it still matches.
     patch_candidates(
@@ -89,7 +91,7 @@ def test_subset_participants_still_match_via_overlap_coefficient(patch_candidate
     )
 
 
-def test_non_overlapping_candidate_is_not_matched(patch_candidates):
+def test_non_overlapping_candidate_is_not_matched(patch_candidates) -> None:
     # A different meeting in the same window with no shared participants must not
     # be matched — better to create a fresh meeting than mis-attach.
     patch_candidates(
@@ -104,7 +106,7 @@ def test_non_overlapping_candidate_is_not_matched(patch_candidates):
     )
 
 
-def test_clear_winner_by_overlap_then_proximity(patch_candidates):
+def test_clear_winner_by_overlap_then_proximity(patch_candidates) -> None:
     patch_candidates(
         [
             _candidate("far", minute_offset=8, emails=["a@dlthub.com", "b@acme.com"]),
@@ -120,7 +122,7 @@ def test_clear_winner_by_overlap_then_proximity(patch_candidates):
     )
 
 
-def test_tie_without_llm_falls_back_deterministically(patch_candidates):
+def test_tie_without_llm_falls_back_deterministically(patch_candidates) -> None:
     # Two indistinguishable candidates (same overlap, same proximity): with the
     # LLM disabled the matcher returns a stable deterministic pick (min id).
     patch_candidates(
@@ -139,7 +141,7 @@ def test_tie_without_llm_falls_back_deterministically(patch_candidates):
     )
 
 
-def test_prefers_calendar_synced_over_api_duplicate(patch_candidates):
+def test_prefers_calendar_synced_over_api_duplicate(patch_candidates) -> None:
     # Same slot, same participants: a calendar-synced (system) meeting and an
     # api-token duplicate a prior run minted. The matcher must pick the system
     # one so the recording attaches to the canonical calendar meeting (ai-4bz).
@@ -169,7 +171,7 @@ def test_prefers_calendar_synced_over_api_duplicate(patch_candidates):
     )
 
 
-def test_empty_participant_emails_returns_none(patch_candidates):
+def test_empty_participant_emails_returns_none(patch_candidates) -> None:
     patch_candidates(
         [_candidate("m1", minute_offset=0, emails=["a@dlthub.com"])],
     )
