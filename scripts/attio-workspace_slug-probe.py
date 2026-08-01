@@ -115,8 +115,8 @@ def _cache_key_tag(api_key: str) -> str:
     """Return the stable, non-secret tag used to partition Dagger caches."""
     # This is a cache partition identifier, not password storage; the API key
     # is never persisted, logged, or emitted by this function.
-    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.blake2b(
+        # codeql[py/weak-sensitive-data-hashing]
         api_key.encode("utf-8"),
         key=_CACHE_TAG_KEY,
         digest_size=8,
