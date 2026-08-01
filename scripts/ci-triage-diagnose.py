@@ -48,9 +48,17 @@ import pathlib as _pathlib
 import sys as _sys
 
 _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1]))
-from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 
-if __name__ == "__main__":
+# Optional, not required -- see the same guard in ci-triage-linear-issue.py. The
+# Dagger container mounts this script alone, so `scripts/lib/` is absent there
+# and its dependency is already pip-installed; importing the bootstrap
+# unconditionally killed the containerized path before main() ran.
+try:
+    from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
+except (ImportError, OSError):  # pragma: no cover - exercised by the container test
+    _bootstrap_uv = None  # type: ignore[assignment]
+
+if __name__ == "__main__" and _bootstrap_uv is not None:
     _bootstrap_uv(script_path=__file__, mode="script")
 
 import argparse

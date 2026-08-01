@@ -7,8 +7,13 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import ClassVar
 
 import pytest
+from gtm_linear import PaginationOrderBy
+
+# The window CI triage reads back when looking for an open ticket to bump.
+TRIAGE_ISSUE_WINDOW = 100
 
 
 class _CapturingFakeLinear:
@@ -100,6 +105,9 @@ def _install_async_sdk(monkeypatch, queries_cls, mutations_cls) -> None:
     fake.LinearClient = _FakeAsyncClient  # type: ignore[attr-defined]
     fake.LinearQueries = queries_cls  # type: ignore[attr-defined]
     fake.LinearMutations = mutations_cls  # type: ignore[attr-defined]
+    # Real enum: the adapter must pass the member the SDK actually accepts, and
+    # 0.1.0 renamed these from UPPER_SNAKE to lowerCamel.
+    fake.PaginationOrderBy = PaginationOrderBy  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "gtm_linear", fake)
 
 
@@ -150,6 +158,74 @@ def test_create_issue_async_invokes_mutations(monkeypatch) -> None:
     result = create_issue("input-sentinel")  # type: ignore[arg-type]
     assert result == "created-issue"
     assert seen["payload"] == "input-sentinel"
+
+
+def test_get_team_by_key_invokes_queries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mutations only take team UUIDs, so key -> UUID is its own round-trip."""
+    seen: dict[str, object] = {}
+
+    class _Queries:
+        def __init__(self, _client: object) -> None: ...
+
+        async def get_team_by_key(self, key: str) -> str:
+            seen["key"] = key
+            return "team-payload"
+
+    class _Mutations:
+        def __init__(self, _client: object) -> None: ...
+
+    _install_async_sdk(monkeypatch, _Queries, _Mutations)
+    monkeypatch.setenv("LINEAR_API_KEY", "k")
+
+    from libs.linear.client import get_team_by_key
+
+    assert get_team_by_key("AI") == "team-payload"
+    assert seen["key"] == "AI"
+
+
+def test_list_open_team_issues_filters_and_orders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CI-triage dedupe query.
+
+    Every part of this is load-bearing: without the state filter a closed
+    triage ticket keeps absorbing new failures, and without the ordering
+    "newest open issue" is whatever Linear felt like returning.
+    """
+    seen: dict[str, object] = {}
+
+    class _Page:
+        nodes: ClassVar[list[str]] = ["issue-a", "issue-b"]
+
+    class _Queries:
+        def __init__(self, _client: object) -> None: ...
+
+        async def list_issues_page(
+            self,
+            filter_: object,
+            first: int,
+            order_by: object,
+        ) -> _Page:
+            seen["filter"] = filter_
+            seen["first"] = first
+            seen["order_by"] = order_by
+            return _Page()
+
+    class _Mutations:
+        def __init__(self, _client: object) -> None: ...
+
+    _install_async_sdk(monkeypatch, _Queries, _Mutations)
+    monkeypatch.setenv("LINEAR_API_KEY", "k")
+
+    from libs.linear.client import list_open_team_issues
+
+    assert list_open_team_issues("team-uuid") == ["issue-a", "issue-b"]
+    assert seen["filter"] == {
+        "team": {"id": {"eq": "team-uuid"}},
+        "state": {"type": {"nin": ["completed", "canceled"]}},
+    }
+    assert seen["first"] == TRIAGE_ISSUE_WINDOW, "the window CI triage relies on"
+    assert seen["order_by"] is PaginationOrderBy.updatedAt
 
 
 def test_api_key_scope_nests(monkeypatch, _fake_sdk) -> None:
