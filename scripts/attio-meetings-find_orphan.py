@@ -193,7 +193,7 @@ def main() -> int:
         )
 
     meetings = []
-    system_count = api_token_count = other_count = 0
+    system_count = api_created_count = other_count = 0
     for candidate in iter_meetings_in_range(start=start, end=end):
         # Check the cap BEFORE consuming so --limit N scans exactly N meetings.
         if args.limit is not None and len(meetings) >= args.limit:
@@ -202,7 +202,7 @@ def main() -> int:
         if candidate.created_by_type == "system":
             system_count += 1
         elif candidate.created_by_type == "api-token":
-            api_token_count += 1
+            api_created_count += 1
         else:
             other_count += 1
 
@@ -212,7 +212,7 @@ def main() -> int:
 
     print(
         f"# scanned={len(meetings)} system={system_count} "
-        f"api-token={api_token_count} other={other_count}",
+        f"api-token={api_created_count} other={other_count}",
     )
     print(f"# confident={len(confident)} review={len(review)}")
     print(f"# confident -> {paths['confident']}")
