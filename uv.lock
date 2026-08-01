@@ -307,18 +307,6 @@ wheels = [
 ]
 
 [[package]]
-name = "cross-web"
-version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/a0/bdb8370215987cc5bde497cb8b976b17ab14841566ecef2aab6ae3e6c7b0/cross_web-0.7.0.tar.gz", hash = "sha256:15fbc8b9a824a055db8127fd6e43e0773074f620fdecb6b2b587d3d0a2bdd459", size = 332407, upload-time = "2026-05-19T14:18:48.849Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/4a/78b52ec2edcbd9b123638f4e0421fd8699ebe653ebf63ac5f82abd2665bc/cross_web-0.7.0-py3-none-any.whl", hash = "sha256:ddea9be3c68b48eaf16561847a5831a559786949c544b3701432e00a4e8d19d9", size = 25207, upload-time = "2026-05-19T14:18:47.614Z" },
-]
-
-[[package]]
 name = "cryptography"
 version = "49.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1131,7 +1119,7 @@ requires-dist = [
     { name = "flatsplode", specifier = ">=0.2.0" },
     { name = "gcsfs", specifier = ">=2026.7.0" },
     { name = "gtm-apollo", specifier = ">=0.0.2" },
-    { name = "gtm-linear", specifier = ">=0.0.2" },
+    { name = "gtm-linear", specifier = ">=0.1.0" },
     { name = "ibis-framework" },
     { name = "infisicalsdk", specifier = ">=1.0.16" },
     { name = "logfire", specifier = ">=4.32.1" },
@@ -1225,15 +1213,16 @@ wheels = [
 
 [[package]]
 name = "gtm-linear"
-version = "0.0.2"
+version = "0.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
-    { name = "strawberry-graphql" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/04/907fbe7a0e9dd5498e167a01e20969a2177eb80dcd8881936a9739964072/gtm_linear-0.0.2.tar.gz", hash = "sha256:4a940b521570c77a93ba329755df57e6390a3d9429891c4867ce0508e908ee6b", size = 10406, upload-time = "2026-05-30T19:52:10.765Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/c5/70c84697e25531dc1284d74d02aebb770c2e7f02181b8fe9b4d503eaf60c/gtm_linear-0.1.0.tar.gz", hash = "sha256:9b87e7f2bac6c5bbdfbe3e34508286180c5eb12827c2f0dd099574126c52127e", size = 238984, upload-time = "2026-08-01T01:21:33.67Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/28/7b0d23436ececb00b9b7ae684a4f54317f95baf79e21f35ed348eab057c5/gtm_linear-0.0.2-py3-none-any.whl", hash = "sha256:3af6e0a30b8df3a8e01625a445b080802e1249d6173918efb2b0f64262d7cff0", size = 12825, upload-time = "2026-05-30T19:52:09.586Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/d9/64fefc85f145dfa284aa94ec5f575a90ec1866c0bce3b10ccfaa1c6db6d0/gtm_linear-0.1.0-py3-none-any.whl", hash = "sha256:c5281cc4dd4043b52e6e1588fa9d1fafceafeb509bb133505ba1011682926e77", size = 29261, upload-time = "2026-08-01T01:21:32.536Z" },
 ]
 
 [[package]]
@@ -2600,22 +2589,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/6d/90764092216fa560f6587f83bb70113a8ba510ba436c6476a2b47359057c/stevedore-5.7.0.tar.gz", hash = "sha256:31dd6fe6b3cbe921e21dcefabc9a5f1cf848cf538a1f27543721b8ca09948aa3", size = 516200, upload-time = "2026-02-20T13:27:06.765Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/69/06/36d260a695f383345ab5bbc3fd447249594ae2fa8dfd19c533d5ae23f46b/stevedore-5.7.0-py3-none-any.whl", hash = "sha256:fd25efbb32f1abb4c9e502f385f0018632baac11f9ee5d1b70f88cc5e22ad4ed", size = 54483, upload-time = "2026-02-20T13:27:05.561Z" },
-]
-
-[[package]]
-name = "strawberry-graphql"
-version = "0.316.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cross-web" },
-    { name = "graphql-core" },
-    { name = "packaging" },
-    { name = "python-dateutil" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/09/f189fd3c70544322eeba0398ccaa980d17857894c0a66d447aa0b5704686/strawberry_graphql-0.316.0.tar.gz", hash = "sha256:bee5ce0e20d522325bd1ed2db186c812c03c2ea7db29f997b35e7d694649820c", size = 223985, upload-time = "2026-05-19T17:06:10.443Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/dd/b2cf54803cbd0d37e3ce73c7274bdb144ba83743bc83351b5790eb2a5fad/strawberry_graphql-0.316.0-py3-none-any.whl", hash = "sha256:222e16fbbf953f5a1fa75f62bf9a8e95f274180f928f70bec459b566053aa2cb", size = 326530, upload-time = "2026-05-19T17:06:07.844Z" },
 ]
 
 [[package]]

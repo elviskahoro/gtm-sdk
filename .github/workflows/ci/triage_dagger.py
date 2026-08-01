@@ -17,13 +17,18 @@ CI resolves ``python`` to a dedicated dagger-io/anyio venv via ``$GITHUB_PATH``
 (see ``.github/workflows/agent-ci-triage.yml``), so the CI invocation stays a bare
 ``dagger run python "${pipeline}"``.
 
-Why the container is deliberately tiny: the filing script is stdlib-only, so this
-image needs no ``uv sync`` and no dependency resolution at all -- just a pinned
-interpreter, one script, and the diagnosis file. Only ``scripts/`` is mounted
-rather than the repo root, which keeps the context small and means a broken
-lockfile or a poisoned working tree cannot influence the filing step. That
+Why the container is deliberately tiny: it installs exactly one pinned wheel and
+mounts exactly two paths -- the filing script and the ``libs/linear`` adapter it
+calls. No ``uv sync``, no lockfile, no repo dependency graph, so a broken
+lockfile or a poisoned working tree still cannot influence the filing step. That
 matters here more than usual: this pipeline runs *because* something in CI is
 already broken.
+
+The ``pip install`` is its own ``with_exec``, placed before the mounts so the
+layer caches on the base image and the pin alone -- a diagnosis file changing
+every run must not re-resolve the dependency. Keep ``GTM_LINEAR_PIN`` in lockstep
+with the PEP 723 header in ``scripts/ci-triage-linear-issue.py``; a test asserts
+they agree. Same shape as ``triage_diagnose_dagger.py``'s ``OZ_SDK_PIN``.
 
 The Linear key is forwarded as a Dagger secret, so it lands as an env var the
 script reads without being baked into an image layer or echoed into the build
@@ -49,6 +54,10 @@ from dagger import dag
 
 CONTAINER_IMAGE = "python:3.13-slim"
 
+# Keep in lockstep with the PEP 723 header in the filing script and with the
+# project's floor -- tests/workflows/test_triage_workflow.py enforces all three.
+GTM_LINEAR_PIN = "gtm-linear==0.1.0"
+
 WORKDIR = "/work"
 SCRIPT_NAME = "ci-triage-linear-issue.py"
 SCRIPT_IN_CONTAINER = f"{WORKDIR}/scripts/{SCRIPT_NAME}"
@@ -71,6 +80,10 @@ def build_container(
 ) -> dagger.Container:
     """Build the filing container. Caller must be inside ``dagger.connection(...)``."""
     scripts = dag.host().directory("scripts", include=[SCRIPT_NAME])
+    # The adapter, and only the adapter. `libs/linear/client.py` imports nothing
+    # but stdlib at runtime (every `gtm_linear` import is lazy or TYPE_CHECKING),
+    # so this pulls in two small files rather than the `libs/` tree.
+    libs = dag.host().directory("libs", include=["__init__.py", "linear/**"])
     diagnosis = dag.host().file(str(diagnosis_host_path))
     secret = dag.set_secret("linear-api-key", api_key)
 
@@ -81,7 +94,9 @@ def build_container(
     return (
         dag.container()
         .from_(CONTAINER_IMAGE)
+        .with_exec(["pip", "install", "--no-cache-dir", "--quiet", GTM_LINEAR_PIN])
         .with_directory(f"{WORKDIR}/scripts", scripts)
+        .with_directory(f"{WORKDIR}/libs", libs)
         .with_file(DIAGNOSIS_IN_CONTAINER, diagnosis)
         .with_secret_variable("LINEAR_API_KEY", secret)
         .with_workdir(WORKDIR)

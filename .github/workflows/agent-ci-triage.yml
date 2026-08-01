@@ -189,6 +189,17 @@ jobs:
             "dagger-io==0.21.7" "anyio==4.13.0"
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
+      # The host fallback runs the filing script directly, and that script
+      # re-execs itself through `uv run --script` to resolve its PEP 723 pin in
+      # an ephemeral env (never `uv sync`, never this repo's lockfile). Without
+      # `uv` on PATH the bootstrap fails closed and the fallback cannot file
+      # anything -- so install it up front rather than inside the fallback step,
+      # which only runs when things are already going wrong.
+      - name: Install uv for the host fallback
+        if: steps.preflight.outputs.configured == 'true'
+        continue-on-error: true
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
       # Runs the Oz agent through oz-agent-sdk inside a container instead of the
       # `warpdotdev/oz-agent-action` runner action. The SDK is plain Python, which is
       # what makes a fully containerized pipeline possible, and it submits a CLOUD
