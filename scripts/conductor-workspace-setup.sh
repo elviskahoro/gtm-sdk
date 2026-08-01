@@ -247,18 +247,27 @@ if [[ ! -e .beads ]]; then
   if [[ -f .env.local ]]; then
     set -a && source .env.local && set +a
   fi
-  DOLTHUB_API_KEY="${DOLTHUB_API_KEY-}"
+  # DoltHub-hosted remotes authenticate via a `dolt creds` keypair (registered
+  # at dolthub.com/settings/credentials), not DOLT_REMOTE_USER/PASSWORD -- that
+  # env-var pair only applies to a self-hosted `dolt sql-server` remotesapi
+  # authenticated via SQL grants, a different mechanism entirely (ai-429).
+  DOLTHUB_CREDENTIAL="${DOLTHUB_CREDENTIAL-}"
   if command -v infisical >/dev/null 2>&1 && [[ -n ${INFISICAL_TOKEN-} ]] && [[ -n ${INFISICAL_PROJECT_ID-} ]]; then
-    DOLTHUB_API_KEY="$(infisical secrets get DOLTHUB_API_KEY --projectId "${INFISICAL_PROJECT_ID}" --token "${INFISICAL_TOKEN}" --env=dev --plain 2>/dev/null || true)"
+    DOLTHUB_CREDENTIAL="$(infisical secrets get DOLTHUB_CREDENTIAL --projectId "${INFISICAL_PROJECT_ID}" --token "${INFISICAL_TOKEN}" --env=dev --plain 2>/dev/null || true)"
   fi
-  if [[ -n ${DOLTHUB_API_KEY} ]]; then
-    DOLT_REMOTE_USER="elviskahoro" DOLT_REMOTE_PASSWORD="${DOLTHUB_API_KEY}" \
-      bd init --non-interactive --remote "${DOLT_REMOTE_URL}" ||
+  # --skip-agents/--skip-hooks: bd init's default post-clone setup rewrites
+  # AGENTS.md's managed Beads section and installs Claude/Codex integration
+  # files (.codex/, hooks) -- surprising, unrequested repo-file churn on every
+  # sandbox provision. This repo's AGENTS.md/agent tooling is authored by hand;
+  # bd init should only seed the database, not touch either.
+  if [[ -n ${DOLTHUB_CREDENTIAL} ]]; then
+    (echo "${DOLTHUB_CREDENTIAL}" | dolt creds import) &&
+      bd init --non-interactive --skip-agents --skip-hooks --remote "${DOLT_REMOTE_URL}" ||
       echo "warning: could not seed beads DB from ${DOLT_REMOTE_URL}, falling back to a fresh local database"
   else
-    echo "warning: DOLTHUB_API_KEY not available from .env.local or Infisical; falling back to a fresh local Beads database instead of ${DOLT_REMOTE_URL}"
+    echo "warning: DOLTHUB_CREDENTIAL not available from .env.local or Infisical; falling back to a fresh local Beads database instead of ${DOLT_REMOTE_URL}"
   fi
-  [[ ! -e .beads ]] && bd init --non-interactive --init-if-missing
+  [[ ! -e .beads ]] && bd init --non-interactive --skip-agents --skip-hooks --init-if-missing
 fi
 
 # --- Python project ----------------------------------------------------------

@@ -458,7 +458,7 @@ def test_macos_fallback_skips_reinstall_when_a_later_path_entry_is_compatible(
 #
 # A flaky fallback installer (roborev/bd) used to be able to kill the whole
 # `set -e` script before it ever reached the Beads bootstrap block below it,
-# and a `DOLTHUB_API_KEY` that simply never resolved fell back to an empty
+# and a `DOLTHUB_CREDENTIAL` that simply never resolved fell back to an empty
 # local database with no log output at all. Both are regression targets.
 # ---------------------------------------------------------------------------
 
@@ -477,7 +477,7 @@ def test_failed_roborev_install_does_not_abort_setup(tmp_path: Path) -> None:
     )
     # Setup must still reach the Beads bootstrap block after the failure.
     assert (
-        "warning: DOLTHUB_API_KEY not available from .env.local or Infisical"
+        "warning: DOLTHUB_CREDENTIAL not available from .env.local or Infisical"
         in result.stdout
     )
 
@@ -492,7 +492,7 @@ def test_failed_bd_install_reports_a_clear_warning_before_bd_is_needed(
     this fix, the unguarded `curl | bash` pipeline died under `set -e` right
     there with no diagnostic; now the install failure is reported explicitly,
     and the script proceeds into the Beads bootstrap block (reaching the
-    DOLTHUB_API_KEY warning) before failing later for the obvious reason
+    DOLTHUB_CREDENTIAL warning) before failing later for the obvious reason
     (`bd: command not found`) instead of an opaque curl/pipe abort.
     """
     result, _log = _run_setup(
@@ -504,30 +504,57 @@ def test_failed_bd_install_reports_a_clear_warning_before_bd_is_needed(
 
     assert "warning: bd fallback install failed, continuing without bd" in result.stdout
     assert (
-        "warning: DOLTHUB_API_KEY not available from .env.local or Infisical"
+        "warning: DOLTHUB_CREDENTIAL not available from .env.local or Infisical"
         in result.stdout
     )
     assert "bd: command not found" in result.stderr
 
 
-def test_missing_dolthub_api_key_reports_explicit_warning(tmp_path: Path) -> None:
+def test_missing_dolthub_credential_reports_explicit_warning(tmp_path: Path) -> None:
     result, _log = _run_setup(tmp_path, flox_succeeds=False, kernel="Darwin")
 
     assert result.returncode == 0, result.stderr
     assert (
-        "warning: DOLTHUB_API_KEY not available from .env.local or Infisical; "
+        "warning: DOLTHUB_CREDENTIAL not available from .env.local or Infisical; "
         "falling back to a fresh local Beads database instead of "
         "https://doltremoteapi.dolthub.com/elviskahoro/gtm-sdk" in result.stdout
     )
 
 
-def test_available_dolthub_api_key_skips_missing_key_warning(tmp_path: Path) -> None:
-    result, _log = _run_setup(
+def test_available_dolthub_credential_skips_missing_key_warning(tmp_path: Path) -> None:
+    result, log = _run_setup(
         tmp_path,
         flox_succeeds=False,
         kernel="Darwin",
-        extra_env={"DOLTHUB_API_KEY": "test-token"},
+        extra_env={"DOLTHUB_CREDENTIAL": "test-jwk-credential"},
     )
 
     assert result.returncode == 0, result.stderr
-    assert "warning: DOLTHUB_API_KEY not available" not in result.stdout
+    assert "warning: DOLTHUB_CREDENTIAL not available" not in result.stdout
+    # The credential must be imported via `dolt creds import` (the mechanism
+    # DoltHub-hosted remotes actually authenticate with) rather than passed
+    # as DOLT_REMOTE_USER/PASSWORD, which only applies to a self-hosted `dolt
+    # sql-server` remotesapi (ai-429).
+    assert "fallback-dolt creds import" in log.read_text()
+
+
+def test_beads_bootstrap_skips_agent_and_hook_setup() -> None:
+    """`bd init`'s default post-clone setup rewrites AGENTS.md's managed Beads
+    section and installs Claude/Codex integration files (.codex/, git hooks)
+    -- unrequested repo-file churn on every sandbox provision. Both `bd init`
+    calls in the Beads bootstrap block must opt out with --skip-agents and
+    --skip-hooks; this repo's AGENTS.md and agent tooling are authored by hand.
+    """
+    setup_script = SETUP_SCRIPT.read_text()
+    bd_init_lines = [
+        line
+        for line in setup_script.splitlines()
+        if "bd init" in line and not line.strip().startswith("#")
+    ]
+
+    assert bd_init_lines, (
+        "expected at least one `bd init` invocation in the setup script"
+    )
+    for line in bd_init_lines:
+        assert "--skip-agents" in line, line
+        assert "--skip-hooks" in line, line
