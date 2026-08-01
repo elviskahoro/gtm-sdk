@@ -26,5 +26,5 @@ c54beaa921ab43655c6d9ce9abda778bb65297d6
 # style: renaming to webhook
 7329f9d91b9dd113e2cf042ce4b4b8dead0a6ac4
 
-# lint: Lint (2026-08-01)
-4f76221dec24144cdfb2b3d60c72c2b6cdf1c155
+# trunk lint pass (#458), squash-merged (2026-08-01)
+980329ec5f7e426b60a8593d9555e186d97d7f40
