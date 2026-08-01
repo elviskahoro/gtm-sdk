@@ -5,8 +5,8 @@ shell-out pattern (see scripts/hookdeck-connection_events-dump.py) and because
 no programmatic app-listing API is established in this repo yet.
 
 MODAL_TOKEN_ID / MODAL_TOKEN_SECRET must be set in the environment — inject via
-Infisical, never use personal-shell tokens (see CLAUDE.md "Scripted deploy
-pitfalls").
+Infisical, never use personal-shell tokens (see
+scripts/webhooks-handlers-redeploy.py's `_preflight_env`).
 """
 
 from __future__ import annotations

@@ -5,3 +5,8 @@
 # Draft content
 drafts/
 *.draft.mdx
+
+# Directory-scoped agent instructions (repo tooling, not published pages).
+AGENTS.md
+CLAUDE.md
+WARP.md

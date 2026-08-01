@@ -74,3 +74,10 @@ scripts/lib/**/*.pyc
 state.json
 CLAUDE.md
 CLAUDE.local.md
+
+# The `CLAUDE.md` rule above has no leading slash, so it matches at *any*
+# depth. Directory-scoped agent instructions (<dir>/AGENTS.md plus its
+# CLAUDE.md/WARP.md symlinks) are tracked on purpose, and without this
+# negation `git add` drops them silently. The root CLAUDE.md is already
+# tracked, so the rule above is inert there.
+!*/CLAUDE.md

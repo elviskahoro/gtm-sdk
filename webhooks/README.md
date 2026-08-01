@@ -129,7 +129,8 @@ these are what bite:
 
 Additional mitigations (concurrent-invocation lock, atexit-scoped restore,
 Modal-token/secret/Infisical-key/GCS-bucket preflight, signal-routed cleanup)
-are catalogued in `CLAUDE.md` → **Scripted deploy pitfalls**. The CI smoke
+are documented on the functions that implement them in
+`scripts/webhooks-handlers-redeploy.py` — that module is the catalogue. The CI smoke
 test at `tests/scripts/test_deploy_webhook.py` drives the Flox executor
 end-to-end: substitute/restore, cleanup on deploy failure, the
 `MODAL_TOKEN_ID` pop at the preflight, and the environment scrub.

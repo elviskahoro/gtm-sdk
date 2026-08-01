@@ -50,6 +50,12 @@ SDK_INDEX = DOCS_DIR / "sdk" / "index.mdx"
 # imported by pages (no frontmatter of their own), styles is Vale config.
 NON_PAGE_DIRS = {"snippets", "styles", "logo"}
 
+# Agent instruction files. `docs/AGENTS.md` scopes the docs-site conventions to
+# the directory they apply to; CLAUDE.md/WARP.md symlink to it. They are repo
+# tooling, not published pages, and carry a body H1 and no frontmatter by
+# design -- docs/.mintignore keeps them off the site for the same reason.
+NON_PAGE_NAMES = {"AGENTS.md", "CLAUDE.md", "WARP.md"}
+
 MAX_DESCRIPTION_LEN = 300
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
@@ -66,6 +72,8 @@ def _iter_pages() -> list[Path]:
             continue
         rel = path.relative_to(DOCS_DIR)
         if rel.parts and rel.parts[0] in NON_PAGE_DIRS:
+            continue
+        if path.name in NON_PAGE_NAMES:
             continue
         pages.append(path)
     return pages

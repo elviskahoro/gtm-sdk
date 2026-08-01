@@ -144,7 +144,8 @@ Standalone Modal apps under `webhooks/` — one app per (handler, source) pair v
 
 Deploy with `scripts/webhooks-handlers-redeploy.py <handler> <source>` (or `--all`) — never
 `modal deploy webhooks/<file>.py` directly (it fails on the placeholder). Full runbook:
-[`webhooks/README.md`](webhooks/README.md).
+[`webhooks/README.md`](webhooks/README.md); rules for agents working there:
+[`webhooks/AGENTS.md`](webhooks/AGENTS.md).
 
 ## Telemetry
 

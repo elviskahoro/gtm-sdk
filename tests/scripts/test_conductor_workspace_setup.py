@@ -386,7 +386,8 @@ def test_primary_checkout_removes_dangling_beads_symlink(tmp_path: Path) -> None
 # Previously this branch only checked `command -v uv` (presence), so an
 # already-resolvable but *incompatible* uv (e.g. a stray pyenv shim) would
 # skip installation entirely -- see scripts/lib/uv_resolve.py and
-# AGENTS.md "Scripted deploy pitfalls" for the full story. None of the tests
+# scripts/webhooks-handlers-redeploy.py's `_bootstrap_uv` for the full story.
+# None of the tests
 # above exercise a Darwin kernel or a pre-existing incompatible uv at all.
 # ---------------------------------------------------------------------------
 
