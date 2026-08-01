@@ -1,3 +1,5 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
+
 """The triage scripts must import in the minimal tree their containers mount.
 
 ``triage_dagger.py`` and ``triage_diagnose_dagger.py`` each mount a handful of
