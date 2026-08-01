@@ -24,6 +24,12 @@ lockfile or a poisoned working tree still cannot stop a ticket being filed.
 What it does now depend on is PyPI being reachable -- a narrower exposure than
 hand-rolled GraphQL was worth.
 
+``uv run --script`` picks up the sibling ``ci-triage-linear-issue.py.lock``
+script lockfile automatically, so the host path's full transitive closure is
+hash-verified too, not just the top-level pin. Regenerate it with
+``uv lock --script scripts/ci-triage-linear-issue.py`` whenever the PEP 723
+``dependencies`` line changes.
+
 Do not reintroduce a raw-GraphQL fallback path. Every Linear call goes through
 ``libs.linear.client``; that adapter is where the API surface belongs, and a
 second implementation that only runs when the first is missing is a code path

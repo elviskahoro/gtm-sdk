@@ -32,6 +32,19 @@ REPO_ROOT = Path(__file__).parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "agent-ci-triage.yml"
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "triage_dagger.py"
 FILING_SCRIPT = REPO_ROOT / "scripts" / "ci-triage-linear-issue.py"
+FILING_SCRIPT_LOCK = REPO_ROOT / "scripts" / "ci-triage-linear-issue.py.lock"
+GTM_LINEAR_CONSTRAINTS = (
+    REPO_ROOT / ".github" / "workflows" / "ci" / "constraints" / "gtm-linear.txt"
+)
+
+DIAGNOSE_PIPELINE = (
+    REPO_ROOT / ".github" / "workflows" / "ci" / "triage_diagnose_dagger.py"
+)
+DIAGNOSE_SCRIPT = REPO_ROOT / "scripts" / "ci-triage-diagnose.py"
+DIAGNOSE_SCRIPT_LOCK = REPO_ROOT / "scripts" / "ci-triage-diagnose.py.lock"
+OZ_SDK_CONSTRAINTS = (
+    REPO_ROOT / ".github" / "workflows" / "ci" / "constraints" / "oz-agent-sdk.txt"
+)
 
 # Kept in lockstep with tests-unit.yml / tests-integration.yml and with the
 # dagger-io pin the workflow installs.
@@ -282,15 +295,23 @@ def test_pipeline_mounts_only_the_script_and_its_adapter() -> None:
         source
     ), "mount the adapter, not the whole libs tree"
     assert "with_secret_variable" in source, "the key must not be an image layer"
+    assert "dag.host().file(str(CONSTRAINTS_FILE))" in source, (
+        "the hash-locked closure must be mounted, not resolved from PyPI directly"
+    )
 
     # Two execs: the dependency install, then the script. The install comes
     # first so its layer caches on the base image and the pin alone -- a
     # diagnosis file that changes every run must not re-resolve the wheel.
     execs = [line for line in source.splitlines() if ".with_exec(" in line]
     assert len(execs) == PIPELINE_EXEC_COUNT, f"expected two with_exec, found {execs}"
-    assert "pip" in execs[0]
-    assert "GTM_LINEAR_PIN" in execs[0]
     assert "sh" in execs[1], "the exec wraps the script so its exit code is captured"
+
+    install_block = source.split(".with_exec(", 2)[1]
+    assert '"pip"' in install_block
+    assert "--require-hashes" in install_block, (
+        "the closure, not just the top-level pin, must be hash-verified"
+    )
+    assert "CONSTRAINTS_IN_CONTAINER" in install_block
 
     for forbidden in ("uv sync", "apt-get", "uv.lock"):
         assert forbidden not in body, (
@@ -299,7 +320,8 @@ def test_pipeline_mounts_only_the_script_and_its_adapter() -> None:
 
 
 def test_gtm_linear_pin_agrees_everywhere_it_appears() -> None:
-    """The container pin, the script's PEP 723 pin, and the project floor.
+    """The container pin, the script's PEP 723 pin, the project floor, and the
+    hash-locked constraints file.
 
     Drift is invisible until a Linear failure in CI, and then the Dagger path
     and the host fallback would file through different SDK versions.
@@ -322,6 +344,71 @@ def test_gtm_linear_pin_agrees_everywhere_it_appears() -> None:
     )
     assert floor is not None
     assert floor.group(1) == version, "the project floor and the CI pin must not drift"
+
+    constraints = GTM_LINEAR_CONSTRAINTS.read_text(encoding="utf-8")
+    assert f"gtm-linear=={version} \\" in constraints, (
+        "the constraints file the container installs with --require-hashes must "
+        "pin the same version"
+    )
+
+
+def test_oz_sdk_pin_agrees_everywhere_it_appears() -> None:
+    """The diagnose container's pin, its script's PEP 723 pin, and its
+    hash-locked constraints file.
+
+    Mirrors test_gtm_linear_pin_agrees_everywhere_it_appears -- fixing drift
+    detection for one triage pipeline and not the other is half a fix.
+    """
+    pin = re.search(
+        r'OZ_SDK_PIN = "oz-agent-sdk==([^"]+)"',
+        DIAGNOSE_PIPELINE.read_text(encoding="utf-8"),
+    )
+    assert pin is not None, "the pipeline must pin oz-agent-sdk"
+    version = pin.group(1)
+
+    script = DIAGNOSE_SCRIPT.read_text(encoding="utf-8")
+    assert f'dependencies = ["oz-agent-sdk=={version}"' in script, (
+        "the PEP 723 header drives the host fallback; keep it on the container pin"
+    )
+
+    constraints = OZ_SDK_CONSTRAINTS.read_text(encoding="utf-8")
+    assert f"oz-agent-sdk=={version} \\" in constraints, (
+        "the constraints file the container installs with --require-hashes must "
+        "pin the same version"
+    )
+
+
+@pytest.mark.parametrize(
+    "constraints_file",
+    [GTM_LINEAR_CONSTRAINTS, OZ_SDK_CONSTRAINTS],
+    ids=["gtm-linear", "oz-agent-sdk"],
+)
+def test_constraints_file_is_fully_hash_locked(constraints_file: Path) -> None:
+    """Every requirement line carries a hash, not just the top-level pin.
+
+    Catches an accidental regen without `--generate-hashes` -- `pip install
+    --require-hashes` would then refuse everything, but silently, and only
+    inside the container.
+    """
+    lines = constraints_file.read_text(encoding="utf-8").splitlines()
+    requirement_indices = [
+        i for i, line in enumerate(lines) if re.match(r"^[A-Za-z0-9._-]+==", line)
+    ]
+    assert requirement_indices, f"{constraints_file} has no pinned requirements"
+    for i in requirement_indices:
+        assert "--hash=sha256:" in lines[i + 1], (
+            f"{lines[i]!r} in {constraints_file} has no hash on the following line"
+        )
+
+
+def test_script_lockfiles_exist_for_the_host_fallback() -> None:
+    """`uv run --script` picks up a sibling `.lock` file automatically.
+
+    Without it, a host-fallback run resolves the PEP 723 closure fresh from
+    PyPI instead of against a hash-verified lock.
+    """
+    for lockfile in (FILING_SCRIPT_LOCK, DIAGNOSE_SCRIPT_LOCK):
+        assert lockfile.is_file(), f"missing script lockfile: {lockfile}"
 
 
 def test_uv_is_installed_before_the_host_fallback(

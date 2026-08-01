@@ -13,8 +13,12 @@ on the runner any more. Invoked the same way locally and in CI:
 
 Unlike ``triage_dagger.py``, this container does install a dependency
 (``oz-agent-sdk``), so the version is pinned here and nowhere else. It is still a
-minimal image: no repo mount beyond ``scripts/``, no ``uv sync``, no project
-dependency graph -- which matters because this runs precisely when CI is broken.
+minimal image: no repo mount beyond ``scripts/``, no ``uv sync``, no ``uv.lock``, no
+project dependency graph -- which matters because this runs precisely when CI is
+broken. The install uses ``--require-hashes`` against the committed
+``constraints/oz-agent-sdk.txt``, so the transitive closure is hash-verified too,
+not just the top-level pin. Regenerate that file with the command in its own
+header comment whenever ``OZ_SDK_PIN`` changes.
 
 The agent executes on Warp's infrastructure, not in this container, so the
 container never needs repo access. All evidence is passed in as files that the
@@ -54,6 +58,12 @@ DIFF_IN_CONTAINER = f"{WORKDIR}/failing-diff.patch"
 OUTPUT_IN_CONTAINER = f"{WORKDIR}/diagnosis.md"
 RC_IN_CONTAINER = f"{WORKDIR}/diagnose_rc"
 
+# Hash-locked closure for OZ_SDK_PIN, regenerated via the command in its own
+# header comment. `--require-hashes` refuses to install anything -- including a
+# transitive dependency -- that isn't listed here by hash.
+CONSTRAINTS_FILE = Path(__file__).parent / "constraints" / "oz-agent-sdk.txt"
+CONSTRAINTS_IN_CONTAINER = f"{WORKDIR}/constraints.txt"
+
 # The trailing `echo $? > …` always exits 0, so the `with_exec` succeeds and the
 # diagnosis stays exportable; main() reads the real code back and re-raises it. Do
 # not collapse this into a bare command or a `|| true` (ai-eun).
@@ -69,6 +79,25 @@ def _quote(arg: str) -> str:
     return "'" + arg.replace("'", "'\\''") + "'"
 
 
+def _assert_constraints_pin_matches() -> None:
+    """Fail fast if CONSTRAINTS_FILE drifts from OZ_SDK_PIN.
+
+    The pin-agreement test catches this too, but that only runs in CI; this
+    catches it the moment someone bumps the pin locally without regenerating
+    the constraints file. `pip-compile` output is sorted alphabetically, so
+    the pin is not necessarily the first requirement line.
+    """
+    package_name = OZ_SDK_PIN.split("==", 1)[0]
+    lines = CONSTRAINTS_FILE.read_text(encoding="utf-8").splitlines()
+    matches = [line for line in lines if line.startswith(f"{package_name}==")]
+    if not matches or matches[0].split(" \\", 1)[0].strip() != OZ_SDK_PIN:
+        msg = (
+            f"{CONSTRAINTS_FILE} does not pin {OZ_SDK_PIN!r}. Regenerate "
+            "the constraints file (see its header comment for the command)."
+        )
+        raise AssertionError(msg)
+
+
 def build_container(
     *,
     api_key: str,
@@ -77,13 +106,28 @@ def build_container(
     script_args: list[str],
 ) -> dagger.Container:
     """Build the diagnosing container. Caller must be inside ``dagger.connection``."""
+    _assert_constraints_pin_matches()
     scripts = dag.host().directory("scripts", include=[SCRIPT_NAME])
     secret = dag.set_secret("warp-api-key", api_key)
+    constraints = dag.host().file(str(CONSTRAINTS_FILE))
 
     ctr = (
         dag.container()
         .from_(CONTAINER_IMAGE)
-        .with_exec(["pip", "install", "--no-cache-dir", "--quiet", OZ_SDK_PIN])
+        .with_file(CONSTRAINTS_IN_CONTAINER, constraints)
+        # OZ_SDK_PIN is pinned via CONSTRAINTS_FILE; --require-hashes refuses
+        # anything not listed there by hash, closure included.
+        .with_exec(
+            [
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--quiet",
+                "--require-hashes",
+                "-r",
+                CONSTRAINTS_IN_CONTAINER,
+            ],
+        )
         .with_directory(f"{WORKDIR}/scripts", scripts)
         .with_secret_variable("WARP_API_KEY", secret)
     )
