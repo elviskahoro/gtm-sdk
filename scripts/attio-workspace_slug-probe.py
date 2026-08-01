@@ -8,6 +8,11 @@ the workspace the token authenticates against, which is the authoritative way
 to map an API key to its workspace slug — Infisical doesn't store the slug as
 its own secret.
 
+Set `GTM_EXEC_BACKEND` to anything other than `dagger` (i.e. `flox` or `host`)
+to make the same `/v2/self` call in-process via the Attio SDK instead. That is
+the only way to run this on a Conductor cloud sandbox, where Dagger's engine
+cannot start at all — see AGENTS.md "Webhook deploys".
+
 The Infisical environment is explicit (no silent prod default): pass `--env`
 or set `INFISICAL_ENV`. The script auto-bootstraps `infisical run` when
 `ATTIO_API_KEY` isn't already set by reading `gtm-sdk/.env.local` for the
@@ -51,7 +56,11 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.lib.env import infisical_run_example  # noqa: E402
+from scripts.lib.env import (  # noqa: E402
+    ExecBackend,
+    infisical_run_example,
+    resolve_exec_backend,
+)
 
 # Sentinel propagated through `os.execvp` -> `infisical run` -> child python.
 # Prevents an infinite re-bootstrap loop when the chosen Infisical env simply
@@ -160,6 +169,59 @@ async def probe(*, api_key: str, json_output: bool) -> str:
                 f"/v2/self returned non-JSON body: {body!r}",
             ) from exc
     return extract_workspace_slug(body)
+
+
+def probe_without_dagger(*, api_key: str, json_output: bool) -> str:
+    """Call ``GET /v2/self`` in-process, no container involved.
+
+    The container in :func:`probe` exists so the host needs no ``curl`` and so
+    the key is passed as a Dagger secret. Neither buys anything here: the Attio
+    SDK is already a project dependency, the key never leaves this process, and
+    Dagger's engine cannot run on Conductor cloud sandboxes at all (AGENTS.md
+    "Webhook deploys"). So there is no Flox wrapper either — ``flox`` and
+    ``host`` collapse to the same in-process call, and the pinning that matters
+    is ``uv.lock``.
+
+    Deliberately reuses ``libs.attio``: :func:`fetch_token_scopes` is the same
+    ``/v2/self`` round-trip, and its ``active`` flag lets us name an inactive
+    token instead of reporting a missing ``workspace_slug``.
+    """
+    from libs.attio.client import get_client
+    from libs.attio.preflight import fetch_token_scopes
+    from libs.attio.sdk_boundary import describe_attio_error, model_dump_or_empty
+
+    try:
+        if json_output:
+            with get_client(api_key) as client:
+                identity = client.meta.get_v2_self()
+            payload = model_dump_or_empty(identity)
+            if not payload:
+                msg = f"/v2/self response was not serializable to JSON: {identity!r}"
+                raise AttioProbeError(msg)  # noqa: TRY301
+            return json.dumps(payload, indent=2, default=str)
+
+        active, _scopes, workspace_slug = fetch_token_scopes(api_key)
+    except AttioProbeError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        # The generated SDK constrains each endpoint's error `code` to a narrow
+        # Literal, so a valid-but-unlisted code surfaces as a pydantic
+        # ResponseValidationError with Attio's real message buried. Re-parse it.
+        described = describe_attio_error(exc)
+        detail = f"{described.code}: {described.message}" if described else str(exc)
+        msg = f"/v2/self request failed: {detail}"
+        raise AttioProbeError(msg) from exc
+
+    if not active:
+        msg = (
+            "Attio token is inactive (GET /v2/self reported active=false). "
+            "Regenerate it in Attio → Settings → Developers and update Infisical."
+        )
+        raise AttioProbeError(msg)
+    if not workspace_slug:
+        msg = "/v2/self response did not include a workspace_slug."
+        raise AttioProbeError(msg)
+    return workspace_slug
 
 
 def _clean_env(value: str | None) -> str | None:
@@ -327,7 +389,10 @@ def main() -> int:
         return _bootstrap_via_infisical(env, forward)
 
     try:
-        output = asyncio.run(probe(api_key=api_key, json_output=args.json))
+        if resolve_exec_backend() is ExecBackend.DAGGER:
+            output = asyncio.run(probe(api_key=api_key, json_output=args.json))
+        else:
+            output = probe_without_dagger(api_key=api_key, json_output=args.json)
     except (AttioProbeError, ValueError) as exc:
         # ValueError covers extract_workspace_slug raising on inactive tokens
         # where Attio omits workspace_slug entirely.

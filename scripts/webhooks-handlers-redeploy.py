@@ -18,9 +18,20 @@ Usage:
     scripts/webhooks-handlers-redeploy.py <handler> <source>
     scripts/webhooks-handlers-redeploy.py <handler> --all
 
-The ``DAGGER_DRY_RUN=1`` env var swaps the Dagger deploy for a direct
-``infisical run -- uv run modal deploy`` invocation on the host. Used by the
-test suite so CI does not need a Dagger engine running.
+``GTM_EXEC_BACKEND`` selects where the deploy step runs (default ``dagger``):
+
+``dagger``
+    The container path above. Local Mac and CI.
+``flox``
+    ``infisical run -- uv run modal deploy`` wrapped in a Flox activation, so
+    the toolchain comes from ``.flox/env/manifest.lock`` instead of an OCI
+    image. The documented path on Conductor cloud sandboxes, where Dagger's
+    engine cannot run — see AGENTS.md "Webhook deploys".
+``host``
+    The same command against bare ``PATH``, with no pinning. For the
+    stub-binary tests only.
+
+``DAGGER_DRY_RUN=1`` still works as a deprecated alias for ``host`` and warns.
 
 The shebang is a plain ``python3``, not ``uv run python``: ``[tool.uv]
 required-version`` in pyproject.toml makes *any* incompatible ``uv`` binary
@@ -140,6 +151,12 @@ import subprocess  # noqa: E402
 from typing import TYPE_CHECKING, NoReturn  # noqa: E402
 
 import dagger  # noqa: E402
+
+from scripts.lib.env import (  # noqa: E402
+    ExecBackend,
+    resolve_exec_backend,
+    wrap_for_backend,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -919,31 +936,49 @@ async def _deploy_via_dagger(
         ).sync()
 
 
-def _deploy_via_host_subprocess(handler_file: Path) -> None:
-    """Test-only fallback: run modal deploy on the host (no Dagger engine needed).
+def _deploy_without_dagger(handler_file: Path, backend: ExecBackend) -> None:
+    """Run ``modal deploy`` on the host, no Dagger engine required.
 
-    Activated by ``DAGGER_DRY_RUN=1``. Mirrors the bash script's deploy
-    shape so the existing stub-binary tests (``infisical``/``modal``/``uv``
-    in ``tests/scripts/test_deploy_webhook.py``) exercise the same code
-    path without requiring a real Dagger engine in CI.
+    Two backends land here and they are not interchangeable:
+
+    ``flox``
+        The documented path on Conductor cloud sandboxes, where Dagger's engine
+        cannot run at all (see AGENTS.md "Webhook deploys"). The command is
+        wrapped in a Flox activation so the toolchain comes from
+        ``.flox/env/manifest.lock`` — the same *pinned toolchain* guarantee the
+        Dagger image provides, by a different mechanism. ``uv`` is left bare so
+        Flox's ``PATH`` resolves its pinned copy.
+
+    ``host``
+        Bare ``PATH``, no pinning. This exists for the stub-binary tests in
+        ``tests/scripts/test_deploy_webhook.py``, which prepend fake
+        ``infisical``/``modal``/``uv`` executables that a Flox activation would
+        shadow with the real ones. ``uv`` goes through ``_require_uv_path()``
+        because nothing else guarantees a version-compatible one.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
+    uv = "uv" if backend is ExecBackend.FLOX else _require_uv_path()
+    argv = [
+        "infisical",
+        "run",
+        "--projectId",
+        os.environ["INFISICAL_PROJECT_ID"],
+        "--token",
+        os.environ["INFISICAL_TOKEN"],
+        # Honour the caller's environment. This used to be hardcoded to `dev`,
+        # which was survivable while the path was test-only but is not now that
+        # it is an operator-facing backend: an INFISICAL_ENV=prod deploy would
+        # have silently shipped against dev secrets.
+        f"--env={os.environ['INFISICAL_ENV']}",
+        "--",
+        uv,
+        "run",
+        "modal",
+        "deploy",
+        rel,
+    ]
     subprocess.run(
-        [
-            "infisical",
-            "run",
-            "--projectId",
-            os.environ["INFISICAL_PROJECT_ID"],
-            "--token",
-            os.environ["INFISICAL_TOKEN"],
-            "--env=dev",
-            "--",
-            _require_uv_path(),
-            "run",
-            "modal",
-            "deploy",
-            rel,
-        ],
+        wrap_for_backend(argv, backend, required_tools=("uv", "infisical")),
         cwd=REPO_ROOT,
         check=True,
     )
@@ -998,8 +1033,9 @@ def _deploy_one(handler_file: Path, source: str) -> None:
     handler_file.write_text(original.replace(PLACEHOLDER, source))
 
     try:
-        if os.environ.get("DAGGER_DRY_RUN") == "1":
-            _deploy_via_host_subprocess(handler_file)
+        backend = resolve_exec_backend()
+        if backend is not ExecBackend.DAGGER:
+            _deploy_without_dagger(handler_file, backend)
         else:
             modal_token_id, modal_token_secret = _resolve_modal_tokens()
             asyncio.run(

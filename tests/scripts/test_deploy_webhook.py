@@ -232,11 +232,12 @@ def _run_deploy(
     # script header. Tests pin to "dev" since they stub the modal binary
     # and never reach Infisical.
     env.setdefault("INFISICAL_ENV", "dev")
-    # Force the host-subprocess deploy path so the existing infisical/modal/uv
-    # stubs handle the deploy step. The Dagger path is exercised by manual
-    # smoke tests; bringing a Dagger engine into CI would also drag in real
-    # Modal credentials, which defeats the purpose of these stubs.
-    env.setdefault("DAGGER_DRY_RUN", "1")
+    # `host`, not `flox`: these stubs are prepended to PATH, and a Flox
+    # activation would shadow them with the real pinned infisical/modal/uv.
+    # The Dagger path is exercised by manual smoke tests; bringing a Dagger
+    # engine into CI would also drag in real Modal credentials, which defeats
+    # the purpose of these stubs.
+    env.setdefault("GTM_EXEC_BACKEND", "host")
     if env_overrides:
         env.update(env_overrides)
     # Invoke the script with the test's own interpreter rather than
