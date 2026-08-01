@@ -1,3 +1,5 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
+
 """Tests for scripts/ci-triage-linear-issue.py.
 
 The script turns a triage agent's diagnosis into exactly one Linear issue per

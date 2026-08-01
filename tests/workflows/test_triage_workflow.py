@@ -1,3 +1,5 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
+
 """Static invariants for the CI-failure-triage workflow.
 
 Each guard here corresponds to a specific way this workflow could regress into

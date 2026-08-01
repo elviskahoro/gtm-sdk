@@ -1,3 +1,4 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
 # pyright: reportPrivateUsage=none
 # Mirrors tests/libs/parallel/test_client.py — exercises the module-private
 # ``_get_client`` to verify the api_key resolution chain (explicit arg >
