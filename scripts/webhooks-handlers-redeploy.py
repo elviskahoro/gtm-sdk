@@ -632,7 +632,7 @@ def _preflight_flox() -> None:
             "on Linux sandboxes, and falls back to curl installers when it "
             "cannot) or unset GTM_DEPLOY_VIA_FLOX to deploy via Dagger.",
         )
-    probe = subprocess.run(
+    probe = subprocess.run(  # noqa: S603 — argv list, shell disabled
         [*flox_activate_prefix(), "sh", "-c", 'printf %s "$FLOX_ENV"'],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -665,7 +665,7 @@ def _preflight_flox() -> None:
     # A tool can be on the activated PATH without living in $FLOX_ENV/bin
     # (flox composes multiple store paths), so fall back to asking the
     # activation itself before failing.
-    resolved = subprocess.run(
+    resolved = subprocess.run(  # noqa: S603 — argv list, shell disabled
         [*flox_activate_prefix(), "sh", "-c", "command -v uv && command -v git"],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -679,7 +679,7 @@ def _preflight_flox() -> None:
             f".flox/env/manifest.toml) before deploying.",
         )
     print(
-        f"  uv, git resolved inside the activation ✓ ({missing} not in $FLOX_ENV/bin)"
+        f"  uv, git resolved inside the activation ✓ ({missing} not in $FLOX_ENV/bin)",
     )
 
 
@@ -876,7 +876,7 @@ GIT_INSTALL_EXEC: tuple[str, ...] = (
 # deploy land in the same Modal workspace — INFISICAL_ENV (which the deployed
 # app reads at request time) is a payload value and deliberately does not
 # select credentials here.
-MODAL_TOKEN_INFISICAL_ENV = "dev"  # noqa: S105 — an env slug, not a secret
+MODAL_TOKEN_INFISICAL_ENV = "dev"  # noqa: S105 # nosec B105 -- env slug, not a secret
 
 # Throwaway venv for the Flox executor's `uv sync --frozen`, the counterpart of
 # Dagger's `exclude=[".venv/"]` source-mount filter. Flox runs in place on the

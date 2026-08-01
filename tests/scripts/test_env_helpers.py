@@ -5,6 +5,7 @@ self-bootstraps `infisical run` (e.g. attio-meeting_relationship-inspect,
 attio-workspace_slug-probe), so a regression in `parse_dotenv` or credential
 resolution would silently break bootstrap across multiple commands. BD: ai-3hq.
 """
+# ruff: noqa: S101 -- pytest assertions are intentional.
 
 from __future__ import annotations
 

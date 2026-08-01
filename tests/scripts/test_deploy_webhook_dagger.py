@@ -23,6 +23,9 @@ exec slip past the test.
 BD: ai-04d. Roborev flagged this gap during the bash→Python rewrite.
 """
 # trunk-ignore-all(bandit/B106): hardcoded keyword args are test fixtures, not real credentials.
+# ruff: noqa: S101, S106, SLF001 -- asserts are the point of a test file, the
+# fake tokens are fixtures, and pinning the recipe means reaching for the
+# script's private executors and key tuples on purpose.
 
 from __future__ import annotations
 
@@ -511,18 +514,25 @@ def _run_flox(
     script_module: ModuleType,
     deploy_env: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
-) -> list[tuple[tuple[object, ...], dict[str, object]]]:
+) -> list[tuple[list[str], dict[str, object]]]:
     """Invoke ``_deploy_via_flox`` against a stubbed ``subprocess`` module.
 
     Patches ``script_module.subprocess`` wholesale, never
     ``script_module.subprocess.run`` — the script does ``import subprocess``,
     so that attribute is the real stdlib module and patching it would leak
     into every other test in the session.
+
+    Returns ``(argv, kwargs)`` per call. Unpacking the sole positional
+    argument here rather than at each call site keeps the argv typed as a
+    list, so the parity assertions can slice off the activation prefix.
     """
     fake_subprocess = MagicMock(name="subprocess")
     monkeypatch.setattr(script_module, "subprocess", fake_subprocess)
     script_module._deploy_via_flox(HANDLER_FILE, deploy_env=deploy_env)
-    return [(call.args, call.kwargs) for call in fake_subprocess.run.call_args_list]
+    return [
+        (cast("list[str]", call.args[0]), call.kwargs)
+        for call in fake_subprocess.run.call_args_list
+    ]
 
 
 def test_deploy_steps_matches_the_literal_commands(script_module: ModuleType) -> None:
@@ -586,21 +596,21 @@ async def test_executors_run_the_same_recipe(
         list(script_module.GIT_INSTALL_EXEC),
         *[step.argv for step in steps],
     ]
-    assert [args[0] for args, _ in flox_calls] == [
+    assert [argv for argv, _ in flox_calls] == [
         [*script_module.flox_activate_prefix(), *step.argv] for step in steps
     ]
 
     flox_per_step = [
         (
-            list(args[0][len(script_module.flox_activate_prefix()) :]),
+            argv[len(script_module.flox_activate_prefix()) :],
             sorted(k for k in cast("dict[str, str]", kwargs["env"]) if k in deploy_env),
         )
-        for args, kwargs in flox_calls
+        for argv, kwargs in flox_calls
     ]
     # Skip Dagger's git install; compare the recipe steps one-to-one.
     assert flox_per_step == dagger_execs[1:]
 
-    for _args, kwargs in flox_calls:
+    for _argv, kwargs in flox_calls:
         assert kwargs["check"] is True
         assert kwargs["cwd"] == script_module.REPO_ROOT
 
@@ -666,7 +676,7 @@ def test_flox_scrubs_inherited_env_that_would_change_the_artifact(
         monkeypatch,
     )
 
-    for _args, kwargs in flox_calls:
+    for _argv, kwargs in flox_calls:
         child_env = cast("dict[str, str]", kwargs["env"])
         for leaked in (
             "TELEMETRY_COLLECTOR_APP",
@@ -702,8 +712,8 @@ def test_scrub_set_covers_every_key_the_bootstrap_secret_reads(
         "INFISICAL_PROJECT_ID",
         "INFISICAL_HOST",
         "INFISICAL_ENV",
-        *secrets_bootstrap._TELEMETRY_POINTER_KEYS,
-        *secrets_bootstrap._OTEL_SINK_KEYS,
+        *secrets_bootstrap._TELEMETRY_POINTER_KEYS,  # pyright: ignore[reportPrivateUsage]
+        *secrets_bootstrap._OTEL_SINK_KEYS,  # pyright: ignore[reportPrivateUsage]
     }
 
     assert payload_keys <= script_module.deploy_env_scrub_keys()
@@ -748,11 +758,11 @@ def _stub_flox_probes(
     flox_on_path: bool = True,
 ) -> list[list[str]]:
     """Feed ``_preflight_flox`` canned probe results; capture the argvs it ran."""
-    monkeypatch.setattr(
-        script_module.shutil,
-        "which",
-        lambda name: "/usr/bin/flox" if (flox_on_path and name == "flox") else None,
-    )
+
+    def _which(name: str, *_args: object, **_kwargs: object) -> str | None:
+        return "/usr/bin/flox" if (flox_on_path and name == "flox") else None
+
+    monkeypatch.setattr(script_module.shutil, "which", _which)
     seen: list[list[str]] = []
     pending = list(results)
 

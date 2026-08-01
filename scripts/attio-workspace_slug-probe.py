@@ -119,7 +119,8 @@ def probe(*, api_key: str, json_output: bool) -> str:
         # the body is only legible via describe_attio_error's re-parse.
         described = describe_attio_error(exc)
         detail = f"{described.code}: {described.message}" if described else str(exc)
-        raise AttioProbeError(f"/v2/self request failed: {detail}") from exc
+        message = f"/v2/self request failed: {detail}"
+        raise AttioProbeError(message) from exc
 
     payload = model_dump_or_empty(identity)
     if json_output:

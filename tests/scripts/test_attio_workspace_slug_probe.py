@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from collections.abc import Callable
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import pytest
 
 from scripts.lib import env as env_lib
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 SCRIPT_PATH = (
