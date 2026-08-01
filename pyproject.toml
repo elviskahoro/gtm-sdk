@@ -110,6 +110,13 @@ pythonPath = ".venv/bin/python"
 extend = ".trunk/configs/ruff.toml"
 
 [tool.ruff.lint.per-file-ignores]
+# trunk does NOT see this table: it invokes ruff with
+# `--config .trunk/configs/ruff.toml`, which never reads pyproject.toml. So a
+# bare `ruff check` is *more permissive* on tests than the required "Lint and
+# type check with Trunk" gate, and a green local run can still land a red CI.
+# Test files therefore carry their own `# ruff: noqa: S101, ...` headers, and
+# `trunk check --filter=ruff` is the authority. Reproduce CI without trunk via
+# `ruff check --config .trunk/configs/ruff.toml`.
 "tests/**/*.py" = ["S101"]
 
 [dependency-groups]

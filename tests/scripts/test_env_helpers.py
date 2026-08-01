@@ -5,6 +5,7 @@ self-bootstraps `infisical run` (e.g. attio-meeting_relationship-inspect,
 attio-workspace_slug-probe), so a regression in `parse_dotenv` or credential
 resolution would silently break bootstrap across multiple commands. BD: ai-3hq.
 """
+# ruff: noqa: S101 -- pytest assertions are intentional.
 
 from __future__ import annotations
 
@@ -107,6 +108,56 @@ def test_read_infisical_credentials_returns_none_when_absent(
     monkeypatch.delenv("INFISICAL_TOKEN", raising=False)
     monkeypatch.setattr(env, "REPO_ROOT", tmp_path)  # empty dir, no .env.local
     assert env.read_infisical_credentials() is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("1", True),
+        ("true", True),
+        ("True", True),
+        ("  YES  ", True),
+        ("on", True),
+        ("0", False),
+        ("false", False),
+        ("no", False),
+        ("OFF", False),
+    ],
+)
+def test_env_flag_accepts_the_documented_spellings(
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+    *,
+    expected: bool,
+) -> None:
+    monkeypatch.setenv("GTM_TEST_FLAG", raw)
+    assert env.env_flag("GTM_TEST_FLAG") is expected
+
+
+def test_env_flag_unset_or_blank_uses_the_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GTM_TEST_FLAG", raising=False)
+    assert env.env_flag("GTM_TEST_FLAG") is False
+    assert env.env_flag("GTM_TEST_FLAG", default=True) is True
+    # A blank export is "I didn't set this", not "off": `FOO=` is what an
+    # unpopulated shell variable expands to.
+    monkeypatch.setenv("GTM_TEST_FLAG", "   ")
+    assert env.env_flag("GTM_TEST_FLAG", default=True) is True
+
+
+def test_env_flag_rejects_an_unrecognised_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo must raise, not silently resolve to the default.
+
+    The whole point: `GTM_DEPLOY_VIA_FLOX=true` compared against the literal
+    `"1"` used to select the *other* deploy backend without a word.
+    """
+    monkeypatch.setenv("GTM_TEST_FLAG", "yes-please")
+    with pytest.raises(ValueError, match="GTM_TEST_FLAG") as excinfo:
+        env.env_flag("GTM_TEST_FLAG")
+    assert "true" in str(excinfo.value)
 
 
 def test_infisical_run_example_includes_required_flags() -> None:

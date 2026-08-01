@@ -49,8 +49,12 @@ export PATH="${HOME}/.local/bin:${PATH}"
 # --- Flox bootstrap (Linux cloud sandboxes only) ---------------------------
 # Flox = Nix under the hood: declarative manifest (.flox/env/manifest.toml),
 # lockfile-pinned versions, binary-cache installs. Chosen over Dagger for
-# setup tooling because Dagger's engine requires a privileged containerized
-# BuildKit/runc stack that cannot run in these sandboxes (issue #284).
+# setup tooling because Dagger's engine cannot run in these sandboxes:
+# xt_comment is absent from the kernel and unloadable, so CNI bridge setup
+# fails, networkMode="host" is forced, and Dagger's per-exec telemetry proxy
+# assumes a per-exec netns and errors with no fallback. Namespace creation
+# itself works fine -- the "nested runc fails at the kernel level" cause this
+# comment used to record is wrong (issue #284; corrected in #443).
 #
 # macOS: never install Flox unattended (needs Homebrew or an interactive
 # .pkg). If a Mac already has flox on PATH we use it; otherwise the curl

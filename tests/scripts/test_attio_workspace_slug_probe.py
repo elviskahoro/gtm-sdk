@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 # ruff: noqa: PLR2004, S101, SLF001 -- white-box tests intentionally use
-# assertions and exercise the probe's private cache-tag helper.
+# assertions and exercise the probe's private bootstrap sentinel.
 
 import importlib.util
 import json
-from collections.abc import Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Self
 
 import pytest
+
+from scripts.lib import env as env_lib
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 SCRIPT_PATH = (
@@ -29,6 +33,31 @@ def _load_script_module():
     return module
 
 
+def _stub_probe(
+    *,
+    returns: str | None = None,
+    raises: BaseException | None = None,
+    calls: list[tuple[str, bool]] | None = None,
+) -> Callable[..., str]:
+    """Build a stand-in for the module-level `probe`.
+
+    Tests patch `probe` by name rather than an async driver, and the stub
+    takes `api_key` / `json_output` as required keywords so that a `main()`
+    which stopped forwarding either one fails here instead of passing
+    against a permissive `**kwargs` signature.
+    """
+
+    def _probe(*, api_key: str, json_output: bool) -> str:
+        if calls is not None:
+            calls.append((api_key, json_output))
+        if raises is not None:
+            raise raises
+        assert returns is not None
+        return returns
+
+    return _probe
+
+
 @pytest.fixture(autouse=True)
 def _scrub_bootstrap_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[reportUnusedFunction]
     """The bootstrap sentinel is set on `os.environ` directly inside the
@@ -39,47 +68,22 @@ def _scrub_bootstrap_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:  # pyrig
     monkeypatch.delenv(module._BOOTSTRAP_SENTINEL_ENV, raising=False)
 
 
-def test_cache_key_tag_is_deterministic() -> None:
-    module = _load_script_module()
-
-    assert module._cache_key_tag("attio-key-alpha") == module._cache_key_tag(
-        "attio-key-alpha",
-    )
-
-
-def test_cache_key_tag_changes_for_different_api_keys() -> None:
-    module = _load_script_module()
-
-    assert module._cache_key_tag("attio-key-alpha") != module._cache_key_tag(
-        "attio-key-beta",
-    )
-
-
-def test_cache_key_tag_is_a_16_character_hex_tag_without_the_api_key() -> None:
-    module = _load_script_module()
-    api_key_v1 = "attio-key-alpha"
-    expected_v1_tag = "2cf0ad4a214fc3f7"
-
-    tag = module._cache_key_tag(api_key_v1)
-
-    assert tag == expected_v1_tag
-    assert len(tag) == 16
-    assert int(tag, 16) >= 0
-    assert api_key_v1 not in tag
-
-
 def test_missing_creds_shows_canonical_infisical_invocation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    tmp_path: pytest.TempPathFactory,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("ATTIO_API_KEY", raising=False)
     monkeypatch.delenv("INFISICAL_PROJECT_ID", raising=False)
     monkeypatch.delenv("INFISICAL_TOKEN", raising=False)
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "prod"])
+    # The `.env.local` fallback now lives in scripts/lib/env, so point *that*
+    # module at an empty directory — patching the script's own REPO_ROOT would
+    # silently stop covering anything and the test would pass on a machine
+    # with real credentials on disk.
+    monkeypatch.setattr(env_lib, "REPO_ROOT", tmp_path)
 
     module = _load_script_module()
-    monkeypatch.setattr(module, "REPO_ROOT", Path(str(tmp_path)))
 
     exit_code = module.main()
 
@@ -124,12 +128,7 @@ def test_preinjected_api_key_does_not_require_env_flag(
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH)])
 
     module = _load_script_module()
-
-    def fake_asyncio_run(coro: Coroutine[Any, Any, str]) -> str:
-        coro.close()
-        return "acme"
-
-    monkeypatch.setattr(module.asyncio, "run", fake_asyncio_run)
+    monkeypatch.setattr(module, "probe", _stub_probe(returns="acme"))
 
     exit_code = module.main()
 
@@ -284,32 +283,6 @@ def test_extract_workspace_slug_empty_slug_raises() -> None:
         module.extract_workspace_slug(body)
 
 
-def test_parse_dotenv_handles_export_quotes_and_inline_comments() -> None:
-    """`.env.local` files in the wild use `export KEY=value`, quoted values,
-    and inline comments — the parser must accept all three (codex review
-    finding)."""
-    module = _load_script_module()
-    text = "\n".join(
-        [
-            "# top-level comment",
-            "",
-            "INFISICAL_PROJECT_ID=plain-value",
-            'INFISICAL_TOKEN="quoted-value"',
-            "export ALT_PROJECT_ID=exported  # trailing comment",
-            "export ALT_TOKEN='single-quoted'",
-            "BLANK=",
-            "  # indented comment",
-        ],
-    )
-    parsed = module._parse_dotenv(text)
-
-    assert parsed["INFISICAL_PROJECT_ID"] == "plain-value"
-    assert parsed["INFISICAL_TOKEN"] == "quoted-value"
-    assert parsed["ALT_PROJECT_ID"] == "exported"
-    assert parsed["ALT_TOKEN"] == "single-quoted"
-    assert parsed["BLANK"] == ""
-
-
 @pytest.mark.parametrize("non_dict_payload", ["null", "[]", '"a string"', "42"])
 def test_extract_workspace_slug_non_object_payload_raises(
     non_dict_payload: str,
@@ -346,18 +319,14 @@ def test_main_happy_path_prints_slug_only(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Happy-path Dagger flow: probe() returns the slug, main() prints it
-    with a trailing newline to stdout and exits zero."""
+    """Happy path: probe() returns the slug, main() prints it with a
+    trailing newline to stdout and exits zero."""
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev"])
 
     module = _load_script_module()
-
-    def fake_asyncio_run(coro: Coroutine[Any, Any, str]) -> str:
-        coro.close()
-        return "acme"
-
-    monkeypatch.setattr(module.asyncio, "run", fake_asyncio_run)
+    calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(module, "probe", _stub_probe(returns="acme", calls=calls))
 
     exit_code = module.main()
 
@@ -365,6 +334,7 @@ def test_main_happy_path_prints_slug_only(
     assert exit_code == 0
     assert captured.out == "acme\n"
     assert captured.err == ""
+    assert calls == [("test-token-not-real", False)]
 
 
 def test_main_happy_path_json_output(
@@ -381,12 +351,8 @@ def test_main_happy_path_json_output(
         {"active": True, "workspace_slug": "acme"},
         indent=2,
     )
-
-    def fake_asyncio_run(coro: Coroutine[Any, Any, str]) -> str:
-        coro.close()
-        return pretty
-
-    monkeypatch.setattr(module.asyncio, "run", fake_asyncio_run)
+    calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(module, "probe", _stub_probe(returns=pretty, calls=calls))
 
     exit_code = module.main()
 
@@ -394,6 +360,9 @@ def test_main_happy_path_json_output(
     assert exit_code == 0
     assert captured.out == pretty + "\n"
     assert captured.err == ""
+    # `--json` has to reach probe(): it selects which of the two renderings
+    # the single round trip produces.
+    assert calls == [("test-token-not-real", True)]
 
 
 def test_bootstrap_sentinel_blocks_infinite_loop(
@@ -430,19 +399,21 @@ def test_probe_failure_surfaces_attio_error_body_and_exits_nonzero(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A failed Dagger exec / bad Attio response must not dump a traceback —
-    surface a clean stderr message and exit non-zero (codex review finding)."""
+    """A bad Attio response must not dump a traceback — surface a clean
+    stderr message and exit non-zero (codex review finding)."""
     monkeypatch.setenv("ATTIO_API_KEY", "test-token-not-real")
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev"])
 
     module = _load_script_module()
-
-    def fake_asyncio_run(coro: Coroutine[Any, Any, str]) -> str:
-        # Close the unawaited coroutine to suppress RuntimeWarning.
-        coro.close()
-        raise module.AttioProbeError("/v2/self request failed: 401 unauthorized")
-
-    monkeypatch.setattr(module.asyncio, "run", fake_asyncio_run)
+    monkeypatch.setattr(
+        module,
+        "probe",
+        _stub_probe(
+            raises=module.AttioProbeError(
+                "/v2/self request failed: 401 unauthorized",
+            ),
+        ),
+    )
 
     exit_code = module.main()
 
@@ -464,15 +435,15 @@ def test_probe_inactive_token_surfaces_value_error_and_exits_nonzero(
     monkeypatch.setattr("sys.argv", [str(SCRIPT_PATH), "--env", "dev"])
 
     module = _load_script_module()
-
-    def fake_asyncio_run(coro: Coroutine[Any, Any, str]) -> str:
-        # Close the unawaited coroutine to suppress RuntimeWarning.
-        coro.close()
-        raise ValueError(
-            "/v2/self response did not include a workspace_slug: {'active': False}",
-        )
-
-    monkeypatch.setattr(module.asyncio, "run", fake_asyncio_run)
+    monkeypatch.setattr(
+        module,
+        "probe",
+        _stub_probe(
+            raises=ValueError(
+                "/v2/self response did not include a workspace_slug: {'active': False}",
+            ),
+        ),
+    )
 
     exit_code = module.main()
 
@@ -480,3 +451,199 @@ def test_probe_inactive_token_surfaces_value_error_and_exits_nonzero(
     assert exit_code == 1
     assert "attio probe failed:" in captured.err
     assert "workspace_slug" in captured.err
+
+
+class _FakeIdentity:
+    """Stands in for the SDK's /v2/self response model.
+
+    Only `model_dump` matters: `model_dump_or_empty` duck-types on it, so a
+    real pydantic model buys the test nothing.
+    """
+
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def model_dump(self) -> dict[str, object]:
+        return dict(self._payload)
+
+
+class _FakeSdk:
+    """Records the round trips `probe` makes through the Attio SDK."""
+
+    def __init__(
+        self,
+        *,
+        identity: object = None,
+        raises: BaseException | None = None,
+        call_count: list[int] | None = None,
+    ) -> None:
+        self._identity = identity
+        self._raises = raises
+        self._call_count = call_count
+        self.meta = self
+
+    def get_v2_self(self) -> object:
+        if self._call_count is not None:
+            self._call_count.append(1)
+        if self._raises is not None:
+            raise self._raises
+        return self._identity
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+
+def _patch_client(
+    monkeypatch: pytest.MonkeyPatch,
+    module: object,
+    sdk: _FakeSdk,
+    keys_seen: list[str | None] | None = None,
+) -> None:
+    def fake_get_client(api_key: str | None = None) -> _FakeSdk:
+        if keys_seen is not None:
+            keys_seen.append(api_key)
+        return sdk
+
+    monkeypatch.setattr(module, "get_client", fake_get_client)
+
+
+_SELF_PAYLOAD: dict[str, object] = {
+    "active": True,
+    "scope": "record_permission:read",
+    "workspace_id": "00000000-0000-0000-0000-000000000000",
+    "workspace_name": "Acme",
+    "workspace_slug": "acme",
+}
+
+
+def test_probe_returns_the_slug_and_forwards_the_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script_module()
+    calls: list[int] = []
+    keys_seen: list[str | None] = []
+    _patch_client(
+        monkeypatch,
+        module,
+        _FakeSdk(identity=_FakeIdentity(_SELF_PAYLOAD), call_count=calls),
+        keys_seen,
+    )
+
+    assert module.probe(api_key="key-alpha", json_output=False) == "acme"
+    # The key must reach get_client explicitly rather than leaking in via
+    # os.environ, which is what the bootstrap re-exec populates.
+    assert keys_seen == ["key-alpha"]
+    assert len(calls) == 1
+
+
+def test_probe_json_mode_serves_the_same_single_round_trip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--json` changes the rendering, not the number of API calls.
+
+    The Dagger container issued exactly one `GET /v2/self` for both modes;
+    a second call here would be a behaviour change (and a second chance to
+    observe a different workspace).
+    """
+    module = _load_script_module()
+    calls: list[int] = []
+    _patch_client(
+        monkeypatch,
+        module,
+        _FakeSdk(identity=_FakeIdentity(_SELF_PAYLOAD), call_count=calls),
+    )
+
+    output = module.probe(api_key="key-alpha", json_output=True)
+
+    assert json.loads(output) == _SELF_PAYLOAD
+    assert len(calls) == 1
+    # The two modes agree on the payload they were derived from.
+    assert module.extract_workspace_slug(output) == "acme"
+
+
+def test_probe_maps_an_attio_error_envelope_to_code_and_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Attio's real code/message must survive, not pydantic's Literal noise.
+
+    The SDK's `Code` Literal omits most real codes, so the SDK raises a
+    validation error whose str() hides the cause; `describe_attio_error`
+    re-parses `.body` to recover it.
+    """
+    module = _load_script_module()
+
+    class _SdkError(Exception):
+        body = json.dumps(
+            {
+                "status_code": 401,
+                "type": "authentication_error",
+                "code": "unauthorized",
+                "message": "Invalid API key",
+            },
+        )
+
+    _patch_client(monkeypatch, module, _FakeSdk(raises=_SdkError("noise")))
+
+    with pytest.raises(module.AttioProbeError) as excinfo:
+        module.probe(api_key="key-alpha", json_output=False)
+
+    message = str(excinfo.value)
+    assert "unauthorized" in message
+    assert "Invalid API key" in message
+
+
+def test_probe_falls_back_to_str_for_a_non_envelope_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A transport error has no Attio envelope; still one clean message."""
+    module = _load_script_module()
+    _patch_client(
+        monkeypatch,
+        module,
+        _FakeSdk(raises=ConnectionError("connection reset")),
+    )
+
+    with pytest.raises(module.AttioProbeError, match="connection reset"):
+        module.probe(api_key="key-alpha", json_output=False)
+
+
+def test_probe_rejects_a_response_that_carries_no_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An inactive token 200s without a slug: ValueError, not a bare crash.
+
+    `model_dump_or_empty` also yields `{}` for a response the SDK returns as
+    something other than a model, and that lands on the same branch.
+    """
+    module = _load_script_module()
+    _patch_client(
+        monkeypatch,
+        module,
+        _FakeSdk(identity=_FakeIdentity({"active": False})),
+    )
+
+    with pytest.raises(ValueError, match="workspace_slug"):
+        module.probe(api_key="key-alpha", json_output=False)
+
+
+def test_probe_no_longer_depends_on_dagger_or_asyncio() -> None:
+    """The container path is gone, not merely bypassed.
+
+    Without this, deleting the call sites while leaving `import dagger` (and
+    the engine startup cost, plus the scrypt cache-tag it needed) in place
+    would look identical to every other test in this file.
+    """
+    module = _load_script_module()
+
+    assert not hasattr(module, "asyncio")
+    assert not hasattr(module, "dagger")
+    assert not hasattr(module, "PROBE_SCRIPT")
+    assert not hasattr(module, "_cache_key_tag")
+    # The private env helpers moved to scripts/lib/env.py, where a single
+    # implementation is covered by tests/scripts/test_env_helpers.py.
+    assert not hasattr(module, "_parse_dotenv")
+    assert not hasattr(module, "_clean_env")
+    assert not hasattr(module, "_read_infisical_credentials")

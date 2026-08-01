@@ -31,6 +31,34 @@ def infisical_run_example(
     )
 
 
+_TRUE_FLAGS = frozenset({"1", "true", "yes", "on"})
+_FALSE_FLAGS = frozenset({"0", "false", "no", "off"})
+
+
+def env_flag(name: str, *, default: bool = False) -> bool:
+    """Read a boolean toggle from the environment, rejecting typos loudly.
+
+    An `== "1"` comparison silently treats `true`/`yes`/`on` as *off*, which
+    is the worst possible failure mode for a switch that selects between two
+    deploy backends: the operator believes they opted in and gets the other
+    path. Unset or blank falls back to ``default``; an unrecognised value
+    raises ``ValueError`` naming both the variable and the accepted set.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if not value:
+        return default
+    if value in _TRUE_FLAGS:
+        return True
+    if value in _FALSE_FLAGS:
+        return False
+    accepted = ", ".join(sorted(_TRUE_FLAGS | _FALSE_FLAGS))
+    msg = f"{name}={raw!r} is not a boolean. Accepted values: {accepted}."
+    raise ValueError(msg)
+
+
 def add_repo_root_to_sys_path() -> None:
     """Insert the repo root into `sys.path` if a script needs local imports."""
 

@@ -1,8 +1,16 @@
-"""Mock-based tests for `_deploy_via_dagger` in scripts/webhooks-handlers-redeploy.py.
+"""Mock-based tests for both deploy executors in scripts/webhooks-handlers-redeploy.py.
 
 Complements the host-side focused tests and the outer-controller real-container
 smoke stage. These tests pin secrets wiring, source mount exclusions, and the
 uv-sync + modal-deploy SDK call graph without deploying live Modal resources.
+
+They also pin *parity*: `_deploy_via_dagger` and `_deploy_via_flox` must run
+the same `deploy_steps()` with the same credential surface, differing only in
+the isolation layer. The two executors drifted once already — Flox skipped
+`uv sync --frozen` entirely and wrapped the deploy in `infisical run`, whose
+whole-environment injection is baked into the app's Modal Secret by
+`src/secrets_bootstrap.py` — so the parity assertions below are the mechanism
+that keeps "one recipe, two executors" true rather than aspirational.
 
 Each chainable container method (`from_`, `with_directory`, `with_workdir`,
 `with_exec`, `with_secret_variable`) returns a *distinct* mock — not the same
@@ -15,10 +23,14 @@ exec slip past the test.
 BD: ai-04d. Roborev flagged this gap during the bash→Python rewrite.
 """
 # trunk-ignore-all(bandit/B106): hardcoded keyword args are test fixtures, not real credentials.
+# ruff: noqa: S101, S106, SLF001 -- asserts are the point of a test file, the
+# fake tokens are fixtures, and pinning the recipe means reaching for the
+# script's private executors and key tuples on purpose.
 
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,9 +85,9 @@ class _ChainStep:
 def script_module() -> Iterator[ModuleType]:
     """Load scripts/webhooks-handlers-redeploy.py as a module without packaging it.
 
-    The script lives under `scripts/`, which is intentionally excluded from
-    `[tool.setuptools.packages.find]`, so a normal `import` doesn't resolve.
-    Loading via importlib keeps the build config untouched.
+    `scripts*` IS included in `[tool.setuptools.packages.find]`; what blocks a
+    plain `import` is the dash in the filename, which is not a legal Python
+    identifier. importlib is the only way in short of renaming the script.
     """
     spec = importlib.util.spec_from_file_location(_MODULE_NAME, SCRIPT_PATH)
     assert spec is not None and spec.loader is not None
@@ -196,6 +208,18 @@ def test_content_addressed_secret_name_is_stable_and_value_sensitive(
     assert first == "infisical-token-a70bf50e531c"  # trunk-ignore(ruff/S101)
 
 
+def _deploy_env(script_module: ModuleType, *, host: str | None) -> dict[str, str]:
+    """Build the canonical credential dict both executors are handed."""
+    return script_module.deploy_env(
+        modal_token_id="mtok-id",
+        modal_token_secret="mtok-secret",
+        infisical_token="inf-token",
+        infisical_project_id="inf-proj",
+        infisical_env="dev",
+        infisical_host=host,
+    )
+
+
 @pytest.mark.asyncio
 async def test_deploy_via_dagger_with_host(script_module: ModuleType) -> None:
     """All six secrets wire through when INFISICAL_HOST is provided."""
@@ -203,13 +227,8 @@ async def test_deploy_via_dagger_with_host(script_module: ModuleType) -> None:
 
     with patch.object(script_module, "dagger", fake_dagger):
         await script_module._deploy_via_dagger(
-            handler_file=HANDLER_FILE,
-            modal_token_id="mtok-id",
-            modal_token_secret="mtok-secret",
-            infisical_token="inf-token",
-            infisical_project_id="inf-proj",
-            infisical_env="dev",
-            infisical_host="https://app.infisical.com",
+            HANDLER_FILE,
+            deploy_env=_deploy_env(script_module, host="https://app.infisical.com"),
         )
 
     mk_name = script_module._content_addressed_secret_name  # trunk-ignore(ruff/SLF001)
@@ -253,27 +272,22 @@ async def test_deploy_via_dagger_without_host(script_module: ModuleType) -> None
     that would confuse self-host vs. SaaS detection.
     """
     fake_dagger, steps, _ = _build_dagger_mock()
+    deploy_env = _deploy_env(script_module, host=None)
 
     with patch.object(script_module, "dagger", fake_dagger):
-        await script_module._deploy_via_dagger(
-            handler_file=HANDLER_FILE,
-            modal_token_id="mtok-id",
-            modal_token_secret="mtok-secret",
-            infisical_token="inf-token",
-            infisical_project_id="inf-proj",
-            infisical_env="dev",
-            infisical_host=None,
-        )
+        await script_module._deploy_via_dagger(HANDLER_FILE, deploy_env=deploy_env)
 
     set_secret_names = [
         call.args[0] for call in fake_dagger.dag.set_secret.call_args_list
     ]
     assert "infisical-host" not in set_secret_names
-    assert len(set_secret_names) == 5
+    # Counted against the recipe, not a literal 5: the container must carry
+    # exactly the credential surface it was handed, no more and no fewer.
+    assert len(set_secret_names) == len(deploy_env)
 
     env_names = [args[0] for _step, args in _secret_links(steps)]
     assert "INFISICAL_HOST" not in env_names
-    assert len(env_names) == 5
+    assert env_names == list(deploy_env)
 
 
 @pytest.mark.asyncio
@@ -291,13 +305,8 @@ async def test_deploy_via_dagger_container_chain(script_module: ModuleType) -> N
 
     with patch.object(script_module, "dagger", fake_dagger):
         await script_module._deploy_via_dagger(
-            handler_file=HANDLER_FILE,
-            modal_token_id="mtok-id",
-            modal_token_secret="mtok-secret",
-            infisical_token="inf-token",
-            infisical_project_id="inf-proj",
-            infisical_env="dev",
-            infisical_host=None,
+            HANDLER_FILE,
+            deploy_env=_deploy_env(script_module, host=None),
         )
 
     # The exact chainable method that produced each link, in order. Pinning
@@ -462,3 +471,458 @@ def _env_for(secret_name: str) -> str:
         "infisical-env": "INFISICAL_ENV",
         "infisical-host": "INFISICAL_HOST",
     }[secret_name]
+
+
+# ---------------------------------------------------------------------------
+# Executor parity
+# ---------------------------------------------------------------------------
+
+_REL = "webhooks/export_to_attio.py"
+
+
+def _dagger_steps_with_credentials(
+    steps: list[_ChainStep],
+) -> list[tuple[list[str], list[str]]]:
+    """Return ``[(argv, sorted credential env names visible), ...]`` per exec.
+
+    Walks each ``with_exec`` link back up its parent chain counting the
+    ``with_secret_variable`` links above it, so the result says what the
+    container could actually see *at that step* — the property that makes
+    ``uv sync --frozen`` credential-free rather than merely late.
+    """
+    out: list[tuple[list[str], list[str]]] = []
+    for step in steps:
+        produced = step.produced_by
+        if produced is None or produced[0] != "with_exec":
+            continue
+        argv = cast("list[str]", produced[1][0])
+        visible: list[str] = []
+        ancestor = step.parent
+        while ancestor is not None:
+            ancestor_produced = ancestor.produced_by
+            if (
+                ancestor_produced is not None
+                and ancestor_produced[0] == "with_secret_variable"
+            ):
+                visible.append(cast("str", ancestor_produced[1][0]))
+            ancestor = ancestor.parent
+        out.append((argv, sorted(visible)))
+    return out
+
+
+def _run_flox(
+    script_module: ModuleType,
+    deploy_env: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[list[str], dict[str, object]]]:
+    """Invoke ``_deploy_via_flox`` against a stubbed ``subprocess`` module.
+
+    Patches ``script_module.subprocess`` wholesale, never
+    ``script_module.subprocess.run`` — the script does ``import subprocess``,
+    so that attribute is the real stdlib module and patching it would leak
+    into every other test in the session.
+
+    Returns ``(argv, kwargs)`` per call. Unpacking the sole positional
+    argument here rather than at each call site keeps the argv typed as a
+    list, so the parity assertions can slice off the activation prefix.
+    """
+    fake_subprocess = MagicMock(name="subprocess")
+    monkeypatch.setattr(script_module, "subprocess", fake_subprocess)
+    script_module._deploy_via_flox(HANDLER_FILE, deploy_env=deploy_env)
+    return [
+        (cast("list[str]", call.args[0]), call.kwargs)
+        for call in fake_subprocess.run.call_args_list
+    ]
+
+
+def test_deploy_steps_matches_the_literal_commands(script_module: ModuleType) -> None:
+    """The recipe holds the exact argvs, spelled out.
+
+    Sourcing the parity expectations only from ``deploy_steps()`` would make
+    them ``f(x) == f(x)`` — a typo in the recipe would deploy the typo and
+    every assertion would still pass. This is the one place the commands are
+    written independently.
+    """
+    steps = script_module.deploy_steps(_REL)
+
+    assert [step.argv for step in steps] == [
+        ["uv", "sync", "--frozen"],
+        ["uv", "run", "modal", "deploy", _REL],
+    ]
+    # Only the deploy step may see credentials: Dagger attaches its secrets
+    # after the sync, and a flat recipe would silently let Flox hand them to
+    # both.
+    assert [step.with_credentials for step in steps] == [False, True]
+    assert script_module.GIT_INSTALL_EXEC == (
+        "sh",
+        "-c",
+        "apt-get update && apt-get install -y --no-install-recommends git",
+    )
+    assert script_module.flox_activate_prefix() == [
+        "flox",
+        "activate",
+        "--dir",
+        str(script_module.REPO_ROOT),
+        "--mode",
+        "run",
+        "--",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_executors_run_the_same_recipe(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both executors run ``deploy_steps()`` with the same credential surface.
+
+    The comparison is per step, on ``(argv, sorted(credential env names))``.
+    Comparing the union across the whole run would pass for an executor that
+    handed credentials to ``uv sync`` too.
+    """
+    deploy_env = _deploy_env(script_module, host="https://app.infisical.com")
+    steps = script_module.deploy_steps(_REL)
+
+    fake_dagger, chain, _src = _build_dagger_mock()
+    with patch.object(script_module, "dagger", fake_dagger):
+        await script_module._deploy_via_dagger(HANDLER_FILE, deploy_env=deploy_env)
+    dagger_execs = _dagger_steps_with_credentials(chain)
+
+    flox_calls = _run_flox(script_module, deploy_env, monkeypatch)
+
+    # Dagger prepends its own git install; that is isolation-layer setup (the
+    # Flox environment already pins git via the Nix store), not a recipe step.
+    assert [argv for argv, _ in dagger_execs] == [
+        list(script_module.GIT_INSTALL_EXEC),
+        *[step.argv for step in steps],
+    ]
+    assert [argv for argv, _ in flox_calls] == [
+        [*script_module.flox_activate_prefix(), *step.argv] for step in steps
+    ]
+
+    flox_per_step = [
+        (
+            argv[len(script_module.flox_activate_prefix()) :],
+            sorted(k for k in cast("dict[str, str]", kwargs["env"]) if k in deploy_env),
+        )
+        for argv, kwargs in flox_calls
+    ]
+    # Skip Dagger's git install; compare the recipe steps one-to-one.
+    assert flox_per_step == dagger_execs[1:]
+
+    for _argv, kwargs in flox_calls:
+        assert kwargs["check"] is True
+        assert kwargs["cwd"] == script_module.REPO_ROOT
+
+
+@pytest.mark.asyncio
+async def test_executors_agree_on_the_credential_surface(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same names *and* same values reach ``modal deploy`` on both paths.
+
+    Set-equality on the Dagger side (secrets are the container's whole env
+    contribution); subset on the Flox side, where the child also inherits
+    PATH/HOME and always will. The honest claim is that the Infisical-derived
+    surface is identical, not that the environments are.
+    """
+    deploy_env = _deploy_env(script_module, host="https://app.infisical.com")
+
+    fake_dagger, chain, _src = _build_dagger_mock()
+    with patch.object(script_module, "dagger", fake_dagger):
+        await script_module._deploy_via_dagger(HANDLER_FILE, deploy_env=deploy_env)
+
+    dagger_secret_env = {
+        cast("str", args[0]): cast("MagicMock", args[1])._secret[1]
+        for _step, args in _secret_links(chain)
+    }
+    assert dagger_secret_env == deploy_env
+
+    flox_calls = _run_flox(script_module, deploy_env, monkeypatch)
+    deploy_step_env = cast("dict[str, str]", flox_calls[-1][1]["env"])
+    for key, value in deploy_env.items():
+        assert deploy_step_env[key] == value
+
+    # And the sync step gets none of them, matching Dagger's late attach.
+    sync_step_env = cast("dict[str, str]", flox_calls[0][1]["env"])
+    assert [key for key in deploy_env if key in sync_step_env] == []
+
+
+def test_flox_scrubs_inherited_env_that_would_change_the_artifact(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dict merge cannot express "unset" — these must be removed, not overridden.
+
+    ``TELEMETRY_COLLECTOR_APP=""`` in the operator's shell is the documented
+    opt-out: inherited, ``src/secrets_bootstrap.py`` would bake direct-sink
+    creds into the app and lose Logfire, while a Dagger deploy of the same
+    commit stayed in collector mode. ``MODAL_ENVIRONMENT`` beats
+    ``~/.modal.toml`` in modal/config.py, so inheriting it means "same tokens,
+    different deploy target". ``UV_*`` is scrubbed as a family — ``UV_NO_DEV=1``
+    would strip dev deps out of the synced venv.
+    """
+    monkeypatch.setenv("TELEMETRY_COLLECTOR_APP", "")
+    monkeypatch.setenv("MODAL_ENVIRONMENT", "staging")
+    monkeypatch.setenv("HYPERDX_API_KEY", "leaked-provider-cred")
+    monkeypatch.setenv("UV_NO_DEV", "1")
+    monkeypatch.setenv("VIRTUAL_ENV", "/somewhere/else/.venv")
+    monkeypatch.setenv("PATH", "/stub/bin")
+
+    flox_calls = _run_flox(
+        script_module,
+        _deploy_env(script_module, host=None),
+        monkeypatch,
+    )
+
+    for _argv, kwargs in flox_calls:
+        child_env = cast("dict[str, str]", kwargs["env"])
+        for leaked in (
+            "TELEMETRY_COLLECTOR_APP",
+            "MODAL_ENVIRONMENT",
+            "HYPERDX_API_KEY",
+            "UV_NO_DEV",
+            "VIRTUAL_ENV",
+        ):
+            assert leaked not in child_env, f"{leaked} reached the Flox child"
+        # flox activate needs PATH; scrubbing is targeted, not a whitelist.
+        assert child_env["PATH"] == "/stub/bin"
+        # The sync must land in a throwaway venv, the Flox counterpart of
+        # Dagger's `exclude=[".venv/"]` — `uv sync` prunes, so syncing in
+        # place would uninstall extras from the operator's own .venv.
+        assert child_env["UV_PROJECT_ENVIRONMENT"] == str(
+            script_module.FLOX_DEPLOY_VENV,
+        )
+
+
+def test_scrub_set_covers_every_key_the_bootstrap_secret_reads(
+    script_module: ModuleType,
+) -> None:
+    """Pin the scrub set against ``src/secrets_bootstrap.py``'s actual reads.
+
+    A key added to ``_bootstrap_secret_payload()`` without being added here
+    would be silently inherited by the Flox executor and baked into the
+    deployed app — the divergence class this whole refactor exists to close.
+    """
+    from src import secrets_bootstrap
+
+    payload_keys = {
+        "INFISICAL_TOKEN",
+        "INFISICAL_PROJECT_ID",
+        "INFISICAL_HOST",
+        "INFISICAL_ENV",
+        *secrets_bootstrap._TELEMETRY_POINTER_KEYS,  # pyright: ignore[reportPrivateUsage]
+        *secrets_bootstrap._OTEL_SINK_KEYS,  # pyright: ignore[reportPrivateUsage]
+    }
+
+    assert payload_keys <= script_module.deploy_env_scrub_keys()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param("1", True, id="one"),
+        pytest.param("true", True, id="true"),
+        pytest.param("TRUE", True, id="uppercase"),
+        pytest.param("yes", True, id="yes"),
+        pytest.param("on", True, id="on"),
+        pytest.param("0", False, id="zero"),
+        pytest.param("false", False, id="false"),
+        pytest.param("off", False, id="off"),
+        pytest.param("", False, id="blank-falls-back-to-default"),
+    ],
+)
+def test_use_flox_accepts_the_documented_spellings(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+    *,
+    expected: bool,
+) -> None:
+    """``GTM_DEPLOY_VIA_FLOX=true`` used to silently select *Dagger*."""
+    monkeypatch.setenv("GTM_DEPLOY_VIA_FLOX", raw)
+    assert script_module._use_flox() is expected
+
+
+# ---------------------------------------------------------------------------
+# Flox preflight
+# ---------------------------------------------------------------------------
+
+
+def _stub_flox_probes(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    results: list[subprocess.CompletedProcess[str]],
+    flox_on_path: bool = True,
+) -> list[list[str]]:
+    """Feed ``_preflight_flox`` canned probe results; capture the argvs it ran."""
+
+    def _which(name: str, *_args: object, **_kwargs: object) -> str | None:
+        return "/usr/bin/flox" if (flox_on_path and name == "flox") else None
+
+    monkeypatch.setattr(script_module.shutil, "which", _which)
+    seen: list[list[str]] = []
+    pending = list(results)
+
+    def _run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(argv)
+        return pending.pop(0)
+
+    fake_subprocess = MagicMock(name="subprocess")
+    fake_subprocess.run.side_effect = _run
+    monkeypatch.setattr(script_module, "subprocess", fake_subprocess)
+    return seen
+
+
+def _completed(
+    returncode: int,
+    stdout: str = "",
+    stderr: str = "",
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=[],
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def test_preflight_flox_fails_when_flox_is_absent(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _stub_flox_probes(script_module, monkeypatch, results=[], flox_on_path=False)
+
+    with pytest.raises(SystemExit):
+        script_module._preflight_flox()
+
+    assert "flox" in capsys.readouterr().err
+
+
+def test_preflight_flox_fails_when_activation_fails(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A real activation failure is fatal — the toolchain would be unpinned."""
+    _stub_flox_probes(script_module, monkeypatch, results=[_completed(1)])
+
+    with pytest.raises(SystemExit):
+        script_module._preflight_flox()
+
+    assert "flox activate" in capsys.readouterr().err
+
+
+def test_preflight_flox_reads_flox_env_and_checks_the_pinned_tools(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``$FLOX_ENV`` comes from flox, and `uv`/`git` are looked for inside it.
+
+    Re-deriving the path (``uname -m | sed s/arm64/aarch64/`` and friends) is
+    a second implementation of something the activation already exports.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "uv").touch()
+    (bin_dir / "git").touch()
+
+    seen = _stub_flox_probes(
+        script_module,
+        monkeypatch,
+        results=[_completed(0, str(tmp_path))],
+    )
+    script_module._preflight_flox()
+
+    assert len(seen) == 1
+    assert seen[0] == [
+        *script_module.flox_activate_prefix(),
+        "sh",
+        "-c",
+        'printf %s "$FLOX_ENV"',
+    ]
+    assert "uv, git pinned" in capsys.readouterr().out
+
+
+def test_preflight_flox_asks_the_activation_when_tools_are_not_in_flox_env_bin(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Flox composes several store paths, so `$FLOX_ENV/bin` is not exhaustive.
+
+    The fallback must ask the *activated* shell — this process's own
+    ``shutil.which`` cannot see inside an activation.
+    """
+    seen = _stub_flox_probes(
+        script_module,
+        monkeypatch,
+        results=[_completed(0, str(tmp_path)), _completed(0, "/nix/store/…/uv\n")],
+    )
+    script_module._preflight_flox()
+
+    assert seen[1] == [
+        *script_module.flox_activate_prefix(),
+        "sh",
+        "-c",
+        "command -v uv && command -v git",
+    ]
+
+
+def test_preflight_flox_tolerates_an_activation_that_reports_no_flox_env(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """rc=0 with an empty FLOX_ENV means "not really flox" — say so, don't lie.
+
+    A genuinely failed activation already exited above, so the only casualty
+    is the pinning guarantee. The deploy still works; the preflight must not
+    claim a check it could not perform.
+    """
+    _stub_flox_probes(script_module, monkeypatch, results=[_completed(0, "")])
+
+    script_module._preflight_flox()
+
+    assert "unverified" in capsys.readouterr().out
+
+
+def test_preflight_flox_never_invokes_flox_without_a_double_dash(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`flox --version` and friends are useless as probes.
+
+    The test suite's pass-through `flox` stub shifts until it finds `--`;
+    with no `--` it shifts an empty `$@` and execs nothing, returning 0. Any
+    availability probe built that way passes unconditionally, including on a
+    machine with no flox at all.
+    """
+    seen = _stub_flox_probes(
+        script_module,
+        monkeypatch,
+        results=[_completed(0, str(tmp_path)), _completed(0, "/bin/uv")],
+    )
+    script_module._preflight_flox()
+
+    for argv in seen:
+        assert "--" in argv, f"probe without a `--` separator: {argv}"
+
+
+def test_use_flox_rejects_a_bogus_value(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("GTM_DEPLOY_VIA_FLOX", "flox-please")
+    with pytest.raises(SystemExit) as excinfo:
+        script_module._use_flox()
+
+    assert excinfo.value.code == 1
+    assert "GTM_DEPLOY_VIA_FLOX" in capsys.readouterr().err

@@ -252,7 +252,10 @@ def _run_deploy(
     # stubs handle the deploy step. The Dagger path is exercised by manual
     # smoke tests; bringing a Dagger engine into CI would also drag in real
     # Modal credentials, which defeats the purpose of these stubs.
-    env.setdefault("GTM_DEPLOY_VIA_FLOX", "1")
+    # Hard-set, not setdefault: a developer with GTM_DEPLOY_VIA_FLOX=0
+    # exported would otherwise silently run this whole suite against the
+    # Dagger path, which the stubs cannot serve.
+    env["GTM_DEPLOY_VIA_FLOX"] = "1"
     if env_overrides:
         env.update(env_overrides)
     # Invoke the script with the test's own interpreter rather than
@@ -268,7 +271,10 @@ def _run_deploy(
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        timeout=60,
+        # The Flox path now runs two activations per source (uv sync, then
+        # modal deploy), so `--all` across five sources is ten stub
+        # invocations plus the preflights.
+        timeout=180,
         check=False,
     )
 
@@ -286,6 +292,11 @@ def test_substitution_and_restore(stub_bin: Path) -> None:
     assert HANDLER_FILE.read_bytes() == original
     bak = HANDLER_FILE.with_suffix(HANDLER_FILE.suffix + ".bak")
     assert not bak.exists(), "stale .bak sidecar left behind"
+    # The Flox preflight runs (it is gated on the selector) and survives the
+    # pass-through `flox` stub, which activates nothing and so reports no
+    # FLOX_ENV. It must degrade to "unverified", not abort the deploy.
+    assert "Preflighting Flox environment" in result.stdout
+    assert "toolchain pinning unverified" in result.stdout
 
 
 def test_all_flag_deploys_every_source(stub_bin: Path) -> None:
@@ -366,14 +377,22 @@ def test_restore_on_deploy_failure(stub_bin: Path) -> None:
     )
 
 
-def test_modal_token_isolation(stub_bin: Path, tmp_path: Path) -> None:
-    """AC3: parent shell's MODAL_TOKEN_ID is unset before infisical injection.
+def test_modal_token_isolation_at_the_secret_preflight(
+    stub_bin: Path,
+    tmp_path: Path,
+) -> None:
+    """AC3: the Modal-secret preflight runs on Infisical's tokens, not yours.
 
-    Regression target: removing `unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET`
-    would let the developer's personal Modal tokens win and silently route
-    the deploy to the wrong workspace. The infisical stub only injects when
-    the var is empty (mirroring the real-world precedence), so this test
-    fails iff the unset line is gone.
+    The deploy step itself is no longer the place to test this: both
+    executors now receive an explicit ``deploy_env`` that always overrides
+    whatever is in ``os.environ``, so a leaked parent token could not reach
+    ``modal deploy`` even if the pop were removed.
+
+    ``_preflight_modal_secrets`` is where the pop still carries weight. It
+    shells out through ``infisical run`` and asks the resulting workspace to
+    list its secrets — with a personal ``MODAL_TOKEN_ID`` left in the
+    environment it would validate the *wrong workspace's* secrets and green-
+    light a deploy into a workspace that has none of them.
     """
     env_record = tmp_path / "modal_env.txt"
     (stub_bin / "modal").write_text(
@@ -381,11 +400,8 @@ def test_modal_token_isolation(stub_bin: Path, tmp_path: Path) -> None:
             f"""\
             #!/usr/bin/env bash
             if [[ "${{1:-}}" == "secret" && "${{2:-}}" == "list" ]]; then
-                echo '[{{"Name": "devx-gcp-202605260000"}}, {{"Name": "attio"}}]'
-                exit 0
-            fi
-            if [[ "${{1:-}}" == "deploy" ]]; then
                 echo "MODAL_TOKEN_ID=${{MODAL_TOKEN_ID:-UNSET}}" > "{env_record}"
+                echo '[{{"Name": "devx-gcp-202605260000"}}, {{"Name": "attio"}}]'
                 exit 0
             fi
             exit 0
@@ -405,13 +421,82 @@ def test_modal_token_isolation(stub_bin: Path, tmp_path: Path) -> None:
     assert result.returncode == 0, (
         f"Script failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
-    assert env_record.exists(), "modal deploy stub was never invoked"
+    assert env_record.exists(), "modal secret list stub was never invoked"
     recorded = env_record.read_text().strip()
     assert recorded == "MODAL_TOKEN_ID=infisical-injected-id", (
-        f"Parent shell's MODAL_TOKEN_ID leaked through to modal — the "
-        f"`os.environ.pop(...)` call in webhooks-handlers-redeploy.py is missing or "
-        f"ineffective. Got: {recorded}"
+        f"Parent shell's MODAL_TOKEN_ID leaked into the Modal secret "
+        f"preflight — the `os.environ.pop(...)` call in "
+        f"webhooks-handlers-redeploy.py is missing or ineffective. "
+        f"Got: {recorded}"
     )
+
+
+def test_deploy_backend_selector_rejects_a_bogus_value(stub_bin: Path) -> None:
+    """`GTM_DEPLOY_VIA_FLOX=maybe` must abort, naming the variable.
+
+    Before the selector went through ``env_flag``, anything other than the
+    literal ``"1"`` — including ``true`` — silently selected Dagger, so an
+    operator on a Conductor sandbox got an engine-connection failure instead
+    of an answer about their typo.
+    """
+    result = _run_deploy(stub_bin, env_overrides={"GTM_DEPLOY_VIA_FLOX": "maybe"})
+
+    assert result.returncode != 0
+    assert "GTM_DEPLOY_VIA_FLOX" in result.stderr
+
+
+def test_deploy_step_env_is_the_recipe_not_the_operator_shell(
+    stub_bin: Path,
+    tmp_path: Path,
+) -> None:
+    """The Flox child sees the deploy recipe's env, not the operator's exports.
+
+    ``TELEMETRY_COLLECTOR_APP=""`` is the documented opt-out from collector
+    mode. Inherited into ``modal deploy``, ``src/secrets_bootstrap.py`` would
+    bake direct-sink creds into the app's Modal Secret and lose Logfire —
+    while a Dagger deploy of the same commit stayed in collector mode. This
+    is the end-to-end counterpart of the unit-level scrub test in
+    ``test_deploy_webhook_dagger.py``.
+    """
+    env_record = tmp_path / "deploy_env.txt"
+    (stub_bin / "modal").write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            if [[ "${{1:-}}" == "secret" && "${{2:-}}" == "list" ]]; then
+                echo '[{{"Name": "devx-gcp-202605260000"}}, {{"Name": "attio"}}]'
+                exit 0
+            fi
+            if [[ "${{1:-}}" == "deploy" ]]; then
+                {{
+                  echo "TELEMETRY_COLLECTOR_APP=${{TELEMETRY_COLLECTOR_APP-ABSENT}}"
+                  echo "MODAL_ENVIRONMENT=${{MODAL_ENVIRONMENT-ABSENT}}"
+                  echo "INFISICAL_ENV=${{INFISICAL_ENV-ABSENT}}"
+                }} > "{env_record}"
+                exit 0
+            fi
+            exit 0
+            """,
+        ),
+    )
+    _make_executable(stub_bin / "modal")
+
+    result = _run_deploy(
+        stub_bin,
+        env_overrides={
+            "TELEMETRY_COLLECTOR_APP": "",
+            "MODAL_ENVIRONMENT": "staging",
+        },
+    )
+
+    assert result.returncode == 0, (
+        f"Script failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    recorded = dict(line.split("=", 1) for line in env_record.read_text().splitlines())
+    assert recorded["TELEMETRY_COLLECTOR_APP"] == "ABSENT"
+    assert recorded["MODAL_ENVIRONMENT"] == "ABSENT"
+    # ...while the recipe's own values do arrive.
+    assert recorded["INFISICAL_ENV"] == "dev"
 
 
 def test_preflight_fails_when_infisical_returns_empty_stdout(

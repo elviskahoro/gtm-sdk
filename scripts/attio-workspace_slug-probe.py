@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Probe the Attio workspace slug for an `ATTIO_API_KEY`.
 
-Calls `GET https://api.attio.com/v2/self` inside a Dagger-managed Alpine
-container so the host machine doesn't need `curl` and the API key is passed in
-as a Dagger secret (kept out of container layer history). The endpoint returns
-the workspace the token authenticates against, which is the authoritative way
-to map an API key to its workspace slug — Infisical doesn't store the slug as
-its own secret.
+Calls `GET /v2/self` through the repo's own Attio adapter (`libs.attio`). The
+endpoint returns the workspace the token authenticates against, which is the
+authoritative way to map an API key to its workspace slug — Infisical doesn't
+store the slug as its own secret.
+
+This used to run `curl` inside a Dagger-managed Alpine container, which bought
+nothing the SDK does not already do (the round trip is identical) while
+costing an engine, a container image, and a scrypt-derived cache tag to defeat
+Dagger's exec cache — that cache once returned a *dev* workspace slug after
+the operator switched to prod, which is precisely the answer this script
+exists to get right.
 
 The Infisical environment is explicit (no silent prod default): pass `--env`
 or set `INFISICAL_ENV`. The script auto-bootstraps `infisical run` when
@@ -37,21 +42,26 @@ if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse
-import asyncio
-import hashlib
 import json
 import os
 import sys
 from pathlib import Path
-
-import dagger
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.lib.env import infisical_run_example  # noqa: E402
+from libs.attio.client import get_client  # noqa: E402
+from libs.attio.sdk_boundary import (  # noqa: E402
+    describe_attio_error,
+    model_dump_or_empty,
+)
+from scripts.lib.env import (  # noqa: E402
+    clean_env,
+    infisical_run_example,
+    read_infisical_credentials,
+)
 
 # Sentinel propagated through `os.execvp` -> `infisical run` -> child python.
 # Prevents an infinite re-bootstrap loop when the chosen Infisical env simply
@@ -59,29 +69,9 @@ from scripts.lib.env import infisical_run_example  # noqa: E402
 # and call _bootstrap_via_infisical() again, ad infinitum).
 _BOOTSTRAP_SENTINEL_ENV = "_ATTIO_PROBE_BOOTSTRAPPED"
 
-# This is a public domain-separation value, not a credential. Version it so a
-# future change to the cache-tag construction naturally invalidates old tags.
-_CACHE_TAG_KEY = b"gtm-sdk-attio-workspace-slug-probe-cache-v1"
-
 
 class AttioProbeError(RuntimeError):
     """Raised when the /v2/self request fails or returns an unusable body."""
-
-
-# Runs inside the container. Curls /v2/self with the injected secret and emits
-# the raw JSON body. Parsing (slug extraction, pretty-printing) happens in
-# Python so we can unit-test it without standing up a Dagger engine.
-PROBE_SCRIPT = r"""#!/usr/bin/env sh
-set -eu
-
-: "${ATTIO_API_KEY:?ATTIO_API_KEY not set in container}"
-
-# --fail-with-body: non-2xx -> exit non-zero AND keep the body on stdout so we
-# can surface Attio's error message instead of a bare "curl: (22)".
-curl -sS --fail-with-body \
-  -H "Authorization: Bearer ${ATTIO_API_KEY}" \
-  https://api.attio.com/v2/self
-"""
 
 
 def extract_workspace_slug(body: str) -> str:
@@ -111,141 +101,31 @@ def extract_workspace_slug(body: str) -> str:
     return slug
 
 
-def _cache_key_tag(api_key: str) -> str:
-    """Return the stable, non-secret tag used to partition Dagger caches."""
-    # This is a cache partition identifier, not password storage; the API key
-    # is never persisted, logged, or emitted by this function.
-    return hashlib.scrypt(
-        api_key.encode("utf-8"),
-        salt=_CACHE_TAG_KEY,
-        n=2**14,
-        r=8,
-        p=1,
-        dklen=8,
-    ).hex()
+def probe(*, api_key: str, json_output: bool) -> str:
+    """Return the workspace slug, or the whole /v2/self payload as JSON.
 
+    One round trip serves both modes, as the container did: the response is
+    dumped once and either pretty-printed or fed to
+    :func:`extract_workspace_slug`. That helper keeps its string-in signature
+    deliberately — it predates the SDK rewrite and its tests carry the
+    accumulated knowledge of how /v2/self malforms (inactive tokens, proxy
+    HTML, non-object JSON), which is worth more than a tidier interface.
+    """
+    try:
+        with get_client(api_key) as client:
+            identity = client.meta.get_v2_self()
+    except Exception as exc:  # noqa: BLE001 — every SDK failure is one message
+        # The SDK's `Code` Literal omits most of Attio's real error codes, so
+        # the body is only legible via describe_attio_error's re-parse.
+        described = describe_attio_error(exc)
+        detail = f"{described.code}: {described.message}" if described else str(exc)
+        message = f"/v2/self request failed: {detail}"
+        raise AttioProbeError(message) from exc
 
-async def probe(*, api_key: str, json_output: bool) -> str:
-    # Dagger's exec cache key does not include the secret value — two runs with
-    # the same secret *name* but different *values* (e.g. dev vs prod
-    # ATTIO_API_KEY) will return the previously cached stdout and silently
-    # mislead the operator (we hit this returning a dev workspace slug after
-    # switching to prod). Derive a stable per-key tag and bind it both as the
-    # secret's Dagger name and an env var so the cache key changes with the
-    # key. Scrypt keeps this cache identity separate from a bare fast hash while
-    # retaining deterministic tags across runs for the same API key.
-    key_tag = _cache_key_tag(api_key)
-
-    async with dagger.connection(dagger.Config(log_output=sys.stderr)):
-        api_secret = dagger.dag.set_secret(f"attio-api-key-{key_tag}", api_key)
-
-        container = (
-            dagger.dag.container()
-            .from_("alpine:3.20")
-            .with_exec(["apk", "add", "--no-cache", "curl", "ca-certificates"])
-            .with_new_file("/work/probe.sh", contents=PROBE_SCRIPT, permissions=0o755)
-        )
-
-        executed = (
-            container.with_secret_variable("ATTIO_API_KEY", api_secret)
-            .with_env_variable("ATTIO_API_KEY_TAG", key_tag)
-            .with_exec(["/work/probe.sh"])
-        )
-
-        try:
-            body = await executed.stdout()
-        except dagger.ExecError as exc:
-            # curl --fail-with-body writes the Attio error body to stdout before
-            # exiting non-zero, so prefer that over the bare Dagger message.
-            attio_body = (exc.stdout or "").strip()
-            container_stderr = (exc.stderr or "").strip()
-            detail = attio_body or container_stderr or str(exc)
-            raise AttioProbeError(f"/v2/self request failed: {detail}") from exc
-
+    payload = model_dump_or_empty(identity)
     if json_output:
-        try:
-            return json.dumps(json.loads(body), indent=2)
-        except json.JSONDecodeError as exc:
-            raise AttioProbeError(
-                f"/v2/self returned non-JSON body: {body!r}",
-            ) from exc
-    return extract_workspace_slug(body)
-
-
-def _clean_env(value: str | None) -> str | None:
-    """Strip whitespace from an env value and treat blank-after-strip as None.
-
-    Trailing newlines on secrets (e.g. from a `cat`-ed file or copy-paste)
-    silently break auth otherwise — Attio rejects "Bearer key\\n" with a 401
-    that looks identical to a bad key.
-    """
-    if value is None:
-        return None
-    stripped = value.strip()
-    return stripped or None
-
-
-def _read_infisical_credentials() -> tuple[str, str] | None:
-    """Resolve INFISICAL_PROJECT_ID/TOKEN from env, then `gtm-sdk/.env.local`.
-
-    We deliberately avoid asking the operator to `set -a; source .env.local`
-    (per repo memory) — instead we parse the file ourselves and feed the
-    values straight to `infisical run` as CLI flags.
-    """
-    project_id = _clean_env(os.environ.get("INFISICAL_PROJECT_ID"))
-    token = _clean_env(os.environ.get("INFISICAL_TOKEN"))
-    if project_id and token:
-        return project_id, token
-
-    env_file = REPO_ROOT / ".env.local"
-    if not env_file.is_file():
-        return None
-
-    parsed = _parse_dotenv(env_file.read_text())
-
-    project_id = project_id or _clean_env(parsed.get("INFISICAL_PROJECT_ID"))
-    token = token or _clean_env(parsed.get("INFISICAL_TOKEN"))
-    if project_id and token:
-        return project_id, token
-    return None
-
-
-def _parse_dotenv(text: str) -> dict[str, str]:
-    """Parse the subset of `.env` syntax we care about.
-
-    Supports:
-      - blank lines and comments (`# ...`)
-      - leading `export` keyword (`export KEY=value`)
-      - double- and single-quoted values
-      - inline `# comment` after an *unquoted* value
-
-    Does NOT support multiline values or shell expansion — `.env.local` here
-    only carries Infisical creds, which are single-line opaque tokens.
-    """
-    parsed: dict[str, str] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :].lstrip()
-        if "=" not in line:
-            continue
-        key, _, raw_value = line.partition("=")
-        key = key.strip()
-        if not key:
-            continue
-        value = raw_value.strip()
-        # Quoted: keep everything between matching quotes verbatim, ignore
-        # any trailing `# comment`. Unquoted: strip an inline comment.
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-            value = value[1:-1]
-        else:
-            comment_idx = value.find(" #")
-            if comment_idx >= 0:
-                value = value[:comment_idx].rstrip()
-        parsed[key] = value
-    return parsed
+        return json.dumps(payload, indent=2, default=str)
+    return extract_workspace_slug(json.dumps(payload, default=str))
 
 
 def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
@@ -260,7 +140,7 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
         )
         return 2
 
-    creds = _read_infisical_credentials()
+    creds = read_infisical_credentials()
     if creds is None:
         print(
             "ATTIO_API_KEY is not set and INFISICAL_PROJECT_ID/INFISICAL_TOKEN\n"
@@ -315,13 +195,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    api_key = _clean_env(os.environ.get("ATTIO_API_KEY"))
+    api_key = clean_env(os.environ.get("ATTIO_API_KEY"))
     if not api_key:
         # The Infisical env is only needed when we're going to bootstrap; if
         # the operator pre-injected ATTIO_API_KEY (e.g. via another secret
         # manager or a direct shell export), we should run with that key as
         # documented.
-        env = args.env or _clean_env(os.environ.get("INFISICAL_ENV"))
+        env = args.env or clean_env(os.environ.get("INFISICAL_ENV"))
         if env not in {"dev", "prod"}:
             print(
                 "Infisical environment is required to bootstrap ATTIO_API_KEY. "
@@ -337,7 +217,7 @@ def main() -> int:
         return _bootstrap_via_infisical(env, forward)
 
     try:
-        output = asyncio.run(probe(api_key=api_key, json_output=args.json))
+        output = probe(api_key=api_key, json_output=args.json)
     except (AttioProbeError, ValueError) as exc:
         # ValueError covers extract_workspace_slug raising on inactive tokens
         # where Attio omits workspace_slug entirely.
