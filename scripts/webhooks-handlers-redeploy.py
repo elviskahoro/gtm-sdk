@@ -825,14 +825,14 @@ def _write_backup(handler_file: Path) -> None:
 
 
 def _restore_handler() -> None:
-    """Restore the current handler from its backup.
+    r"""Restore the current handler from its backup.
 
     Gated on ``_backup_freshly_written`` so an early-failure path (e.g.
     Modal preflight error) cannot copy a stale backup from a prior run on
     top of a clean worktree. ``shutil.copyfile`` always overwrites — no
     interactive-cp alias risk. Do not swap it for a helper that accepts
     ``exist_ok=False``: that resurrects the ``cp -i`` footgun the bash
-    version needed ``\\cp -f`` to dodge, where the restore silently refused.
+    version needed ``\cp -f`` to dodge, where the restore silently refused.
     """
     if not _backup_freshly_written or _handler is None or _handler_file is None:
         return
