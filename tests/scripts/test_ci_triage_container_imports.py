@@ -54,21 +54,56 @@ def _mkdir(path: Path) -> Path:
     return path
 
 
-# `uv sync` installs this repo as an editable, and setuptools' editable shim is a
-# sys.meta_path finder that resolves `scripts.*` (and `libs.*`) from the real
-# checkout no matter what the cwd is. Left in place it silently satisfies the
-# very imports this test exists to prove are unnecessary -- the pre-fix scripts
-# pass. Dropping the finder is what turns tmp_path into an honest stand-in for
-# `python:3.13-slim`; third-party site-packages (gtm_linear, oz_agent_sdk) stay,
-# because the container pip-installs those.
-_DROP_EDITABLE_FINDER = """
-import runpy, sys
-sys.meta_path = [
-    f for f in sys.meta_path
-    if not type(f).__module__.startswith("__editable__")
-]
+# Making tmp_path an honest stand-in for `python:3.13-slim` means `scripts.*` and
+# `libs.*` must resolve ONLY from the reconstructed tree. Two different mechanisms
+# otherwise leak the real checkout in, and each defeats the test silently by
+# satisfying the imports it exists to prove are unnecessary:
+#
+#   * locally, `uv sync` installs the repo editable, and setuptools' editable
+#     shim is a sys.meta_path finder that answers regardless of cwd;
+#   * in unit CI, pytest_dagger.py installs the project NON-editable
+#     (`uv pip install ... .`), so `scripts/` and `libs/` are real packages in
+#     /opt/venv site-packages. A regular package anywhere on sys.path beats a
+#     namespace portion, so path order cannot save us.
+#
+# Dropping sys.path entries is not an option either: `gtm_linear` lives in the
+# same site-packages, and the container really does pip-install that. So the
+# block has to be per-module -- reject a `scripts`/`libs` spec whose origin sits
+# outside the tree, and let everything else through untouched.
+_BLOCK_OUT_OF_TREE_REPO_PACKAGES = """
+import pathlib, runpy, sys
+from importlib.abc import MetaPathFinder
+
 # `python -c cmd a b` leaves argv[0] == "-c"; restore the shape argparse expects.
 sys.argv = sys.argv[1:]
+TREE = pathlib.Path(sys.argv[0]).resolve().parents[1]
+
+
+class OnlyFromTree(MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] not in ("scripts", "libs"):
+            return None
+        for finder in sys.meta_path:
+            if finder is self:
+                continue
+            spec = finder.find_spec(fullname, path, target)
+            if spec is None:
+                continue
+            locations = [
+                p
+                for p in [spec.origin, *(spec.submodule_search_locations or [])]
+                if p and p != "namespace"
+            ]
+            if locations and not any(
+                pathlib.Path(p).resolve().is_relative_to(TREE) for p in locations
+            ):
+                msg = f"{fullname} resolved outside the container tree: {locations}"
+                raise ModuleNotFoundError(msg, name=fullname)
+            return spec
+        return None
+
+
+sys.meta_path.insert(0, OnlyFromTree())
 runpy.run_path(sys.argv[0], run_name="__main__")
 """
 
@@ -86,7 +121,13 @@ def test_script_runs_without_the_repo_around_it(
     # `--help` exercises every module-level import and argparse setup, then
     # exits before any credential or network use.
     result = subprocess.run(  # noqa: S603
-        [sys.executable, "-c", _DROP_EDITABLE_FINDER, str(script), "--help"],
+        [
+            sys.executable,
+            "-c",
+            _BLOCK_OUT_OF_TREE_REPO_PACKAGES,
+            str(script),
+            "--help",
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
