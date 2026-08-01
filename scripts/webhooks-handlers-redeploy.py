@@ -18,14 +18,17 @@ Usage:
     scripts/webhooks-handlers-redeploy.py <handler> <source>
     scripts/webhooks-handlers-redeploy.py <handler> --all
 
-The ``GTM_DEPLOY_VIA_FLOX=1`` env var swaps the Dagger deploy for a
-Flox-activated ``infisical run -- uv run modal deploy`` invocation on the
-host, for environments where Dagger's container model cannot run at all
-(Conductor cloud sandboxes — see "Webhook deploys" in AGENTS.md and issue
-#284). Flox (`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix store
-instead of container namespaces, so it provides the same reproducibility
-guarantee Dagger gives Mac/CI without needing nested-runc. Also used by the
-test suite so CI does not need a Dagger engine running.
+The ``GTM_DEPLOY_VIA_FLOX=1`` env var swaps the Dagger container for a
+``flox activate`` on the host, for environments where Dagger's engine cannot
+run at all (Conductor cloud sandboxes — see "Webhook deploys" in AGENTS.md
+and issue #284). Flox (`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix
+store instead of container namespaces, so it provides the same
+reproducibility guarantee Dagger gives Mac/CI without needing nested-runc.
+Also used by the test suite so CI does not need a Dagger engine running.
+
+Both backends execute the *same* recipe — see ``deploy_steps`` /
+``deploy_env`` below. They differ only in the isolation layer; anything else
+is drift, and ``tests/scripts/test_deploy_webhook_dagger.py`` fails on it.
 
 The shebang is a plain ``python3``, not ``uv run python``: ``[tool.uv]
 required-version`` in pyproject.toml makes *any* incompatible ``uv`` binary
@@ -47,6 +50,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(REPO_ROOT))
+from scripts.lib.env import env_flag  # noqa: E402
 from scripts.lib.uv_resolve import (  # noqa: E402
     NoCompatibleUvError,
     find_compatible_uv_for_repo,
@@ -142,7 +146,7 @@ import re  # noqa: E402
 import shutil  # noqa: E402
 import signal  # noqa: E402
 import subprocess  # noqa: E402
-from typing import TYPE_CHECKING, NoReturn  # noqa: E402
+from typing import TYPE_CHECKING, NamedTuple, NoReturn  # noqa: E402
 
 import dagger  # noqa: E402
 
@@ -294,9 +298,14 @@ def _preflight_env() -> None:
     exact miss-route shape ai-2aw was filed to eliminate. ``libs.infisical``
     also fails closed at runtime; this catches it before image build.
 
-    The parent shell's personal ``MODAL_TOKEN_*`` would silently win over
-    Infisical-injected dlthub workspace tokens — deploys would land in the
-    wrong workspace. Always unset.
+    Also pops the operator's personal ``MODAL_TOKEN_*``. Contrary to what
+    this file and AGENTS.md used to claim, ``infisical run`` injection *wins*
+    over the parent shell, so the pop is not what protects the deploy — the
+    deploy takes its tokens from an explicit ``_fetch_infisical_value``. The
+    pop still matters for ``_preflight_modal_secrets()``, which shells out
+    through ``_infisical_run`` without that guarantee on every CLI version: a
+    leaked personal token there would list the *wrong workspace's* secrets
+    and pass a preflight for a workspace we are not deploying to.
     """
     for key in ("INFISICAL_PROJECT_ID", "INFISICAL_TOKEN"):
         if not os.environ.get(key):
@@ -535,23 +544,26 @@ _OTEL_OPTIONAL_KEYS = (
 
 
 def _preflight_otel_log_sink_keys() -> None:
-    """Warn-only probe for the OTLP-sink env vars in the target Infisical env.
+    """Report which OTLP-sink keys exist in Infisical. Never fails the deploy.
 
-    Unlike ``_preflight_infisical_keys``, this does NOT fail the deploy when
-    a key is missing — the OTLP sink is opt-in per env. We print ``✓`` for
-    present keys and a notice for absent ones so the operator sees, at
-    deploy time, whether structured logs will ship to a sink or stop at
-    Modal stdout.
+    This is an inventory of the target Infisical environment, NOT a statement
+    about the app being deployed. Neither executor forwards these keys, by
+    design: an unset ``TELEMETRY_COLLECTOR_APP`` selects collector mode (the
+    only mode that reaches Logfire), and app containers must never carry
+    provider credentials — they reach providers through the collector. A
+    ``present`` key here therefore tells the operator what the collector
+    deployment can read, and what a container would pick up if someone
+    reintroduced env forwarding. See :func:`deploy_env`.
 
     Uses the same "returncode 0 + empty stdout = missing" heuristic
-    documented at ``_preflight_infisical_keys`` lines 263-271 — the
-    ``infisical secrets get`` CLI exits 0 for both present and missing
-    keys, so a returncode-only check would be theater.
+    documented at ``_preflight_infisical_keys`` — the ``infisical secrets
+    get`` CLI exits 0 for both present and missing keys, so a
+    returncode-only check would be theater.
     """
     env_slug = os.environ["INFISICAL_ENV"]
     print(
-        f"Probing OTLP-sink keys in env={env_slug} (optional): "
-        f"{' '.join(_OTEL_OPTIONAL_KEYS)}",
+        f"Inventorying OTLP-sink keys in Infisical env={env_slug} "
+        f"(not forwarded to the deployed app): {' '.join(_OTEL_OPTIONAL_KEYS)}",
     )
     any_present = False
     for key in _OTEL_OPTIONAL_KEYS:
@@ -575,12 +587,12 @@ def _preflight_otel_log_sink_keys() -> None:
             check=False,
         )
         if proc.returncode == 0 and proc.stdout.strip():
-            print(f"  {key} ✓")
+            print(f"  {key} present in Infisical")
             any_present = True
         else:
             print(f"  {key} (not set)")
     if not any_present:
-        print("  OTLP sink disabled for this deploy (no OTEL env vars set).")
+        print(f"  No OTLP-sink keys set in Infisical env={env_slug}.")
 
 
 _BUCKET_METHOD_RE = re.compile(r"WebhookModel\.([a-z_]+_get_bucket_name)")
@@ -740,12 +752,205 @@ def _install_signal_handlers() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Deploy (Dagger-wrapped)
+# Deploy recipe — one description of the deploy, two executors
+# ---------------------------------------------------------------------------
+#
+# Dagger (Mac/CI) and Flox (Conductor cloud sandboxes, where the Dagger engine
+# cannot start) must differ ONLY in the isolation layer. When each executor
+# carried its own hand-written argv list they drifted in ways that changed the
+# deployed artifact, not just the mechanics: Flox never ran ``uv sync
+# --frozen``, and its ``infisical run`` wrapper injected a superset of the
+# env Dagger passes, which ``src/secrets_bootstrap.py`` bakes into the app's
+# Modal Secret. A ``TELEMETRY_COLLECTOR_APP=""`` key in Infisical was enough
+# to make the same commit deploy in collector mode under Dagger and in
+# direct-sink mode (no Logfire) under Flox.
+#
+# The recipe below is the single description of *what* runs. Neither executor
+# may add a step or invent an env var; both take the credential dict as a
+# parameter. ``tests/scripts/test_deploy_webhook_dagger.py`` asserts parity
+# step-by-step, because these already drifted once.
+
+
+# The uv base image ships no git, but pyproject pins the public `gtm-linear`
+# git dep, so `uv sync --frozen` shells out to git and dies with "Git
+# executable not found" before modal deploy runs (ai-8h3). `update` + `install`
+# MUST share one exec or Dagger can reuse a stale apt index against a fresh
+# install. `sh` (dash) is guaranteed on Debian; `bash` may be absent on -slim.
+# Dagger-only: the Flox environment already pins git via the Nix store.
+GIT_INSTALL_EXEC: tuple[str, ...] = (
+    "sh",
+    "-c",
+    "apt-get update && apt-get install -y --no-install-recommends git",
+)
+
+# The Modal token pair identifies a *workspace*, not a deploy target. Both
+# executors resolve it from this one Infisical env so a prod deploy and a dev
+# deploy land in the same Modal workspace — INFISICAL_ENV (which the deployed
+# app reads at request time) is a payload value and deliberately does not
+# select credentials here.
+MODAL_TOKEN_INFISICAL_ENV = "dev"  # noqa: S105 — an env slug, not a secret
+
+# Throwaway venv for the Flox executor's `uv sync --frozen`, the counterpart of
+# Dagger's `exclude=[".venv/"]` source-mount filter. Flox runs in place on the
+# operator's checkout, so syncing into `.venv` would mutate it mid-deploy — and
+# `uv sync` prunes: on an `--all-extras` workspace a plain sync uninstalls the
+# `marketplace` extra. `tmp/` is already this script's scratch dir and is
+# gitignored.
+FLOX_DEPLOY_VENV = REPO_ROOT / "tmp" / "webhook-deploy-venv"
+
+
+class DeployStep(NamedTuple):
+    """One command in the deploy, plus whether it may see credentials.
+
+    ``with_credentials`` is load-bearing, not decoration: Dagger attaches its
+    secrets *after* ``uv sync --frozen``, so the sync runs with none. A flat
+    list of argvs would let the Flox executor hand credentials to both steps
+    while a parity test still passed.
+    """
+
+    argv: list[str]
+    with_credentials: bool
+
+
+def deploy_steps(rel: str) -> tuple[DeployStep, ...]:
+    """The commands both executors run, in order, for handler ``rel``.
+
+    ``uv run modal deploy``, never bare ``modal deploy``: bare ``modal`` runs
+    outside the project venv and cannot import the ``src.*`` packages
+    registered in pyproject.toml.
+    """
+    return (
+        DeployStep(argv=["uv", "sync", "--frozen"], with_credentials=False),
+        DeployStep(argv=["uv", "run", "modal", "deploy", rel], with_credentials=True),
+    )
+
+
+def deploy_env(
+    *,
+    modal_token_id: str,
+    modal_token_secret: str,
+    infisical_token: str,
+    infisical_project_id: str,
+    infisical_env: str,
+    infisical_host: str | None,
+) -> dict[str, str]:
+    """Build the credential env both executors hand to ``modal deploy``.
+
+    Deliberately pure — no ``os.environ`` reads — so the deployed artifact is
+    a function of these six arguments and nothing else. Ordering matters: the
+    Dagger executor mints one content-addressed secret per entry in iteration
+    order, and the parity test pins that order.
+
+    ``INFISICAL_HOST`` is omitted (not blanked) when falsy: an empty
+    ``INFISICAL_HOST`` baked into the runtime bootstrap secret confuses
+    ``libs/infisical`` self-host vs. SaaS detection on the first webhook event.
+
+    Telemetry keys are absent on purpose. ``libs.telemetry`` treats an unset
+    ``TELEMETRY_COLLECTOR_APP`` as collector mode — the only mode that reaches
+    Logfire — and app containers must never carry provider credentials, so
+    forwarding the OTLP sink keys would silently downgrade the deployed app.
+    """
+    env = {
+        "MODAL_TOKEN_ID": modal_token_id,
+        "MODAL_TOKEN_SECRET": modal_token_secret,
+        "INFISICAL_TOKEN": infisical_token,
+        "INFISICAL_PROJECT_ID": infisical_project_id,
+        "INFISICAL_ENV": infisical_env,
+    }
+    if infisical_host:
+        env["INFISICAL_HOST"] = infisical_host
+    return env
+
+
+# Env vars the Flox executor removes from the inherited environment before
+# applying ``deploy_env``. A dict merge cannot express "unset", and the
+# distinction matters: ``libs/telemetry`` reads an unset
+# ``TELEMETRY_COLLECTOR_APP`` as collector mode but ``""`` as opt-out, so a
+# stray blank export in the operator's shell would otherwise be inherited and
+# baked into the app's Modal Secret by ``src/secrets_bootstrap.py``.
+#
+# ``MODAL_ENVIRONMENT`` and friends: modal/config.py lets env vars beat
+# ``~/.modal.toml``, so leaving them through reintroduces "same tokens,
+# different deploy target". ``PYTHONPATH``/``VIRTUAL_ENV``/``UV_*``: keep the
+# in-place Flox run from resolving a different interpreter or venv than the
+# one ``uv sync --frozen`` just built (``UV_NO_DEV=1`` in the operator's shell
+# would strip dev deps out of the deploy).
+#
+# NOT scrubbed: PATH, HOME, TMPDIR, SSL_CERT_FILE, NIX_*, XDG_*, FLOX_* —
+# ``flox activate`` needs them.
+_SECRET_PAYLOAD_KEYS: tuple[str, ...] = (
+    # Everything src/secrets_bootstrap.py::_bootstrap_secret_payload() reads.
+    "INFISICAL_TOKEN",
+    "INFISICAL_PROJECT_ID",
+    "INFISICAL_HOST",
+    "INFISICAL_ENV",
+    *_OTEL_OPTIONAL_KEYS,
+)
+_MODAL_CONTROL_KEYS: tuple[str, ...] = (
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
+    "MODAL_ENVIRONMENT",
+    "MODAL_PROFILE",
+    "MODAL_CONFIG_PATH",
+    "MODAL_IMAGE_BUILDER_VERSION",
+    "MODAL_FORCE_BUILD",
+)
+_PYTHON_RESOLUTION_KEYS: tuple[str, ...] = ("PYTHONPATH", "VIRTUAL_ENV")
+_SCRUB_PREFIXES: tuple[str, ...] = ("UV_",)
+
+
+def deploy_env_scrub_keys() -> frozenset[str]:
+    """Exact env-var names the Flox executor strips from ``os.environ``.
+
+    Prefix-matched families (``UV_*``) are handled separately by
+    :func:`_scrubbed_parent_env`; this returns only the literal names so a
+    test can assert the set directly.
+    """
+    return frozenset(
+        (*_SECRET_PAYLOAD_KEYS, *_MODAL_CONTROL_KEYS, *_PYTHON_RESOLUTION_KEYS),
+    )
+
+
+def _scrubbed_parent_env() -> dict[str, str]:
+    """``os.environ`` minus every key the deploy must not inherit."""
+    scrub = deploy_env_scrub_keys()
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in scrub and not key.startswith(_SCRUB_PREFIXES)
+    }
+
+
+def flox_activate_prefix() -> list[str]:
+    """The ``flox activate`` argv that wraps each Flox-executor step.
+
+    ``--mode run`` (not ``dev``): flox refuses a dev-mode activation while
+    another shell holds a run-mode one on the same env, and the two modes
+    resolve different Nix store paths.
+    """
+    return ["flox", "activate", "--dir", str(REPO_ROOT), "--mode", "run", "--"]
+
+
+def _use_flox() -> bool:
+    """Whether ``GTM_DEPLOY_VIA_FLOX`` selects the Flox executor.
+
+    Routed through ``env_flag`` so ``GTM_DEPLOY_VIA_FLOX=true`` fails loudly
+    instead of silently selecting Dagger, which is what an ``== "1"``
+    comparison used to do.
+    """
+    try:
+        return env_flag("GTM_DEPLOY_VIA_FLOX")
+    except ValueError as exc:
+        _fail(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Deploy executors
 # ---------------------------------------------------------------------------
 
 
 def _resolve_modal_tokens() -> tuple[str, str]:
-    """Pull MODAL_TOKEN_ID / MODAL_TOKEN_SECRET from Infisical for Dagger.
+    """Pull MODAL_TOKEN_ID / MODAL_TOKEN_SECRET from Infisical for both paths.
 
     Each token is fetched in its own ``infisical secrets get`` call. The
     obvious alternative — ``infisical run -- printenv VAR1 VAR2`` — breaks
@@ -754,16 +959,29 @@ def _resolve_modal_tokens() -> tuple[str, str]:
     means an error message can name the specific missing var instead of
     conflating them.
 
+    An explicit fetch, rather than letting ``infisical run`` inject the pair,
+    is what makes a missing token a clean pre-deploy failure. ``infisical
+    run`` exits 0 and injects nothing when a key is absent from the selected
+    env; ``_preflight_env`` has already popped the operator's
+    ``MODAL_TOKEN_*``, so modal/config.py would then fall back to whatever
+    ``~/.modal.toml`` profile happens to be active and deploy into that
+    workspace with no error at all.
+
     Personal Modal tokens were already popped from ``os.environ`` in
-    ``_preflight_env``; the values returned here flow straight into Dagger
-    ``set_secret`` calls and never land in the script's env.
+    ``_preflight_env``; the values returned here flow into Dagger
+    ``set_secret`` calls or the Flox executor's explicit child env, and never
+    land back in this process's own environment.
     """
     return _fetch_infisical_value("MODAL_TOKEN_ID"), _fetch_infisical_value(
         "MODAL_TOKEN_SECRET",
     )
 
 
-def _fetch_infisical_value(name: str) -> str:
+def _fetch_infisical_value(
+    name: str,
+    *,
+    env_slug: str = MODAL_TOKEN_INFISICAL_ENV,
+) -> str:
     proc = subprocess.run(
         [
             "infisical",
@@ -774,7 +992,7 @@ def _fetch_infisical_value(name: str) -> str:
             os.environ["INFISICAL_PROJECT_ID"],
             "--token",
             os.environ["INFISICAL_TOKEN"],
-            "--env=dev",
+            f"--env={env_slug}",
             "--plain",
             "--silent",
         ],
@@ -785,8 +1003,8 @@ def _fetch_infisical_value(name: str) -> str:
     )
     if proc.returncode != 0 or not proc.stdout.strip():
         _fail(
-            f"Could not fetch '{name}' from Infisical env=dev. Is it set in "
-            f"the dlthub project?",
+            f"Could not fetch '{name}' from Infisical env={env_slug}. Is it "
+            f"set in the dlthub project?",
         )
     return proc.stdout.strip()
 
@@ -806,78 +1024,48 @@ def _content_addressed_secret_name(base: str, value: str) -> str:
     return f"{base}-{digest}"
 
 
+def _dagger_secret_base(env_name: str) -> str:
+    """``MODAL_TOKEN_ID`` -> ``modal-token-id``, the Dagger secret's base name."""
+    return env_name.lower().replace("_", "-")
+
+
 async def _deploy_via_dagger(
     handler_file: Path,
-    modal_token_id: str,
-    modal_token_secret: str,
-    infisical_token: str,
-    infisical_project_id: str,
-    infisical_env: str,
-    infisical_host: str | None,
+    *,
+    deploy_env: dict[str, str],
 ) -> None:
-    """Run ``uv sync --frozen && uv run modal deploy <handler>`` in a container.
+    """Run :func:`deploy_steps` inside a container (Mac/CI isolation layer).
 
-    Installs ``git`` first: the ``bookworm-slim`` base lacks it, but the lock
-    file pins the public ``gtm-linear`` git dependency that ``uv sync`` must
-    clone (the repo is public, so no credentials are needed). Without git the
-    sync aborts with "Git executable not found" before ``modal deploy`` runs
+    Installs ``git`` first: the base image lacks it, but the lock file pins
+    the public ``gtm-linear`` git dependency that ``uv sync`` must clone (the
+    repo is public, so no credentials are needed). Without git the sync
+    aborts with "Git executable not found" before ``modal deploy`` runs
     (ai-8h3).
 
     Mounts the repo at ``/repo`` (excluding ``.venv``, ``tmp/``, bytecode
     caches, and **both** the worktree's ``.git`` file/dir — worktrees use
     a gitlink file, not a directory, and a stray gitlink inside the
     container points back at host-only git metadata that would break any
-    git-aware step), syncs the venv from the pinned lock file, and invokes
-    ``modal deploy`` with Modal tokens *and* the full Infisical bootstrap
-    env injected as Dagger secrets.
+    git-aware step), then runs the recipe's steps in order.
 
-    The Infisical creds are required because each handler's
-    ``_bootstrap_secret()`` reads ``INFISICAL_TOKEN`` /
-    ``INFISICAL_PROJECT_ID`` / ``INFISICAL_ENV`` / optionally
-    ``INFISICAL_HOST`` from ``os.environ`` at module-import time and bakes
-    them into a ``modal.Secret.from_dict`` that the deployed app uses at
-    request time to call ``libs.infisical.fetch_all``. Without these, the
-    deploy would succeed but the app would ``InfisicalAuthError`` on the
-    first webhook event. ``INFISICAL_HOST`` is forwarded only when set on
-    the host so a missing self-host config doesn't fabricate an empty
-    string that confuses ``libs/infisical``. All values flow in as Dagger
-    secrets so they never appear in image layers or in Dagger's stderr.
+    ``deploy_env`` arrives as Dagger secrets — never image-layer env vars —
+    so the values appear neither in layers nor in Dagger's stderr, and they
+    are attached only before the first step that declares
+    ``with_credentials``. Each handler's ``bootstrap_secret()`` reads those
+    Infisical vars from ``os.environ`` at module-import time inside
+    ``modal deploy`` and bakes them into a ``modal.Secret.from_dict`` the
+    deployed app uses at request time; without them the deploy succeeds but
+    the app raises ``InfisicalAuthError`` on its first webhook event.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
     async with dagger.connection(dagger.Config(log_output=sys.stderr)):
         secrets = {
-            "MODAL_TOKEN_ID": dagger.dag.set_secret(
-                _content_addressed_secret_name("modal-token-id", modal_token_id),
-                modal_token_id,
-            ),
-            "MODAL_TOKEN_SECRET": dagger.dag.set_secret(
-                _content_addressed_secret_name(
-                    "modal-token-secret",
-                    modal_token_secret,
-                ),
-                modal_token_secret,
-            ),
-            "INFISICAL_TOKEN": dagger.dag.set_secret(
-                _content_addressed_secret_name("infisical-token", infisical_token),
-                infisical_token,
-            ),
-            "INFISICAL_PROJECT_ID": dagger.dag.set_secret(
-                _content_addressed_secret_name(
-                    "infisical-project-id",
-                    infisical_project_id,
-                ),
-                infisical_project_id,
-            ),
-            "INFISICAL_ENV": dagger.dag.set_secret(
-                _content_addressed_secret_name("infisical-env", infisical_env),
-                infisical_env,
-            ),
-        }
-        if infisical_host:
-            secrets["INFISICAL_HOST"] = dagger.dag.set_secret(
-                _content_addressed_secret_name("infisical-host", infisical_host),
-                infisical_host,
+            name: dagger.dag.set_secret(
+                _content_addressed_secret_name(_dagger_secret_base(name), value),
+                value,
             )
+            for name, value in deploy_env.items()
+        }
         src = dagger.dag.host().directory(
             str(REPO_ROOT),
             exclude=[
@@ -897,81 +1085,69 @@ async def _deploy_via_dagger(
         container = (
             dagger.dag.container()
             .from_(DAGGER_BASE_IMAGE)
-            # bookworm-slim ships no git, but pyproject pins the public
-            # `gtm-linear` git dep, so `uv sync --frozen` below shells out to
-            # git and dies with "Git executable not found" before modal
-            # deploy runs (ai-8h3). Install it here, before the source mount,
-            # so the apt layer caches on the base image alone and is not
-            # busted by source churn. `update` + `install` MUST share one
-            # exec or Dagger can reuse a stale apt index against a fresh
-            # install (the classic Debian layering pitfall). `sh` (dash) is
-            # guaranteed on Debian; `bash` may be absent on -slim.
-            .with_exec(
-                [
-                    "sh",
-                    "-c",
-                    "apt-get update && apt-get install -y --no-install-recommends git",
-                ],
-            )
+            # Placed before the source mount so the apt layer caches on the
+            # base image alone and is not busted by source churn.
+            .with_exec(list(GIT_INSTALL_EXEC))
             .with_directory("/repo", src)
             .with_workdir("/repo")
-            .with_exec(["uv", "sync", "--frozen"])
         )
-        for name, secret in secrets.items():
-            container = container.with_secret_variable(name, secret)
-        await container.with_exec(
-            ["uv", "run", "modal", "deploy", rel],
-        ).sync()
+        credentials_attached = False
+        for step in deploy_steps(rel):
+            if step.with_credentials and not credentials_attached:
+                for name, secret in secrets.items():
+                    container = container.with_secret_variable(name, secret)
+                credentials_attached = True
+            container = container.with_exec(step.argv)
+        await container.sync()
 
 
-def _deploy_via_flox(handler_file: Path) -> None:
-    """Run modal deploy inside a Flox-activated shell (no Dagger engine needed).
+def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
+    """Run :func:`deploy_steps` in a Flox-activated shell (no Dagger engine).
 
-    Activated by ``GTM_DEPLOY_VIA_FLOX=1``. Dagger cannot run in Conductor
-    cloud sandboxes (nested-runc creation fails at the kernel level — issue
-    #284, do not reinvestigate). Flox pins ``uv``/``git`` via the Nix store
-    (``.flox/env/manifest.toml``) rather than container namespaces, so
-    ``flox activate`` gives the same version-reproducibility guarantee
-    Dagger provides on Mac/CI, without needing containerization at all.
+    Selected by ``GTM_DEPLOY_VIA_FLOX``. Dagger cannot run in Conductor cloud
+    sandboxes (issue #284): those kernels cannot load ``xt_comment``, CNI
+    bridge setup fails, the engine falls back to ``networkMode = "host"``,
+    and Dagger's per-exec telemetry proxy — which assumes a per-exec network
+    namespace — errors with no fallback branch. Flox pins ``uv``/``git`` via
+    the Nix store (``.flox/env/manifest.toml``) rather than container
+    namespaces, so ``flox activate`` gives the same version-reproducibility
+    guarantee without containerization.
 
-    Unlike ``_deploy_via_dagger``, there is no Dagger ``with_exec`` cache to
-    defeat, so no content-addressed secret naming is needed here — Infisical
-    creds flow straight through ``infisical run`` exactly as they do for
-    every other preflight in this file, never through the parent process's
-    ``os.environ`` (see AGENTS.md "Scripted deploy pitfalls").
+    Scrub-then-apply, not merge: ``{**os.environ, **deploy_env}`` cannot
+    express "unset", and ``libs/telemetry`` distinguishes an unset
+    ``TELEMETRY_COLLECTOR_APP`` (collector mode) from ``""`` (opt out). See
+    :func:`deploy_env_scrub_keys`.
 
-    Calls ``uv`` directly rather than via ``_require_uv_path()``'s PATH-scan:
-    Flox pins an exact ``uv`` version in the activated shell, so the PATH
-    resolution that protects the non-Flox path is redundant here and would
-    just re-discover the same activated binary.
+    No ``infisical run`` wrapper. It is *sufficient* (there is no Dagger exec
+    cache to defeat here) but not required, and it injects the whole
+    environment's worth of secrets — a superset of ``deploy_env`` that
+    ``src/secrets_bootstrap.py`` would bake into the deployed app, making the
+    Flox-deployed artifact differ from the Dagger-deployed one.
+
+    Calls ``uv`` directly rather than via ``_require_uv_path()``'s PATH scan:
+    Flox pins an exact ``uv`` version in the activated shell, so resolving
+    again would just re-discover the same activated binary. One activation
+    per step mirrors Dagger's two ``with_exec``s (warm activation is
+    sub-second and needs no network); collapsing them into a single
+    ``sh -c 'a && b'`` would reintroduce the shell-string form this script
+    bans everywhere else.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
-    subprocess.run(
-        [
-            "flox",
-            "activate",
-            "--dir",
-            str(REPO_ROOT),
-            "--mode",
-            "run",
-            "--",
-            "infisical",
-            "run",
-            "--projectId",
-            os.environ["INFISICAL_PROJECT_ID"],
-            "--token",
-            os.environ["INFISICAL_TOKEN"],
-            "--env=dev",
-            "--",
-            "uv",
-            "run",
-            "modal",
-            "deploy",
-            rel,
-        ],
-        cwd=REPO_ROOT,
-        check=True,
-    )
+    prefix = flox_activate_prefix()
+    base_env = _scrubbed_parent_env()
+    # Set after the scrub (which strips every UV_*): redirect the sync into a
+    # throwaway venv so an in-place deploy can never prune the operator's.
+    base_env["UV_PROJECT_ENVIRONMENT"] = str(FLOX_DEPLOY_VENV)
+    for step in deploy_steps(rel):
+        step_env = dict(base_env)
+        if step.with_credentials:
+            step_env |= deploy_env
+        subprocess.run(
+            [*prefix, *step.argv],
+            cwd=REPO_ROOT,
+            env=step_env,
+            check=True,
+        )
 
 
 def _verify_clean_restore(handler_file: Path) -> None:
@@ -1013,8 +1189,15 @@ def _resolve_infisical_host() -> str | None:
     return os.environ.get("INFISICAL_HOST") or None
 
 
-def _deploy_one(handler_file: Path, source: str) -> None:
-    """Substitute placeholder → deploy → restore from backup → verify clean."""
+def _deploy_one(handler_file: Path, source: str, *, deploy_env: dict[str, str]) -> None:
+    """Substitute placeholder → deploy → restore from backup → verify clean.
+
+    ``deploy_env`` is resolved once in ``main()`` and threaded through every
+    source. Resolving it per source would let a token rotation or a transient
+    Infisical failure part-way through ``--all`` deploy source #3 under
+    different credentials than #1 and #2, splitting one handler's Modal apps across
+    two workspaces.
+    """
     assert _handler is not None  # set by main() before the loop
     print()
     print(f"=== Deploying {source} via {_handler} ===")
@@ -1023,21 +1206,10 @@ def _deploy_one(handler_file: Path, source: str) -> None:
     handler_file.write_text(original.replace(PLACEHOLDER, source))
 
     try:
-        if os.environ.get("GTM_DEPLOY_VIA_FLOX") == "1":
-            _deploy_via_flox(handler_file)
+        if _use_flox():
+            _deploy_via_flox(handler_file, deploy_env=deploy_env)
         else:
-            modal_token_id, modal_token_secret = _resolve_modal_tokens()
-            asyncio.run(
-                _deploy_via_dagger(
-                    handler_file,
-                    modal_token_id=modal_token_id,
-                    modal_token_secret=modal_token_secret,
-                    infisical_token=os.environ["INFISICAL_TOKEN"],
-                    infisical_project_id=os.environ["INFISICAL_PROJECT_ID"],
-                    infisical_env=os.environ["INFISICAL_ENV"],
-                    infisical_host=_resolve_infisical_host(),
-                ),
-            )
+            asyncio.run(_deploy_via_dagger(handler_file, deploy_env=deploy_env))
     finally:
         # Restore unconditionally — even on deploy failure — so the next
         # iteration starts from a clean placeholder state and so a SIGINT
@@ -1185,6 +1357,9 @@ def main() -> int:
 
     _preflight_uv_version()
     _preflight_env()
+    # Resolve the selector once, up front: a typo'd GTM_DEPLOY_VIA_FLOX must
+    # abort before the lock is taken, not on the first deploy.
+    _use_flox()
 
     # Acquire lock *before* the working-tree preflight so the snapshot below
     # cannot become stale between check and mutation. Install cleanup
@@ -1200,12 +1375,25 @@ def main() -> int:
     _preflight_otel_log_sink_keys()
     _preflight_gcs_buckets(handler_file, sources_to_deploy)
 
+    # Resolve credentials before touching the working tree, and exactly once
+    # for the whole run — see _deploy_one's docstring for why per-source
+    # resolution is a divergence hazard rather than just two subprocesses per source.
+    modal_token_id, modal_token_secret = _resolve_modal_tokens()
+    resolved_deploy_env = deploy_env(
+        modal_token_id=modal_token_id,
+        modal_token_secret=modal_token_secret,
+        infisical_token=os.environ["INFISICAL_TOKEN"],
+        infisical_project_id=os.environ["INFISICAL_PROJECT_ID"],
+        infisical_env=os.environ["INFISICAL_ENV"],
+        infisical_host=_resolve_infisical_host(),
+    )
+
     _handler = handler
     _handler_file = handler_file
     _write_backup(handler_file)
 
     for source in sources_to_deploy:
-        _deploy_one(handler_file, source)
+        _deploy_one(handler_file, source, deploy_env=resolved_deploy_env)
 
     print()
     print("All deploys complete. Working tree clean.")
