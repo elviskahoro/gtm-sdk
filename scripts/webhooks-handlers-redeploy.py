@@ -50,6 +50,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(REPO_ROOT))
 from scripts.lib.env import env_flag  # noqa: E402
+from scripts.lib.flox import flox_activate_prefix  # noqa: E402
 from scripts.lib.uv_resolve import (  # noqa: E402
     NoCompatibleUvError,
     find_compatible_uv_for_repo,
@@ -1007,16 +1008,6 @@ def _scrubbed_parent_env() -> dict[str, str]:
         for key, value in os.environ.items()
         if key not in scrub and not key.startswith(_SCRUB_PREFIXES)
     }
-
-
-def flox_activate_prefix() -> list[str]:
-    """The ``flox activate`` argv that wraps each Flox-executor step.
-
-    ``--mode run`` (not ``dev``): flox refuses a dev-mode activation while
-    another shell holds a run-mode one on the same env, and the two modes
-    resolve different Nix store paths.
-    """
-    return ["flox", "activate", "--dir", str(REPO_ROOT), "--mode", "run", "--"]
 
 
 def _use_flox() -> bool:

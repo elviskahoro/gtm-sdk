@@ -13,14 +13,16 @@ Two layers, mirroring the split used elsewhere in this repo:
 Neither layer needs a live Dagger engine or real GitHub credentials.
 """
 
-# ruff: noqa: S101, SLF001, TRY003, EM101 -- asserts are the point of a test file;
+# ruff: noqa: S101, SLF001, TRY003, EM101, S105 -- asserts are the point of a test file;
 # SLF001 covers deliberate white-box use of the script's private helpers
-# (_build_parser, etc); TRY003/EM101 cover inline test-fixture error messages.
+# (_build_parser, etc); TRY003/EM101 cover inline test-fixture error messages;
+# S105 covers fake "sekret-token"/GH_TOKEN fixture values, not real credentials.
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -527,3 +529,64 @@ def test_dagger_transport_injects_token_as_secret_not_env(prt: ModuleType) -> No
     assert final_exec_args == ["gh", "pr", "view"]
     assert "sekret-token" not in json.dumps(final_exec_args)
     final_container.stdout.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Flox transport -- parity with the Dagger transport, no engine required
+# ---------------------------------------------------------------------------
+
+
+def test_flox_transport_activates_flox_and_injects_gh_token(
+    prt: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_run_gh_in_flox` reaches `gh` with the same argv/token shape as Dagger."""
+    fake_run = MagicMock(
+        return_value=subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout='{"data": {}}',
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(prt.subprocess, "run", fake_run)
+
+    result = prt._run_gh_in_flox(["pr", "view"], "sekret-token")
+
+    assert result == '{"data": {}}'
+    call_args, call_kwargs = fake_run.call_args
+    argv = call_args[0]
+    assert argv == [*prt.flox_activate_prefix(), "gh", "pr", "view"]
+    assert call_kwargs["env"]["GH_TOKEN"] == "sekret-token"
+    assert call_kwargs["cwd"] == prt.REPO_ROOT
+    assert call_kwargs["check"] is True
+
+
+def test_make_run_gh_dispatches_on_env_flag(
+    prt: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_dagger_maker = MagicMock(return_value="dagger-run-gh")
+    fake_flox_maker = MagicMock(return_value="flox-run-gh")
+    monkeypatch.setattr(prt, "make_dagger_run_gh", fake_dagger_maker)
+    monkeypatch.setattr(prt, "make_flox_run_gh", fake_flox_maker)
+
+    monkeypatch.delenv("GTM_PR_REVIEW_VIA_FLOX", raising=False)
+    assert prt.make_run_gh("tok") == "dagger-run-gh"
+    fake_dagger_maker.assert_called_once_with("tok")
+    fake_flox_maker.assert_not_called()
+
+    fake_dagger_maker.reset_mock()
+    monkeypatch.setenv("GTM_PR_REVIEW_VIA_FLOX", "1")
+    assert prt.make_run_gh("tok") == "flox-run-gh"
+    fake_flox_maker.assert_called_once_with("tok")
+    fake_dagger_maker.assert_not_called()
+
+
+def test_use_flox_rejects_unrecognized_value(
+    prt: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GTM_PR_REVIEW_VIA_FLOX", "banana")
+    with pytest.raises(ValueError, match="GTM_PR_REVIEW_VIA_FLOX"):
+        prt._use_flox()
