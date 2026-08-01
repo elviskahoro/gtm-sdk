@@ -13,6 +13,8 @@ reviews:
     base_branches:
       - main
 
+  # Deliberate inline mirror of AGENTS.md: CodeRabbit cannot follow repository
+  # links. Keep these rules synchronized with the authoritative file.
   path_instructions:
     - path: libs/**
       instructions: |

@@ -302,7 +302,8 @@ Tested locally.
 
 ### Don't add AI attribution
 
-This repo's CLAUDE.md forbids it. **Never** emit:
+The repository-wide prohibition is authoritative in `AGENTS.md` → **Git**.
+**Never** emit:
 
 - `Co-Authored-By: Claude <claude@anthropic.com>`
 - `🤖 Generated with [Claude Code](...)`
@@ -437,7 +438,7 @@ What's wrong: the Summary paraphrases the diff, the Test plan has no reasoning, 
 ## Red flags (stop and rethink)
 
 - **About to merge with `gh pr merge` or the GitHub "Merge" button.** This repo lands PRs through the Trunk merge queue (`trunk merge <pr>`, Step 12); the GitHub button bypasses the queue and can break the landing order.
-- **About to `git push` without running `git roborev review --wait` first.** Roborev is a hard gate before the branch reaches `origin`; no PR should skip it.
+- **About to `git push` without running `git roborev review --wait` first.** This is the repository-wide gate defined in `AGENTS.md` → **Session Completion**; no PR should skip it.
 - **About to `git push` with more commits than the PR needs.** Squash to a coherent set first (Step 4); don't rely on GitHub's "Squash and merge" button to clean up history before review.
 - Drafting a PR with no Linear ticket, no design artifact, and no conversation-derived motivation.
 - Writing more than 3 paragraphs in Why. If you need that much, the work is probably two PRs.
