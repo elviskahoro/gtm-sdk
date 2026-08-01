@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# ruff: noqa: PLR2004, S101, SLF001 -- white-box tests intentionally use
+# assertions and exercise the probe's private cache-tag helper.
+
 import importlib.util
 import json
 from collections.abc import Coroutine
@@ -34,6 +37,33 @@ def _scrub_bootstrap_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:  # pyrig
     bootstraps. Scrub it before every test."""
     module = _load_script_module()
     monkeypatch.delenv(module._BOOTSTRAP_SENTINEL_ENV, raising=False)
+
+
+def test_cache_key_tag_is_deterministic() -> None:
+    module = _load_script_module()
+
+    assert module._cache_key_tag("attio-key-alpha") == module._cache_key_tag(
+        "attio-key-alpha",
+    )
+
+
+def test_cache_key_tag_changes_for_different_api_keys() -> None:
+    module = _load_script_module()
+
+    assert module._cache_key_tag("attio-key-alpha") != module._cache_key_tag(
+        "attio-key-beta",
+    )
+
+
+def test_cache_key_tag_is_a_16_character_hex_tag_without_the_api_key() -> None:
+    module = _load_script_module()
+    api_key = "attio-key-alpha"
+
+    tag = module._cache_key_tag(api_key)
+
+    assert len(tag) == 16
+    assert int(tag, 16) >= 0
+    assert api_key not in tag
 
 
 def test_missing_creds_shows_canonical_infisical_invocation(
