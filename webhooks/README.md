@@ -79,9 +79,16 @@ scripts/webhooks-handlers-redeploy.py export_to_gcp_raw --all
 
 The deploy itself runs inside a Dagger container (`uv sync --frozen && uv run
 modal deploy`) so the env that ships images to Modal is reproducible
-operator-to-operator. Set `DAGGER_DRY_RUN=1` to skip Dagger and invoke
-`infisical run -- uv run modal deploy` directly on the host (used by the CI
-smoke test).
+operator-to-operator. `GTM_EXEC_BACKEND` picks a different mechanism for that
+same guarantee:
+
+- `flox` — runs `infisical run -- uv run modal deploy` inside `flox activate`,
+  taking the toolchain from `.flox/env/manifest.lock`. Use this on Conductor
+  cloud sandboxes, where Dagger's engine cannot start.
+- `host` — the same command against bare `PATH`, unpinned; for the CI smoke
+  test's stub binaries only.
+
+`DAGGER_DRY_RUN=1` remains a deprecated alias for `host`.
 
 Valid `<handler>` and `<source>` values are discovered at runtime from
 `webhooks/*.py` and that handler's `Webhook as <Alias>` imports — there is no

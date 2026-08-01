@@ -48,9 +48,17 @@ export PATH="${HOME}/.local/bin:${PATH}"
 
 # --- Flox bootstrap (Linux cloud sandboxes only) ---------------------------
 # Flox = Nix under the hood: declarative manifest (.flox/env/manifest.toml),
-# lockfile-pinned versions, binary-cache installs. Chosen over Dagger for
-# setup tooling because Dagger's engine requires a privileged containerized
-# BuildKit/runc stack that cannot run in these sandboxes (issue #284).
+# lockfile-pinned versions, binary-cache installs. Chosen over Dagger for setup
+# tooling because Dagger's engine cannot start in these sandboxes: `xt_comment`
+# is absent from the kernel and unloadable (no modprobe, no /lib/modules, no
+# nftables), so CNI bridge setup fails; the only workaround is host networking,
+# which then breaks Dagger's per-exec telemetry proxy because it assumes a
+# per-exec netns. Issue #284 -- and note the cause is NOT "nested containers
+# fail at the kernel level"; namespace creation works fine here.
+#
+# This makes Flox the toolchain that GTM_EXEC_BACKEND=flox depends on (see
+# scripts/lib/env.py). When provisioning below falls back to the curl
+# installers, that backend fails loudly rather than running unpinned.
 #
 # macOS: never install Flox unattended (needs Homebrew or an interactive
 # .pkg). If a Mac already has flox on PATH we use it; otherwise the curl
