@@ -559,3 +559,4 @@ def test_beads_bootstrap_skips_agent_and_hook_setup() -> None:
     for line in bd_init_lines:
         assert "--skip-agents" in line, line
         assert "--skip-hooks" in line, line
+        assert "--prefix gtm" in line, line

@@ -266,12 +266,12 @@ if [[ ! -e .beads ]]; then
   # bd init should only seed the database, not touch either.
   if [[ -n ${DOLTHUB_CREDENTIAL} ]]; then
     (echo "${DOLTHUB_CREDENTIAL}" | dolt creds import) &&
-      bd init --non-interactive --skip-agents --skip-hooks --remote "${DOLT_REMOTE_URL}" ||
+      bd init --non-interactive --skip-agents --skip-hooks --prefix gtm --remote "${DOLT_REMOTE_URL}" ||
       echo "warning: could not seed beads DB from ${DOLT_REMOTE_URL}, falling back to a fresh local database"
   else
     echo "warning: DOLTHUB_CREDENTIAL not available from .env.local or Infisical; falling back to a fresh local Beads database instead of ${DOLT_REMOTE_URL}"
   fi
-  [[ ! -e .beads ]] && bd init --non-interactive --skip-agents --skip-hooks --init-if-missing
+  [[ ! -e .beads ]] && bd init --non-interactive --skip-agents --skip-hooks --prefix gtm --init-if-missing
 fi
 
 # --- Python project ----------------------------------------------------------
