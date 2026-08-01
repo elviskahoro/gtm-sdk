@@ -39,6 +39,7 @@ if __name__ == "__main__":
 import argparse
 import asyncio
 import hashlib
+import hmac
 import json
 import os
 import sys
@@ -58,6 +59,10 @@ from scripts.lib.env import infisical_run_example  # noqa: E402
 # does not contain `ATTIO_API_KEY` (the child would otherwise see an empty key
 # and call _bootstrap_via_infisical() again, ad infinitum).
 _BOOTSTRAP_SENTINEL_ENV = "_ATTIO_PROBE_BOOTSTRAPPED"
+
+# This is a public domain-separation value, not a credential. Version it so a
+# future change to the cache-tag construction naturally invalidates old tags.
+_CACHE_TAG_KEY = b"gtm-sdk-attio-workspace-slug-probe-cache-v1"
 
 
 class AttioProbeError(RuntimeError):
@@ -107,6 +112,15 @@ def extract_workspace_slug(body: str) -> str:
     return slug
 
 
+def _cache_key_tag(api_key: str) -> str:
+    """Return the stable, non-secret tag used to partition Dagger caches."""
+    return hmac.new(
+        _CACHE_TAG_KEY,
+        api_key.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+
+
 async def probe(*, api_key: str, json_output: bool) -> str:
     # Dagger's exec cache key does not include the secret value — two runs with
     # the same secret *name* but different *values* (e.g. dev vs prod
@@ -114,17 +128,9 @@ async def probe(*, api_key: str, json_output: bool) -> str:
     # mislead the operator (we hit this returning a dev workspace slug after
     # switching to prod). Derive a stable per-key tag and bind it both as the
     # secret's Dagger name and an env var so the cache key changes with the
-    # key. The tag is a truncated SHA-256, so it can't be reversed to recover
-    # the key from the trace.
-    #
-    # `usedforsecurity=False` tells static analyzers (CodeQL, bandit) that this
-    # is a cache-key derivation, not password storage — SHA-256 is the right
-    # primitive here precisely because we want a deterministic, non-reversible
-    # tag, not a slow KDF.
-    key_tag = hashlib.sha256(
-        api_key.encode("utf-8"),
-        usedforsecurity=False,
-    ).hexdigest()[:16]
+    # key. HMAC keeps this cache identity separate from a bare hash while
+    # retaining deterministic tags across runs for the same API key.
+    key_tag = _cache_key_tag(api_key)
 
     async with dagger.connection(dagger.Config(log_output=sys.stderr)):
         api_secret = dagger.dag.set_secret(f"attio-api-key-{key_tag}", api_key)
