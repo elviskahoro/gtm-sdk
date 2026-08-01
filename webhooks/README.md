@@ -59,8 +59,7 @@ Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
 Use `scripts/webhooks-handlers-redeploy.py` — never `modal deploy webhooks/<file>.py`
 directly. Handler files live in source control with a `WebhookModelToReplace`
 placeholder so the working tree stays source-agnostic; the script substitutes
-the placeholder, deploys via a Dagger-wrapped `modal deploy`, and restores
-the file in one safe step.
+the placeholder, runs the deploy, and restores the file in one safe step.
 
 ```shell
 set -a && source .env.local && set +a   # once per shell
@@ -77,11 +76,22 @@ scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
 scripts/webhooks-handlers-redeploy.py export_to_gcp_raw --all
 ```
 
-The deploy itself runs inside a Dagger container (`uv sync --frozen && uv run
-modal deploy`) so the env that ships images to Modal is reproducible
-operator-to-operator. Conductor cloud workspaces cannot run the required
-Dagger engine, so set `GTM_DEPLOY_VIA_FLOX=1` there to deploy through the
-repository's pinned Flox environment instead.
+The deploy itself is one recipe — `uv sync --frozen`, then `uv run modal
+deploy` — run by one of two interchangeable executors, so the env that ships
+images to Modal is reproducible operator-to-operator. Dagger runs the recipe
+in a container. Conductor cloud workspaces cannot start the Dagger engine, so
+set `GTM_DEPLOY_VIA_FLOX=1` there to run the same recipe under the
+repository's pinned Flox environment instead. A parity test keeps the two
+executors on identical commands and credentials; the recipe is the only place
+to add a step or a variable.
+
+Two differences between the executors are real rather than papered over. The
+Flox path runs in your working tree, so it syncs into a throwaway
+`tmp/webhook-deploy-venv` and never touches your `.venv`. It also *scrubs*
+the inherited environment rather than merging into it — a stray
+`TELEMETRY_COLLECTOR_APP=""` exported in your shell would otherwise be baked
+into the deployed app and silently cost it Logfire. Preflights run on your
+bare host PATH, outside either isolation layer.
 
 Valid `<handler>` and `<source>` values are discovered at runtime from
 `webhooks/*.py` and that handler's `Webhook as <Alias>` imports — there is no
@@ -103,9 +113,12 @@ These are the failure modes baked into the script. If you ever bypass it,
 these are what bite:
 
 - **Env clobber.** Your shell's personal `MODAL_TOKEN_ID` /
-  `MODAL_TOKEN_SECRET` silently win over the Infisical-injected dlthub
-  workspace tokens, and deploys land in the wrong workspace. The script
-  `os.environ.pop`s both before invoking `infisical run`.
+  `MODAL_TOKEN_SECRET` reach the Modal-secret preflight, which talks to Modal
+  through `infisical run` — a leaked personal token there lists the *wrong*
+  workspace's secrets, so the script `os.environ.pop`s both first. (Infisical
+  injection wins over the parent shell, not the other way round; this file
+  claimed the inverse for a while.) The deploy itself is unaffected: it sets
+  both tokens explicitly from a single up-front fetch.
 - **`cp -i` alias.** A bash-only footgun the Python rewrite sidesteps by
   using `shutil.copyfile` (which always overwrites) for restore — no
   shell-alias resolution involved.
@@ -115,11 +128,13 @@ these are what bite:
   with `shell=False`, so the gotcha is structurally impossible.
 
 Additional mitigations (concurrent-invocation lock, atexit-scoped restore,
-Modal-secret/Infisical-key/GCS-bucket preflight, signal-routed cleanup) are
-catalogued in `CLAUDE.md` → **Scripted deploy pitfalls**. The CI smoke test
-at `tests/scripts/test_deploy_webhook.py` covers the substitute/restore
-loop, the cleanup-on-deploy-failure path, and the `MODAL_TOKEN_ID` isolation
-rule; the lock and full preflight paths are not yet exercised in CI.
+Modal-token/secret/Infisical-key/GCS-bucket preflight, signal-routed cleanup)
+are catalogued in `CLAUDE.md` → **Scripted deploy pitfalls**. The CI smoke
+test at `tests/scripts/test_deploy_webhook.py` drives the Flox executor
+end-to-end: substitute/restore, cleanup on deploy failure, the
+`MODAL_TOKEN_ID` pop at the preflight, and the environment scrub.
+`tests/scripts/test_deploy_webhook_dagger.py` holds the executor parity
+checks. The lock and the full preflight paths are not yet exercised in CI.
 
 ## Registry
 
@@ -132,7 +147,7 @@ Modal + Hookdeck state; never edit by hand and never commit.
 # is sourced from the repo-root .env.local because Infisical's value for it is
 # empty (and an empty Infisical value would overwrite the host env var —
 # surfacing as silently-null hookdeck_*_id fields in the registry).
-unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET  # avoid personal-shell tokens winning
+unset MODAL_TOKEN_ID MODAL_TOKEN_SECRET  # keep personal tokens out of the run
 set -a && source .env.local && set +a
 infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \
   --env=dev -- env HOOKDECK_API_KEY="$HOOKDECK_API_KEY" \

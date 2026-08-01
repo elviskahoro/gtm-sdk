@@ -4,31 +4,30 @@
 
 Port of scripts/redeploy-webhook.sh. Host-side Python does discovery,
 preflights, atomic locking, backup, placeholder substitution, restore, and
-restore verification. The ``modal deploy`` invocation itself runs inside a
-Dagger container (matching ``scripts/hookdeck-connection_events-dump.py``)
-so the env that ships images to Modal is reproducible operator-to-operator.
+restore verification. The deploy itself is one recipe run by one of two
+executors, so the env that ships images to Modal is reproducible
+operator-to-operator.
 
 Every footgun catalogued in AGENTS.md "Scripted deploy pitfalls" is encoded
 here as an explicit preflight or cleanup step. Keep that section in sync
 with this file. The CI smoke test at ``tests/scripts/test_deploy_webhook.py``
 exercises the substitute/restore loop, the EXIT-equivalent restore on deploy
-failure, and the Modal token isolation rule.
+failure, the Modal-token pop at the preflight, and the environment scrub.
 
 Usage:
     scripts/webhooks-handlers-redeploy.py <handler> <source>
     scripts/webhooks-handlers-redeploy.py <handler> --all
 
-The ``GTM_DEPLOY_VIA_FLOX=1`` env var swaps the Dagger container for a
-``flox activate`` on the host, for environments where Dagger's engine cannot
-run at all (Conductor cloud sandboxes — see "Webhook deploys" in AGENTS.md
-and issue #284). Flox (`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix
-store instead of container namespaces, so it provides the same
-reproducibility guarantee Dagger gives Mac/CI without needing nested-runc.
-Also used by the test suite so CI does not need a Dagger engine running.
-
-Both backends execute the *same* recipe — see ``deploy_steps`` /
-``deploy_env`` below. They differ only in the isolation layer; anything else
-is drift, and ``tests/scripts/test_deploy_webhook_dagger.py`` fails on it.
+Both executors run the *same* recipe -- see ``deploy_steps`` / ``deploy_env``
+below. They differ only in the isolation layer; anything else is drift, and
+``tests/scripts/test_deploy_webhook_dagger.py`` fails on it. Dagger runs the
+recipe in a container. ``GTM_DEPLOY_VIA_FLOX=1`` runs it under ``flox
+activate`` on the host instead, for environments where Dagger's engine cannot
+start at all (Conductor cloud sandboxes -- see "Webhook deploys" in AGENTS.md
+and issue #284, whose recorded cause is corrected there). Flox
+(`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix store rather than
+container namespaces, giving the same reproducibility guarantee. The test
+suite uses that path so CI needs no Dagger engine.
 
 The shebang is a plain ``python3``, not ``uv run python``: ``[tool.uv]
 required-version`` in pyproject.toml makes *any* incompatible ``uv`` binary
