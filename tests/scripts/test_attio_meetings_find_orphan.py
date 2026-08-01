@@ -8,8 +8,13 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
+
+# Deferred annotations keep this import type-checking-only at runtime.
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "attio-meetings-find_orphan.py"
@@ -38,6 +43,26 @@ def test_summary_logs_counts_without_sensitive_token_data(
         SimpleNamespace(created_by_type="api-token"),
         SimpleNamespace(created_by_type="other"),
     ]
+
+    def fake_iter_meetings(**_: object) -> Iterator[SimpleNamespace]:
+        return iter(candidates)
+
+    def fake_detect_orphans(_: object) -> list[object]:
+        return []
+
+    def fake_classify(_: object) -> tuple[list[object], list[object]]:
+        return [], []
+
+    def fake_write_orphan_csvs(
+        _: object,
+        __: Path,
+    ) -> dict[str, Path]:
+        return {
+            "confident": tmp_path / "confident.csv",
+            "review": tmp_path / "review.csv",
+            "all": tmp_path / "all.csv",
+        }
+
     monkeypatch.setattr(
         "libs.attio.preflight.fetch_token_scopes",
         lambda: (True, {"meeting:read"}, "dlthub"),
@@ -45,19 +70,11 @@ def test_summary_logs_counts_without_sensitive_token_data(
     monkeypatch.setattr(
         script_module,
         "iter_meetings_in_range",
-        lambda **_: iter(candidates),
+        fake_iter_meetings,
     )
-    monkeypatch.setattr(script_module, "detect_orphans", lambda _: [])
-    monkeypatch.setattr(script_module, "classify", lambda _: ([], []))
-    monkeypatch.setattr(
-        script_module,
-        "write_orphan_csvs",
-        lambda _, __: {
-            "confident": tmp_path / "confident.csv",
-            "review": tmp_path / "review.csv",
-            "all": tmp_path / "all.csv",
-        },
-    )
+    monkeypatch.setattr(script_module, "detect_orphans", fake_detect_orphans)
+    monkeypatch.setattr(script_module, "classify", fake_classify)
+    monkeypatch.setattr(script_module, "write_orphan_csvs", fake_write_orphan_csvs)
     monkeypatch.setattr(
         sys,
         "argv",
