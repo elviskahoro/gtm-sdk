@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dosu": {
+      "type": "http",
+      "url": "https://api.dosu.dev/v1/mcp/deployments/a233f333-095f-43c4-944e-269f0ed3ab6e"
+    }
+  }
+}
