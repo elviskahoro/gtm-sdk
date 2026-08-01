@@ -2,10 +2,10 @@
 
 Rules for working in `docs/`. `CLAUDE.md` and `WARP.md` symlink here.
 
-`docs/` is the published documentation site, so the repo-wide
-"don't create summary `.md` files" rule does not apply here. Local preview:
-`npm i -g mint`, then `mint dev` inside `docs/` (Node 24 via `.node-version`;
-mint breaks on Node 25+).
+`docs/` is the published documentation site. Create canonical documentation
+pages here, but the repo-wide ban on summary, investigation, and "what I did"
+`.md` files still applies. Local preview: `npm i -g mint`, then `mint dev`
+inside `docs/` (Node 24 via `.node-version`; mint breaks on Node 25+).
 
 - Every page is `.mdx` with `title` + one-line `description` frontmatter and no
   body H1 — the site renders the frontmatter title as the H1. The description

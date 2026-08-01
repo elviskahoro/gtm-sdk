@@ -96,7 +96,9 @@ hand-syncing versions.
 
 **Use `uv`. Never `pip`, `pip3`, or `python3 -m pip`.** Bare pip bypasses
 `uv.lock` and causes environment drift. `uv sync` installs from lock,
-`uv pip install <pkg>` adds a dep, `uv run <cmd>` runs inside the env.
+`uv add <pkg>` records a project dependency in `pyproject.toml`/`uv.lock`
+(`uv pip install <pkg>` only installs into the active env, for disposable
+setups — it never touches either file), `uv run <cmd>` runs inside the env.
 
 ## Path anchoring
 

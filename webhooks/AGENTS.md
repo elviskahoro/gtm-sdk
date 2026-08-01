@@ -40,7 +40,7 @@ scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
 
 The contract every concrete `src/<source>/webhook/*.py` `Webhook` class must
 satisfy is `WebhookModelProtocol` in `libs/webhook/protocol.py`. Implement the
-existing surface and add a parametrize entry to
+existing surface and add a parameterization entry to
 `tests/libs/webhook/test_protocol_conformance.py`; extend `protocol.py` only
 for a genuinely new contract method.
 
