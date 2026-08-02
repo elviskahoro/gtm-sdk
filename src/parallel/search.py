@@ -6,7 +6,7 @@ from libs.parallel.client import search
 from libs.parallel.models import SearchInput, SearchResponse
 from libs.parallel.types import SearchMode
 from src.api_keys import inject_api_keys
-from src.app import app, image
+from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets
 
 
