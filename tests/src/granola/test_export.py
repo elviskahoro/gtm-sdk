@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# ruff: noqa: EM101, PLR2004, PT017, S101, TC003, TRY003
 import datetime as dt
 from pathlib import Path
 

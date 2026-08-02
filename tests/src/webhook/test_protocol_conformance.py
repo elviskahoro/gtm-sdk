@@ -1,3 +1,4 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
 """Verify each source's ``Webhook`` class satisfies ``WebhookModelProtocol``.
 
 Catches missing contract methods at ``pytest`` time instead of at
