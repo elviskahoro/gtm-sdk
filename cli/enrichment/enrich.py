@@ -45,10 +45,9 @@ def fetch(
         help="Path to write enriched records JSON",
     ),
 ) -> None:
-    """Fetch enrichment from Harvest API and write to file (no Attio changes).
+    r"""Fetch enrichment from Harvest API and write to file (no Attio changes).
 
     Example:
-
         gtm enrichment enrich fetch \\
             --config enrichment_config.json \\
             --records records.json \\
@@ -153,10 +152,9 @@ def upsert(
         help="Preview changes without updating Attio",
     ),
 ) -> None:
-    """Batch upsert enriched records to Attio CRM.
+    r"""Batch upsert enriched records to Attio CRM.
 
     Example:
-
         gtm enrichment enrich upsert \\
             --input enriched_output.json
 
