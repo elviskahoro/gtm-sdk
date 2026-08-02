@@ -1,7 +1,49 @@
+# gazelle:python_root
+# gazelle:python_default_visibility //:__subpackages__
+# gazelle:map_kind py_test pytest_test //bazel:pytest_test.bzl
+# gazelle:exclude cli
+# gazelle:exclude scripts
+# gazelle:exclude src
+# gazelle:exclude tests/cli
+# gazelle:exclude tests/integration
+# gazelle:exclude tests/scripts
+# gazelle:exclude tests/src
+# gazelle:exclude tests/webhooks
+# gazelle:exclude webhooks
+# gazelle:exclude data-gen
+
+load("@bazel_gazelle//:def.bzl", "gazelle", "gazelle_binary")
+load("@pypi//:requirements.bzl", "all_whl_requirements")
+load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
+load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
+
 exports_files(
     [
         "pyproject.toml",
         "requirements_bazel.txt",
     ],
     visibility = ["//visibility:public"],
+)
+
+modules_mapping(
+    name = "modules_map",
+    include_stub_packages = True,
+    wheels = all_whl_requirements,
+)
+
+gazelle_python_manifest(
+    name = "gazelle_python_manifest",
+    modules_mapping = ":modules_map",
+    pip_repository_name = "pypi",
+    requirements = "//:requirements_bazel.txt",
+)
+
+gazelle_binary(
+    name = "gazelle_python_binary",
+    languages = ["@rules_python_gazelle_plugin//python"],
+)
+
+gazelle(
+    name = "gazelle",
+    gazelle = ":gazelle_python_binary",
 )
