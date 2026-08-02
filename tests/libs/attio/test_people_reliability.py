@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -8,6 +10,7 @@ from pydantic import ValidationError
 
 from libs.attio.errors import (
     ConflictError,
+    DeploymentMismatchError,
     SchemaMismatchError,
     classify_error,
     translate_modal_signature_error,
@@ -232,5 +235,33 @@ def test_classify_error_maps_modal_signature_mismatch_code() -> None:
     err = TypeError(
         "attio_upsert_person() got an unexpected keyword argument 'additional_emails'",
     )
-    mapped = classify_error(translate_modal_signature_error(err))
-    assert mapped.code == "modal_signature_mismatch"
+    translated = translate_modal_signature_error(err)
+    if not isinstance(translated, DeploymentMismatchError):
+        pytest.fail(
+            f"expected DeploymentMismatchError, got {type(translated).__name__}",
+        )
+
+    mapped = classify_error(translated)
+    if mapped.code != "modal_signature_mismatch":
+        pytest.fail(f"unexpected error code: {mapped.code}")
+    if "uv run modal deploy deploy.py" not in mapped.message:
+        pytest.fail(f"missing redeploy command in message: {mapped.message}")
+
+
+def test_attio_errors_import_does_not_import_src_modules() -> None:
+    result = subprocess.run(  # noqa: S603 -- fixed interpreter argv, shell disabled.
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; import libs.attio.errors; "
+                "assert not any(n == 'src' or n.startswith('src.') for n in sys.modules)"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        pytest.fail(result.stderr)

@@ -106,8 +106,9 @@ class ClassifiedError:
 def translate_modal_signature_error(error: Exception) -> Exception:
     if isinstance(error, TypeError) and "unexpected keyword argument" in str(error):
         return DeploymentMismatchError(
-            "Modal function signature mismatch. Deployed function is stale for current CLI payload. "
-            "Redeploy the Modal app to resolve this error.",
+            "Modal function signature mismatch. Deployed function is stale for the "
+            "current CLI payload. Redeploy the configured app with "
+            "`uv run modal deploy deploy.py`.",
         )
     return error
 
