@@ -12,8 +12,8 @@ from libs.attio.models import (
     CompanySearchResult,
 )
 from src.api_keys import inject_api_keys
-from src.app import app, image
 from src.attio.http_responses import error_response_from_exception
+from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets
 
 
