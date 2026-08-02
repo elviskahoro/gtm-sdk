@@ -1,0 +1,24 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "rb2b",
+    srcs = [
+        "__init__.py",
+        "utils.py",
+        "webhook/__init__.py",
+        "webhook/visit.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/dlt",
+        "//libs/rb2b",
+        "//libs/webhook",
+        "//src/attio",
+        "@pypi//flatsplode",
+        "@pypi//orjson",
+        "@pypi//pydantic",
+    ],
+)

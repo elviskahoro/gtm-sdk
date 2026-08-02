@@ -1,0 +1,20 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "apollo",
+    srcs = [
+        "__init__.py",
+        "organizations.py",
+        "people.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/apollo",
+        "//src:api_keys",
+        "//src:modal_runtime",
+        "//src:secrets_bootstrap",
+        "@pypi//pydantic",
+    ],
+)

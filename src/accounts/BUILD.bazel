@@ -1,0 +1,26 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "accounts",
+    srcs = [
+        "__init__.py",
+        "accounts.py",
+        "batch.py",
+        "models.py",
+        "people.py",
+        "research.py",
+        "tasks.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/parallel",
+        "//libs/parsers",
+        "//src:api_keys",
+        "//src:modal_runtime",
+        "//src:secrets_bootstrap",
+        "@pypi//pydantic",
+    ],
+)

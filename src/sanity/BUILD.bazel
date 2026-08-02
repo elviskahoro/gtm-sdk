@@ -1,0 +1,17 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "sanity",
+    srcs = [
+        "__init__.py",
+        "blog_download.py",
+    ],
+    pyi_deps = ["@pypi//types_pyyaml"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/sanity",
+        "@pypi//pyyaml",
+    ],
+)

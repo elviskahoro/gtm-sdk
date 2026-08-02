@@ -1,0 +1,36 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "attio",
+    srcs = [
+        "__init__.py",
+        "companies.py",
+        "deployment_parity.py",
+        "enrichment.py",
+        "export.py",
+        "http_responses.py",
+        "meeting_match.py",
+        "notes.py",
+        "ops.py",
+        "orphan_meetings.py",
+        "people.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs:telemetry",
+        "//libs/attio",
+        "//libs/exa",
+        "//libs/logging",
+        "//src:api_keys",
+        "//src:modal_app",
+        "//src:modal_runtime",
+        "//src:secrets_bootstrap",
+        "@pypi//fastapi",
+        "@pypi//modal",
+        "@pypi//openai",
+        "@pypi//orjson",
+        "@pypi//pydantic",
+    ],
+)
