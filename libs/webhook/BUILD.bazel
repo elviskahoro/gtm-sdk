@@ -1,0 +1,21 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "webhook",
+    srcs = [
+        "__init__.py",
+        "filter.py",
+        "protocol.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = ["@pypi//pydantic"],
+)

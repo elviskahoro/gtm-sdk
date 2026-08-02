@@ -1,0 +1,29 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+# gazelle:resolve py opentelemetry._logs @pypi//opentelemetry_api
+# gazelle:resolve py opentelemetry._logs.LogRecord @pypi//opentelemetry_api
+# gazelle:resolve py opentelemetry._logs.SeverityNumber @pypi//opentelemetry_api
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "logging",
+    srcs = [
+        "__init__.py",
+        "structured.py",
+    ],
+    pyi_deps = ["@pypi//fastapi"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs:telemetry",
+        "@pypi//opentelemetry_api",
+        "@pypi//orjson",
+        "@pypi//uuid7",
+    ],
+)

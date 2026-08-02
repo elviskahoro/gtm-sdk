@@ -1,0 +1,30 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "parsers",
+    srcs = [
+        "__init__.py",
+        "constants.py",
+        "contacts.py",
+        "countries.py",
+        "dataframes.py",
+        "normalization.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//emoji",
+        "@pypi//narwhals",
+        "@pypi//phonenumbers",
+        "@pypi//pyarrow",
+        "@pypi//pycountry",
+    ],
+)
