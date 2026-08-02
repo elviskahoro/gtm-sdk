@@ -92,6 +92,85 @@ jq.pkg-path = "jq"
 #   cp target/release/myproject $out/bin/myproject
 # """
 
+# gtm-sdk#445: repackage the official upstream release binaries instead of
+# building from source via flake (the flake builds are what breaks on
+# Vercel-class sandboxes with no working Nix sandbox -- /homeless-shelter
+# purity failures). aarch64-darwin only for now (this build machine); Linux
+# assets are TODO(#445 follow-up) once a Linux builder is available.
+#
+# `[build.*]` has no per-entry `systems` field to scope this to Darwin (flox
+# rejects an unknown `systems` key here -- verified against this flox
+# version), so each command errors loudly on any other platform instead of
+# silently no-op'ing. That's safe: nothing in this repo invokes `flox build`
+# automatically -- it's a manual, developer-invoked step (`flox build bd`)
+# to produce a `flox publish`-able artifact. `[install]` (below) is untouched
+# by this commit and still resolves bd/roborev via the flake pins on every
+# platform, including this Mac, until a follow-up PR swaps it to `pkg-path`
+# once these are actually published.
+[build.bd]
+description = "beads (bd) CLI repackaged from official upstream release binaries"
+version = "1.1.0"
+sandbox = "off"
+command = '''
+  set -euo pipefail
+  version="1.1.0"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)
+      asset="beads_${version}_darwin_arm64.tar.gz"
+      sha256="c42e24d83b258f7ba9f52a6d2d5f6b055869dfe7807165055988b12e7ea8c564"
+      ;;
+    *)
+      # TODO(#445 follow-up): pin Linux asset names/hashes once published
+      # from a Linux builder; until then this build only runs on darwin-arm64.
+      echo "error: no pinned bd asset for $(uname -s)-$(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  if [ -z "${SSL_CERT_FILE:-}" ] && [ -f "${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt" ]; then
+    export SSL_CERT_FILE="${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt"
+  fi
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "${tmp}"' EXIT
+  curl -fsSL -o "${tmp}/${asset}" \
+    "https://github.com/gastownhall/beads/releases/download/v${version}/${asset}"
+  echo "${sha256}  ${tmp}/${asset}" | sha256sum --check -
+  tar -xzf "${tmp}/${asset}" -C "${tmp}"
+  mkdir -p "$out/bin"
+  install -m755 "${tmp}/bd" "$out/bin/bd"
+'''
+
+[build.roborev]
+description = "roborev CLI repackaged from official upstream release binaries"
+version = "0.62.1"
+sandbox = "off"
+command = '''
+  set -euo pipefail
+  version="0.62.1"
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)
+      asset="roborev_${version}_darwin_arm64.tar.gz"
+      sha256="c90c6a7553c19faa9588d0a44962d62ddd82d0db607490d618a27aa2392296da"
+      ;;
+    *)
+      # TODO(#445 follow-up): pin Linux asset names/hashes once published
+      # from a Linux builder; until then this build only runs on darwin-arm64.
+      echo "error: no pinned roborev asset for $(uname -s)-$(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  if [ -z "${SSL_CERT_FILE:-}" ] && [ -f "${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt" ]; then
+    export SSL_CERT_FILE="${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt"
+  fi
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "${tmp}"' EXIT
+  curl -fsSL -o "${tmp}/${asset}" \
+    "https://github.com/kenn-io/roborev/releases/download/v${version}/${asset}"
+  echo "${sha256}  ${tmp}/${asset}" | sha256sum --check -
+  tar -xzf "${tmp}/${asset}" -C "${tmp}"
+  mkdir -p "$out/bin"
+  install -m755 "${tmp}/roborev" "$out/bin/roborev"
+'''
+
 
 ## Other Environment Options -----------------------------------------
 [options]
