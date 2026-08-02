@@ -1,0 +1,11 @@
+.agents
+.beads
+.claude
+.context
+.dolt
+.venv
+data
+data-gen
+out
+tmp
+worktrees

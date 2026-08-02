@@ -1,0 +1,15 @@
+common --enable_bzlmod
+build --incompatible_default_to_explicit_init_py
+test --test_output=errors
+
+# Workstation-only cache or remote settings belong in this ignored file.
+try-import %workspace%/.bazelrc.user
+
+# Opt in locally with `--config=local-cache`; never use this for CI artifacts.
+build:local-cache --disk_cache=tmp/bazel-disk-cache
+
+common:ci --color=no
+common:ci --curses=no
+common:ci --lockfile_mode=error
+build:ci --announce_rc
+test:ci --test_output=errors
