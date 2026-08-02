@@ -1,0 +1,7 @@
+exports_files(
+    [
+        "pytest_main.py",
+        "pytest_test.bzl",
+    ],
+    visibility = ["//visibility:public"],
+)
