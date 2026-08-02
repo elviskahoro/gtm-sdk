@@ -1,0 +1,19 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "granola",
+    srcs = [
+        "__init__.py",
+        "export.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli:json_validation",
+        "//libs/granola",
+        "//src/granola",
+        "@pypi//pydantic",
+        "@pypi//typer",
+    ],
+)

@@ -1,0 +1,23 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "octolens",
+    srcs = [
+        "__init__.py",
+        "backfill.py",
+        "utils.py",
+        "webhook/__init__.py",
+        "webhook/mention.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/dlt",
+        "//libs/octolens",
+        "//libs/webhook",
+        "//src/attio",
+        "@pypi//pydantic",
+    ],
+)

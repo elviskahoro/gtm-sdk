@@ -1,0 +1,27 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "caldotcom",
+    srcs = [
+        "__init__.py",
+        "utils.py",
+        "webhook/__init__.py",
+        "webhook/booking.py",
+        "webhook/slack_export.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/caldotcom",
+        "//libs/dlt",
+        "//libs/infisical",
+        "//libs/meetings",
+        "//src/attio",
+        "//src/slack",
+        "@pypi//flatsplode",
+        "@pypi//orjson",
+        "@pypi//pydantic",
+        "@pypi//uuid7",
+    ],
+)

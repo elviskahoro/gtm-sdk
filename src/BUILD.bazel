@@ -1,0 +1,84 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode file
+
+py_library(
+    name = "api_keys",
+    srcs = ["api_keys.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_library(
+    name = "app",
+    srcs = ["app.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":modal_runtime",
+        "//src/accounts",
+        "//src/apollo",
+        "//src/attio",
+        "//src/exa",
+        "//src/parallel",
+    ],
+)
+
+py_library(
+    name = "enrichment",
+    srcs = ["enrichment.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/harvest",
+        "//libs/logging",
+        "//libs/parsers",
+        "@pypi//pydantic",
+    ],
+)
+
+py_library(
+    name = "modal_app",
+    srcs = ["modal_app.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_library(
+    name = "modal_runtime",
+    srcs = ["modal_runtime.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":modal_app",
+        "//libs:telemetry",
+        "//libs/logging",
+        "@pypi//modal",
+    ],
+)
+
+py_library(
+    name = "otel_collector",
+    srcs = ["otel_collector.py"],
+    pyi_deps = ["@pypi//types_requests"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//modal",
+        "@pypi//requests",
+    ],
+)
+
+py_library(
+    name = "secrets_bootstrap",
+    srcs = ["secrets_bootstrap.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":api_keys",
+        "//libs:telemetry",
+        "//libs/apollo",
+        "//libs/attio",
+        "//libs/caldotcom",
+        "//libs/exa",
+        "//libs/infisical",
+        "//libs/linear",
+        "//libs/parallel",
+        "//libs/slack",
+        "@pypi//modal",
+    ],
+)

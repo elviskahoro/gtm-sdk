@@ -1,0 +1,22 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "parallel",
+    srcs = [
+        "__init__.py",
+        "extract.py",
+        "findall.py",
+        "search.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli:json_validation",
+        "//src:modal_app",
+        "//src/parallel",
+        "@pypi//modal",
+        "@pypi//pydantic",
+        "@pypi//typer",
+    ],
+)

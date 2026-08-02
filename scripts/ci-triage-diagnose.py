@@ -422,6 +422,8 @@ def main(argv: list[str] | None = None, *, client: Any = None) -> int:
         # oz-agent-sdk is intentionally not a project dependency: it is installed
         # only inside the Dagger container (and by this file's PEP 723 header for
         # direct runs), which is why the import is function-local.
+        # gazelle:ignore oz_agent_sdk
+        # gazelle:ignore oz_agent_sdk.OzAPI
         # trunk-ignore(pyrefly/missing-import)
         from oz_agent_sdk import OzAPI
 

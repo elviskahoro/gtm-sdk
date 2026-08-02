@@ -1,0 +1,31 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+py_library(
+    name = "webhook",
+    srcs = [
+        "__init__.py",
+        "_hookdeck.py",
+        "_modal.py",
+        "registry.py",
+        "sync.py",
+    ],
+    pyi_deps = [
+        "@pypi//types_pyyaml",
+        "@pypi//types_requests",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/dlt",
+        "//libs/webhook",
+        "//src/caldotcom",
+        "//src/fathom",
+        "//src/octolens",
+        "//src/rb2b",
+        "@pypi//pydantic",
+        "@pypi//pyyaml",
+        "@pypi//requests",
+        "@pypi//typer",
+    ],
+)

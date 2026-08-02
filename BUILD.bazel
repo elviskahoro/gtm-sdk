@@ -1,14 +1,7 @@
 # gazelle:python_root
 # gazelle:python_default_visibility //:__subpackages__
+# gazelle:python_ignore_files deploy.py
 # gazelle:map_kind py_test pytest_test //bazel:pytest_test.bzl
-# gazelle:exclude cli
-# gazelle:exclude scripts
-# gazelle:exclude src
-# gazelle:exclude tests/cli
-# gazelle:exclude tests/integration
-# gazelle:exclude tests/scripts
-# gazelle:exclude tests/src
-# gazelle:exclude tests/webhooks
 # gazelle:exclude webhooks
 # gazelle:exclude data-gen
 

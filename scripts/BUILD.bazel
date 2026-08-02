@@ -1,0 +1,359 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+# gazelle:python_generation_mode file
+
+# keep
+exports_files(
+    [
+        "__init__.py",
+        "agent-skills-sync.py",
+        "attio-meeting_relationship-inspect.py",
+        "attio-meetings-find_orphan.py",
+        "attio-people-bootstrap.py",
+        "attio-social_mentions-bootstrap.py",
+        "attio-tracking_events-bootstrap.py",
+        "attio-workspace_slug-probe.py",
+        "attio-workspace_url-emit.py",
+        "bazel-requirements-sync.py",
+        "beads-rig-sync_to.py",
+        "caldotcom-bookings-backfill.py",
+        "ci-suite-validate.py",
+        "ci-triage-diagnose.py",
+        "ci-triage-linear-issue.py",
+        "collector-deployment-verify.py",
+        "dash0-telemetry-verify.py",
+        "docs-cli_reference-generate.py",
+        "docs-pages-lint.py",
+        "downstream-contract-sync.py",
+        "entire-hooks-setup.py",
+        "fathom-attio_meetings-backfill.py",
+        "fireflies-attio_meetings-backfill.py",
+        "hookdeck-connection_events-dump.py",
+        "hookdeck-webhook-wire.py",
+        "octolens-mentions-backfill.py",
+        "pr-review-threads.py",
+        "rb2b-event_ids-reconcile.py",
+        "rb2b-visits-backfill.py",
+    ],
+    visibility = ["//tests/scripts:__pkg__"],
+)
+
+# keep
+exports_files(
+    ["webhooks-handlers-redeploy.py"],
+    visibility = [
+        "//tests/scripts:__pkg__",
+        "//tests/webhooks:__pkg__",
+    ],
+)
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_binary(
+    name = "agent-skills-sync",
+    srcs = ["agent-skills-sync.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//typer",
+    ],
+)
+
+py_binary(
+    name = "attio-meeting_relationship-inspect",
+    srcs = ["attio-meeting_relationship-inspect.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+        "@pypi//attio",
+    ],
+)
+
+py_binary(
+    name = "attio-meetings-find_orphan",
+    srcs = ["attio-meetings-find_orphan.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+        "//src/attio",
+    ],
+)
+
+py_binary(
+    name = "attio-people-bootstrap",
+    srcs = ["attio-people-bootstrap.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+    ],
+)
+
+py_binary(
+    name = "attio-social_mentions-bootstrap",
+    srcs = ["attio-social_mentions-bootstrap.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+    ],
+)
+
+py_binary(
+    name = "attio-tracking_events-bootstrap",
+    srcs = ["attio-tracking_events-bootstrap.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+    ],
+)
+
+py_binary(
+    name = "attio-workspace_slug-probe",
+    srcs = ["attio-workspace_slug-probe.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+    ],
+)
+
+py_binary(
+    name = "attio-workspace_url-emit",
+    srcs = ["attio-workspace_url-emit.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//scripts/lib",
+    ],
+)
+
+py_binary(
+    name = "bazel-requirements-sync",
+    srcs = ["bazel-requirements-sync.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_binary(
+    name = "beads-rig-sync_to",
+    srcs = ["beads-rig-sync_to.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//scripts/lib"],
+)
+
+py_binary(
+    name = "caldotcom-bookings-backfill",
+    srcs = ["caldotcom-bookings-backfill.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli/webhook",
+        "//libs/caldotcom",
+        "//scripts/lib",
+        "//src/caldotcom",
+        "@pypi//httpx",
+    ],
+)
+
+py_binary(
+    name = "ci-suite-validate",
+    srcs = ["ci-suite-validate.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
+    name = "ci-triage-diagnose",
+    srcs = ["ci-triage-diagnose.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//httpx",
+    ],
+)
+
+py_binary(
+    name = "ci-triage-linear-issue",
+    srcs = ["ci-triage-linear-issue.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/linear",
+        "//scripts/lib",
+        "@pypi//gtm_linear",
+        "@pypi//httpx",
+        "@pypi//pydantic",
+    ],
+)
+
+py_binary(
+    name = "collector-deployment-verify",
+    srcs = ["collector-deployment-verify.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//src:otel_collector",
+        "@pypi//modal",
+    ],
+)
+
+py_binary(
+    name = "dash0-telemetry-verify",
+    srcs = ["dash0-telemetry-verify.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs:telemetry",
+        "//libs/logging",
+        "//src:otel_collector",
+    ],
+)
+
+py_binary(
+    name = "docs-cli_reference-generate",
+    srcs = ["docs-cli_reference-generate.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli:main",
+        "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
+    ],
+)
+
+py_binary(
+    name = "docs-pages-lint",
+    srcs = ["docs-pages-lint.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//scripts/lib"],
+)
+
+py_binary(
+    name = "downstream-contract-sync",
+    srcs = ["downstream-contract-sync.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//scripts/lib"],
+)
+
+py_binary(
+    name = "entire-hooks-setup",
+    srcs = ["entire-hooks-setup.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//scripts/lib"],
+)
+
+py_binary(
+    name = "fathom-attio_meetings-backfill",
+    srcs = ["fathom-attio_meetings-backfill.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/fathom",
+        "//scripts/lib",
+        "//src/attio",
+        "//src/fathom",
+    ],
+)
+
+py_binary(
+    name = "fireflies-attio_meetings-backfill",
+    srcs = ["fireflies-attio_meetings-backfill.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/fireflies",
+        "//libs/motherduck",
+        "//scripts/lib",
+        "//src/attio",
+        "//src/fireflies",
+    ],
+)
+
+py_binary(
+    name = "hookdeck-connection_events-dump",
+    srcs = ["hookdeck-connection_events-dump.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
+    name = "hookdeck-webhook-wire",
+    srcs = ["hookdeck-webhook-wire.py"],
+    pyi_deps = ["@pypi//types_requests"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli/webhook",
+        "//scripts/lib",
+        "@pypi//requests",
+    ],
+)
+
+py_binary(
+    name = "octolens-mentions-backfill",
+    srcs = ["octolens-mentions-backfill.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli/webhook",
+        "//libs/octolens",
+        "//scripts/lib",
+        "//src/octolens",
+        "@pypi//httpx",
+        "@pypi//orjson",
+    ],
+)
+
+py_binary(
+    name = "pr-review-threads",
+    srcs = ["pr-review-threads.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
+    name = "rb2b-event_ids-reconcile",
+    srcs = ["rb2b-event_ids-reconcile.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "//libs/rb2b",
+        "//scripts/lib",
+    ],
+)
+
+py_binary(
+    name = "rb2b-visits-backfill",
+    srcs = ["rb2b-visits-backfill.py"],
+    pyi_deps = ["@pypi//types_requests"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//cli/webhook",
+        "//libs/dlt",
+        "//libs/rb2b",
+        "//scripts/lib",
+        "@pypi//dlt",
+        "@pypi//gcsfs",
+        "@pypi//requests",
+    ],
+)
+
+py_binary(
+    name = "webhooks-handlers-redeploy",
+    srcs = ["webhooks-handlers-redeploy.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//dagger_io",
+    ],
+)
