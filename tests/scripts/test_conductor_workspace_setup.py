@@ -102,16 +102,26 @@ def _write_common_stubs(bin_dir: Path, *, kernel: str = "Linux") -> None:
         )
 
 
-def _write_flox(bin_dir: Path, flox_bin: Path, *, succeeds: bool) -> None:
+def _write_flox(
+    bin_dir: Path,
+    flox_bin: Path,
+    *,
+    succeeds: bool,
+    auth_succeeds: bool = True,
+) -> None:
     exit_code = 0 if succeeds else 1
+    auth_exit_code = 0 if auth_succeeds else 1
     _write_stub(
         bin_dir,
         "flox",
         f"""\
         #!/usr/bin/env bash
         echo "flox $*" >> "${{SETUP_TEST_LOG}}"
-        [[ "${{1:-}}" == "activate" ]] || exit 1
-        exit {exit_code}
+        case "${{1:-}}" in
+          auth) exit {auth_exit_code} ;;
+          activate) exit {exit_code} ;;
+          *) exit 1 ;;
+        esac
         """,
     )
     if succeeds:
@@ -203,6 +213,9 @@ def _run_setup(
     later_uv_version: str | None = None,
     failing_curl_tool: str | None = None,
     extra_env: dict[str, str] | None = None,
+    env_local_content: str | None = None,
+    floxhub_auth_succeeds: bool = True,
+    omit_flox: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     repo = tmp_path / "repo"
     scripts_dir = repo / "scripts"
@@ -224,13 +237,21 @@ def _run_setup(
     _make_executable(setup_copy)
     if stale_beads_target is not None:
         (repo / ".beads").symlink_to(stale_beads_target)
+    if env_local_content is not None:
+        (repo / ".env.local").write_text(env_local_content)
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_common_stubs(bin_dir, kernel=kernel)
     if uv_version is not None:
         _write_uv_stub(bin_dir, version=uv_version)
-    _write_flox(bin_dir, flox_bin, succeeds=flox_succeeds)
+    if not omit_flox:
+        _write_flox(
+            bin_dir,
+            flox_bin,
+            succeeds=flox_succeeds,
+            auth_succeeds=floxhub_auth_succeeds,
+        )
     _write_curl_installer(bin_dir, failing_tool=failing_curl_tool)
 
     # Optional second `uv`-only bin dir, placed *later* on PATH than
@@ -281,6 +302,87 @@ def test_successful_flox_activation_uses_flox_provided_tools(tmp_path: Path) -> 
     assert "flox-bd version" in log.read_text()
     assert "flox-roborev version" in log.read_text()
     assert "fallback-roborev" not in log.read_text()
+
+
+def test_floxhub_token_from_env_local_authenticates_before_activation(
+    tmp_path: Path,
+) -> None:
+    # .env.local, not the process environment -- the real provisioning path
+    # (DOLTHUB_CREDENTIAL uses the same file), not just FLOXHUB_TOKEN already
+    # being set for some other reason.
+    result, log = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        env_local_content='FLOXHUB_TOKEN="test-fixture-not-a-real-credential"\n',  # nosec B105
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "info: authenticated to FloxHub" in result.stdout
+    lines = log.read_text().splitlines()
+    auth_line = next(
+        i for i, line in enumerate(lines) if line.startswith("flox auth login")
+    )
+    activate_line = next(
+        i for i, line in enumerate(lines) if line.startswith("flox activate")
+    )
+    assert auth_line < activate_line
+    assert "provisioning source: Flox" in result.stdout
+
+
+def test_no_flox_skips_floxhub_auth_entirely(tmp_path: Path) -> None:
+    # Without flox on PATH at all (the plain macOS-without-Flox fallback
+    # case), authenticate_floxhub must not run -- otherwise it'd call a
+    # nonexistent `flox auth login` and misreport a real auth failure for
+    # what is actually just "flox isn't installed here".
+    result, log = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        omit_flox=True,
+        env_local_content='FLOXHUB_TOKEN="test-fixture-not-a-real-credential"\n',  # nosec B105
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "FloxHub auth failed" not in result.stdout
+    assert "authenticated to FloxHub" not in result.stdout
+    assert "flox auth login" not in log.read_text()
+    assert "provisioning source: fallback installers" in result.stdout
+
+
+def test_missing_floxhub_token_skips_auth_activation_still_attempted(
+    tmp_path: Path,
+) -> None:
+    result, log = _run_setup(tmp_path, flox_succeeds=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "info: FLOXHUB_TOKEN not set; skipping FloxHub auth" in result.stdout
+    assert "flox auth login" not in log.read_text()
+    assert "provisioning source: Flox" in result.stdout
+
+
+def test_failed_floxhub_auth_warns_and_still_attempts_activation(
+    tmp_path: Path,
+) -> None:
+    result, log = _run_setup(
+        tmp_path,
+        flox_succeeds=True,
+        floxhub_auth_succeeds=False,
+        env_local_content='FLOXHUB_TOKEN="test-fixture-not-a-real-credential"\n',  # nosec B105
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "warning: FloxHub auth failed; published packages may not resolve"
+        in result.stdout
+    )
+    lines = log.read_text().splitlines()
+    auth_line = next(
+        i for i, line in enumerate(lines) if line.startswith("flox auth login")
+    )
+    activate_line = next(
+        i for i, line in enumerate(lines) if line.startswith("flox activate")
+    )
+    assert auth_line < activate_line
+    assert "provisioning source: Flox" in result.stdout
 
 
 def test_failed_flox_activation_uses_fallback_installers(tmp_path: Path) -> None:

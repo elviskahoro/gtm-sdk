@@ -159,6 +159,58 @@ roborev version
 EOF
 }
 
+# gtm-sdk#445: elvis/bd and elvis/roborev are published to a private FloxHub
+# catalog (aarch64-darwin only so far) -- a bare `flox publish` always lands
+# in the publisher's private catalog with no way to make it fetchable
+# unauthenticated (confirmed against flox-conductor-sandbox#11), so an
+# unauthenticated `flox activate` can't resolve them. Same secret-lookup
+# convention as DOLTHUB_CREDENTIAL below: prefer .env.local; no Infisical
+# lookup yet (tracked follow-up, an operator wires FLOXHUB_TOKEN in
+# separately). Missing token is not fatal -- activation below still runs
+# and fails closed into the existing curl-fallback path, exactly like every
+# other optional credential in this script.
+authenticate_floxhub() {
+  if [[ -f .env.local ]]; then
+    # shellcheck disable=SC1091  # workspace-local file, not present in this repo checkout
+    set -a && source .env.local && set +a
+  fi
+  if [[ -z ${FLOXHUB_TOKEN-} ]]; then
+    echo "info: FLOXHUB_TOKEN not set; skipping FloxHub auth"
+    return 0
+  fi
+  local token_file
+  token_file="$(mktemp)"
+  chmod 600 "${token_file}"
+  # Guarantee cleanup even if flox auth login (a network call) hangs or this
+  # script is killed/signaled mid-call -- not just on the normal-return path
+  # below. EXIT covers the whole-script-dies case; INT/TERM/HUP re-raise
+  # after cleanup so the script's own exit status/signal death is unchanged.
+  # shellcheck disable=SC2064  # intentional immediate expansion: token_file/$$ won't change
+  trap "rm -f '${token_file}'" EXIT RETURN
+  # shellcheck disable=SC2064
+  trap "rm -f '${token_file}'; trap - INT; kill -INT $$" INT
+  # shellcheck disable=SC2064
+  trap "rm -f '${token_file}'; trap - TERM; kill -TERM $$" TERM
+  # shellcheck disable=SC2064
+  trap "rm -f '${token_file}'; trap - HUP; kill -HUP $$" HUP
+  printf '%s' "${FLOXHUB_TOKEN}" >"${token_file}"
+  if flox auth login --token-file="${token_file}" >/dev/null 2>&1; then
+    echo "info: authenticated to FloxHub"
+  else
+    echo "warning: FloxHub auth failed; published packages may not resolve"
+  fi
+  if command -v shred >/dev/null 2>&1; then
+    shred -u "${token_file}" 2>/dev/null || true
+  fi
+  # Unconditional: shred may be absent (macOS) or may itself fail: this is
+  # the actual guarantee, not the traps above (which stay armed afterward --
+  # harmless, since this rm already made them no-ops).
+  rm -f "${token_file}"
+}
+if command -v flox >/dev/null 2>&1; then
+  authenticate_floxhub
+fi
+
 # shellcheck disable=SC2310 # A failed Flox probe deliberately selects fallback provisioning.
 if command -v flox >/dev/null 2>&1 && provision_flox_tools; then
   FLOX_TOOLS_VERIFIED=1
@@ -206,10 +258,18 @@ if [[ ${FLOX_TOOLS_VERIFIED:-0} != 1 ]]; then
 fi
 
 # --- bd + roborev ------------------------------------------------------------
-# Flox-managed on Linux sandboxes via each tool's own flake.nix (pinned in
-# .flox/env/manifest.toml as bd.flake / roborev.flake), already on PATH from
-# the flox activate above. macOS (no unattended Flox install) falls back to
-# curl-installing the unpinned latest release, same as dolt/infisical/uv above.
+# On aarch64-darwin (gtm-sdk#445): Flox-managed via published FloxHub
+# packages (elvis/bd, elvis/roborev -- pinned in .flox/env/manifest.toml as
+# bd.pkg-path / roborev.pkg-path), repackaged from upstream release binaries
+# rather than built from source, so they don't hit the Nix-sandbox purity
+# failures a flake source build does on a sandbox with no working Nix
+# sandbox. On aarch64-linux/x86_64-linux (not published yet): still
+# Flox-managed via each tool's own flake.nix (bd-linux.flake /
+# roborev-linux.flake), same as before -- version-bump runbook once
+# published: republish + bump the pinned version, don't hand-edit the lock.
+# Either way, already on PATH from the flox activate above. macOS (no
+# unattended Flox install) falls back to curl-installing the unpinned
+# latest release, same as dolt/infisical/uv above.
 if ! command -v bd >/dev/null 2>&1; then
   echo "info: installing bd with fallback installer"
   curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash ||

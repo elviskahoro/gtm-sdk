@@ -92,6 +92,27 @@ each step. Toolchain versions come from the committed Flox environment
 (`.flox/env/manifest.toml`) — edit it via `flox install`/`flox edit`, never by
 hand-syncing versions.
 
+`bd`/`roborev` on **aarch64-darwin** resolve from FloxHub packages
+(`elvis/bd`, `elvis/roborev`) repackaged from upstream release binaries via
+`[build.bd]`/`[build.roborev]` in the manifest — this avoids the Nix-sandbox
+purity failures a flake source build hits on a sandbox with no working Nix
+sandbox (gtm-sdk#445). Version bump: bump the pinned asset version + sha256
+in `[build.*]` → commit + push (publish clones from the remote) → `flox
+build <name>` → verify the tool's exact CLI surface against what
+`conductor-workspace-setup.sh` invokes → `flox publish <name>` → bump the
+`version` in `[install]` → regenerate `manifest.lock` via `flox` (never
+hand-edit) → commit. **aarch64-linux/x86_64-linux are not published yet**
+(no Linux builder available) — those systems still resolve `bd`/`roborev`
+via the original flake pins (`bd-linux`/`roborev-linux` in `[install]`),
+unchanged from before.
+
+Because the FloxHub catalog is private by default, `conductor-workspace-setup.sh`
+authenticates via `flox auth login --token-file` before activation when a
+`FLOXHUB_TOKEN` is available (`.env.local`, same convention as
+`DOLTHUB_CREDENTIAL`; Infisical wiring is a follow-up). A missing token
+isn't fatal — activation still runs and fails closed into the existing
+curl-fallback path.
+
 ## Package management
 
 **Use `uv`. Never `pip`, `pip3`, or `python3 -m pip`.** Bare pip bypasses
