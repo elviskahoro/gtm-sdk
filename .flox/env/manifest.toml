@@ -15,8 +15,23 @@ dolt.pkg-path = "dolt"
 infisical.pkg-path = "infisical"
 gh.pkg-path = "gh"
 git.pkg-path = "git"
-bd.flake = "github:gastownhall/beads/v1.1.0"
-roborev.flake = "github:kenn-io/roborev/v0.62.1"
+# gtm-sdk#445: on aarch64-darwin, resolve bd/roborev from published FloxHub
+# packages (see [build.bd]/[build.roborev] below), repackaged from upstream
+# release binaries -- replacing the flake source builds that broke
+# provisioning on sandboxes with no working Nix sandbox. Not yet published
+# for Linux (tracked follow-up once a Linux builder is available), so Linux
+# keeps the exact flake pins it has today via separate install-table keys
+# scoped to those systems -- unchanged behavior there, not a regression.
+bd.pkg-path = "elvis/bd"
+bd.version = "1.1.0"
+bd.systems = ["aarch64-darwin"]
+roborev.pkg-path = "elvis/roborev"
+roborev.version = "0.62.1"
+roborev.systems = ["aarch64-darwin"]
+bd-linux.flake = "github:gastownhall/beads/v1.1.0"
+bd-linux.systems = ["aarch64-linux", "x86_64-linux"]
+roborev-linux.flake = "github:kenn-io/roborev/v0.62.1"
+roborev-linux.systems = ["aarch64-linux", "x86_64-linux"]
 jq.pkg-path = "jq"
 # gum.pkg-path = "gum"
 # gum.version = "^0.14.5"

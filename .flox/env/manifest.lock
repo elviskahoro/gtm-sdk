@@ -4,7 +4,18 @@
     "schema-version": "1.13.0",
     "install": {
       "bd": {
-        "flake": "github:gastownhall/beads/v1.1.0"
+        "pkg-path": "elvis/bd",
+        "version": "1.1.0",
+        "systems": [
+          "aarch64-darwin"
+        ]
+      },
+      "bd-linux": {
+        "flake": "github:gastownhall/beads/v1.1.0",
+        "systems": [
+          "aarch64-linux",
+          "x86_64-linux"
+        ]
       },
       "dolt": {
         "pkg-path": "dolt"
@@ -22,7 +33,18 @@
         "pkg-path": "jq"
       },
       "roborev": {
-        "flake": "github:kenn-io/roborev/v0.62.1"
+        "pkg-path": "elvis/roborev",
+        "version": "0.62.1",
+        "systems": [
+          "aarch64-darwin"
+        ]
+      },
+      "roborev-linux": {
+        "flake": "github:kenn-io/roborev/v0.62.1",
+        "systems": [
+          "aarch64-linux",
+          "x86_64-linux"
+        ]
       },
       "uv": {
         "pkg-path": "uv",
@@ -54,6 +76,32 @@
     }
   },
   "packages": [
+    {
+      "attr_path": "bd",
+      "derivation": "/nix/store/hvwk5zb3wmfqkwrwj8pz2r7pz8sd2hsq-bd-1.1.0.drv",
+      "description": "beads (bd) CLI repackaged from official upstream release binaries",
+      "install_id": "bd",
+      "locked_url": "ssh://git@github.com/elviskahoro/gtm-sdk.git?rev=edda135586315c4c8556a6d55c75ee959eada15b",
+      "name": "bd-1.1.0",
+      "pname": "bd",
+      "rev": "edda135586315c4c8556a6d55c75ee959eada15b",
+      "rev_count": 527,
+      "rev_date": "2026-08-02T16:44:54Z",
+      "scrape_date": "2026-08-02T16:49:02.502484Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "version": "1.1.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/21n7025xm65w5rjbqlahwby6rvkmjx1j-bd-1.1.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
     {
       "attr_path": "dolt",
       "broken": false,
@@ -512,6 +560,32 @@
       "priority": 5
     },
     {
+      "attr_path": "roborev",
+      "derivation": "/nix/store/dsyd8a0lmw6c7qrb0csxblv2aaf5p2g2-roborev-0.62.1.drv",
+      "description": "roborev CLI repackaged from official upstream release binaries",
+      "install_id": "roborev",
+      "locked_url": "ssh://git@github.com/elviskahoro/gtm-sdk.git?rev=edda135586315c4c8556a6d55c75ee959eada15b",
+      "name": "roborev-0.62.1",
+      "pname": "roborev",
+      "rev": "edda135586315c4c8556a6d55c75ee959eada15b",
+      "rev_count": 527,
+      "rev_date": "2026-08-02T16:44:54Z",
+      "scrape_date": "2026-08-02T16:49:02.502503Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "version": "0.62.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/c32f6mf51bxrqqawkf8i5f4v2zqnaxz5-roborev-0.62.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
       "attr_path": "uv",
       "broken": false,
       "derivation": "/nix/store/c3a2nkn6r77mljbz2idjb11yvffak6rl-uv-0.11.26.drv",
@@ -599,36 +673,7 @@
       "priority": 5
     },
     {
-      "install_id": "bd",
-      "locked-url": "github:gastownhall/beads/8e4e59d39f3459a43cf21a3236a13eca4dd874f7?narHash=sha256-%2BdFV//0N8ZDw9BHOJOoWZ%2BBvLmJKlnGtONHIYPRhfBE%3D",
-      "flake-description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
-      "locked-flake-attr-path": "packages.aarch64-darwin.default",
-      "derivation": "/nix/store/y9swlgkhi5yqmycr234nyhlngph4a02j-beads-1.1.0.drv",
-      "outputs": {
-        "out": "/nix/store/jklsqn4ph5c0h2b9n009m2yjnajjbz8a-beads-1.1.0"
-      },
-      "output-names": [
-        "out"
-      ],
-      "outputs-to-install": [
-        "out"
-      ],
-      "requested-outputs-to-install": [],
-      "package-system": "aarch64-darwin",
-      "system": "aarch64-darwin",
-      "name": "beads-1.1.0",
-      "pname": "beads",
-      "version": "1.1.0",
-      "description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
-      "licenses": [
-        "MIT"
-      ],
-      "broken": false,
-      "unfree": false,
-      "priority": 5
-    },
-    {
-      "install_id": "bd",
+      "install_id": "bd-linux",
       "locked-url": "github:gastownhall/beads/8e4e59d39f3459a43cf21a3236a13eca4dd874f7?narHash=sha256-%2BdFV//0N8ZDw9BHOJOoWZ%2BBvLmJKlnGtONHIYPRhfBE%3D",
       "flake-description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
       "locked-flake-attr-path": "packages.aarch64-linux.default",
@@ -657,7 +702,7 @@
       "priority": 5
     },
     {
-      "install_id": "bd",
+      "install_id": "bd-linux",
       "locked-url": "github:gastownhall/beads/8e4e59d39f3459a43cf21a3236a13eca4dd874f7?narHash=sha256-%2BdFV//0N8ZDw9BHOJOoWZ%2BBvLmJKlnGtONHIYPRhfBE%3D",
       "flake-description": "beads (bd) - An issue tracker designed for AI-supervised coding workflows",
       "locked-flake-attr-path": "packages.x86_64-linux.default",
@@ -686,36 +731,7 @@
       "priority": 5
     },
     {
-      "install_id": "roborev",
-      "locked-url": "github:kenn-io/roborev/addd7f2f56a85b0b3a5f3f322057083cf0347709?narHash=sha256-myLItITvQdGHSj6f8X4A65wjpbl01UPDkF6ReU8az08%3D",
-      "flake-description": "roborev - automatic code review daemon for git commits",
-      "locked-flake-attr-path": "packages.aarch64-darwin.default",
-      "derivation": "/nix/store/gmrnfikxw5fcvxz03lwc5nhvp42h3gwl-roborev-0.62.0.drv",
-      "outputs": {
-        "out": "/nix/store/fflycx46gzsf216mlrnjiaclpz0dhg2i-roborev-0.62.0"
-      },
-      "output-names": [
-        "out"
-      ],
-      "outputs-to-install": [
-        "out"
-      ],
-      "requested-outputs-to-install": [],
-      "package-system": "aarch64-darwin",
-      "system": "aarch64-darwin",
-      "name": "roborev-0.62.0",
-      "pname": "roborev",
-      "version": "0.62.0",
-      "description": "Automatic code review daemon for git commits",
-      "licenses": [
-        "MIT"
-      ],
-      "broken": false,
-      "unfree": false,
-      "priority": 5
-    },
-    {
-      "install_id": "roborev",
+      "install_id": "roborev-linux",
       "locked-url": "github:kenn-io/roborev/addd7f2f56a85b0b3a5f3f322057083cf0347709?narHash=sha256-myLItITvQdGHSj6f8X4A65wjpbl01UPDkF6ReU8az08%3D",
       "flake-description": "roborev - automatic code review daemon for git commits",
       "locked-flake-attr-path": "packages.aarch64-linux.default",
@@ -744,7 +760,7 @@
       "priority": 5
     },
     {
-      "install_id": "roborev",
+      "install_id": "roborev-linux",
       "locked-url": "github:kenn-io/roborev/addd7f2f56a85b0b3a5f3f322057083cf0347709?narHash=sha256-myLItITvQdGHSj6f8X4A65wjpbl01UPDkF6ReU8az08%3D",
       "flake-description": "roborev - automatic code review daemon for git commits",
       "locked-flake-attr-path": "packages.x86_64-linux.default",
