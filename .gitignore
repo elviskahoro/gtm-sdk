@@ -81,3 +81,7 @@ CLAUDE.local.md
 # negation `git add` drops them silently. The root CLAUDE.md is already
 # tracked, so the rule above is inert there.
 !*/CLAUDE.md
+
+# Bazel output symlinks and untracked workstation overrides
+/bazel-*
+/.bazelrc.user
