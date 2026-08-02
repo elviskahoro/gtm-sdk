@@ -1,3 +1,4 @@
+# ruff: noqa: ANN401, EM101, S101, SIM117, TRY003
 """Tests for blog download path-safety and fetch error handling."""
 
 import os
