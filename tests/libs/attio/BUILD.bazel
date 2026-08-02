@@ -1,0 +1,335 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_attributes",
+    srcs = ["test_attributes.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//attio",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_attributes_target",
+    srcs = ["test_attributes_target.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_companies_domain",
+    srcs = ["test_companies_domain.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_companies_extensions",
+    srcs = ["test_companies_extensions.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_companies_upsert",
+    srcs = ["test_companies_upsert.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_describe_attio_error",
+    srcs = ["test_describe_attio_error.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+    ],
+)
+
+pytest_test(
+    name = "test_errors_pydantic",
+    srcs = ["test_errors_pydantic.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+    ],
+)
+
+pytest_test(
+    name = "test_errors_scope",
+    srcs = ["test_errors_scope.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_ext_tam",
+    srcs = ["test_ext_tam.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_ext_tam_input",
+    srcs = ["test_ext_tam_input.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_ext_tam_iter",
+    srcs = ["test_ext_tam_iter.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_meeting_payload",
+    srcs = ["test_meeting_payload.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_meetings",
+    srcs = ["test_meetings.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//attio",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_mentions",
+    srcs = ["test_mentions.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_notes_idempotent",
+    srcs = ["test_notes_idempotent.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_objects",
+    srcs = ["test_objects.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_people",
+    srcs = ["test_people.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_people_github_match",
+    srcs = ["test_people_github_match.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_people_linkedin_variants",
+    srcs = ["test_people_linkedin_variants.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_people_multi_email",
+    srcs = ["test_people_multi_email.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_people_name_at_company",
+    srcs = ["test_people_name_at_company.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_people_reliability",
+    srcs = ["test_people_reliability.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_person_input",
+    srcs = ["test_person_input.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_preflight",
+    srcs = ["test_preflight.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_sdk_boundary",
+    srcs = ["test_sdk_boundary.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_tracking_events",
+    srcs = ["test_tracking_events.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_tracking_events_lifecycle",
+    srcs = ["test_tracking_events_lifecycle.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_uniqueness_conflict_translation",
+    srcs = ["test_uniqueness_conflict_translation.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_upload_parsers_is_linkedin_url_properties",
+    srcs = ["test_upload_parsers_is_linkedin_url_properties.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//hypothesis",
+    ],
+)
+
+pytest_test(
+    name = "test_validation_type_error",
+    srcs = ["test_validation_type_error.py"],
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//attio",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_values",
+    srcs = ["test_values.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_values_normalize_company",
+    srcs = ["test_values_normalize_company.py"],
+    deps = [
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

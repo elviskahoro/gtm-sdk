@@ -1,0 +1,48 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_api_key_resolution",
+    srcs = ["test_api_key_resolution.py"],
+    deps = [
+        "//libs/caldotcom",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    deps = [
+        "//libs/caldotcom",
+        "//tests:conftest",
+        "@pypi//httpx",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_client_list_bookings",
+    srcs = ["test_client_list_bookings.py"],
+    deps = [
+        "//libs/caldotcom",
+        "//tests:conftest",
+        "@pypi//httpx",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_models",
+    srcs = ["test_models.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/caldotcom",
+        "//tests:conftest",
+        "@pypi//orjson",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)

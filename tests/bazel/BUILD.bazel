@@ -1,0 +1,8 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_pytest_main",
+    srcs = ["test_pytest_main.py"],
+    pyi_deps = ["@pypi//pytest"],
+    deps = ["//tests:conftest"],
+)

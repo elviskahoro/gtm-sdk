@@ -1,0 +1,49 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+pytest_test(
+    name = "test_import_boundaries",
+    srcs = ["test_import_boundaries.py"],
+    data = [
+        "//libs:architecture_sources",
+        "//libs/apollo:architecture_sources",
+        "//libs/attio:architecture_sources",
+        "//libs/browserbase:architecture_sources",
+        "//libs/caldotcom:architecture_sources",
+        "//libs/clay_http:architecture_sources",
+        "//libs/dlt:architecture_sources",
+        "//libs/exa:architecture_sources",
+        "//libs/fathom:architecture_sources",
+        "//libs/filesystem:architecture_sources",
+        "//libs/fireflies:architecture_sources",
+        "//libs/gmail:architecture_sources",
+        "//libs/granola:architecture_sources",
+        "//libs/harvest:architecture_sources",
+        "//libs/infisical:architecture_sources",
+        "//libs/linear:architecture_sources",
+        "//libs/linkedin:architecture_sources",
+        "//libs/logging:architecture_sources",
+        "//libs/meetings:architecture_sources",
+        "//libs/motherduck:architecture_sources",
+        "//libs/octolens:architecture_sources",
+        "//libs/openai:architecture_sources",
+        "//libs/parallel:architecture_sources",
+        "//libs/parsers:architecture_sources",
+        "//libs/perplexity:architecture_sources",
+        "//libs/rb2b:architecture_sources",
+        "//libs/resend:architecture_sources",
+        "//libs/sanity:architecture_sources",
+        "//libs/slack:architecture_sources",
+        "//libs/webhook:architecture_sources",
+    ],  # keep
+    deps = [
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

@@ -1,0 +1,39 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+filegroup(
+    name = "all_payloads_fixture",
+    srcs = ["fixtures/all_payloads.txt"],
+)
+
+filegroup(
+    name = "events_fixture",
+    srcs = ["fixtures/events.json"],
+)
+
+pytest_test(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    deps = [
+        "//libs/octolens",
+        "//tests:conftest",
+        "@pypi//httpx",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_models",
+    srcs = ["test_models.py"],
+    data = [
+        ":all_payloads_fixture",
+        ":events_fixture",
+    ],  # keep
+    deps = [
+        "//libs/octolens",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)

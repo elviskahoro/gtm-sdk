@@ -1,0 +1,16 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_structured",
+    srcs = ["test_structured.py"],
+    deps = [
+        "//libs:telemetry",
+        "//libs/logging",
+        "//tests:conftest",
+        "@pypi//fastapi",
+        "@pypi//orjson",
+        "@pypi//pytest",
+    ],
+)

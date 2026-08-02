@@ -1,0 +1,31 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode file
+# gazelle:python_include_ancestor_conftest true
+# gazelle:resolve py opentelemetry.sdk._logs.export @pypi//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.sdk._logs.export.LogRecordExportResult @pypi//opentelemetry_sdk
+# gazelle:exclude cli
+# gazelle:exclude integration
+# gazelle:exclude scripts
+# gazelle:exclude src
+# gazelle:exclude test_downstream_contract.py
+# gazelle:exclude test_hypothesis_plugin.py
+# gazelle:exclude test_smoke_telemetry.py
+# gazelle:exclude webhooks
+# gazelle:exclude workflows
+
+py_library(
+    name = "conftest",
+    testonly = True,
+    srcs = ["conftest.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs:telemetry",
+        "//libs/attio",
+        "@pypi//attio",
+        "@pypi//hypothesis",
+        "@pypi//opentelemetry_exporter_otlp_proto_http",
+        "@pypi//opentelemetry_sdk",
+        "@pypi//pytest",
+    ],
+)

@@ -1,0 +1,22 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+pytest_test(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    pyi_deps = ["@pypi//types_requests"],
+    deps = [
+        "//libs/clay_http",
+        "//tests:conftest",
+        "@pypi//pytest",
+        "@pypi//requests",
+    ],
+)

@@ -1,0 +1,14 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_filter",
+    srcs = ["test_filter.py"],
+    deps = [
+        "//libs/webhook",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)

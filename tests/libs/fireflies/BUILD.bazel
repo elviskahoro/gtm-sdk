@@ -1,0 +1,19 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+filegroup(
+    name = "transcript_row_fixture",
+    srcs = ["fixtures/transcript_row.json"],
+)
+
+pytest_test(
+    name = "test_models",
+    srcs = ["test_models.py"],
+    data = [":transcript_row_fixture"],  # keep
+    deps = [
+        "//libs/fireflies",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

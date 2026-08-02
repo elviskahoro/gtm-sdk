@@ -55,6 +55,7 @@ def _runfiles_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root.mkdir(parents=True)
     monkeypatch.setenv("TEST_SRCDIR", str(test_srcdir))
     monkeypatch.setenv("TEST_WORKSPACE", workspace)
+    monkeypatch.delenv("XML_OUTPUT_FILE", raising=False)
     return root
 
 

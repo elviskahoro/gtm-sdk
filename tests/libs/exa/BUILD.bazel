@@ -1,0 +1,43 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_companies_people",
+    srcs = ["test_companies_people.py"],
+    deps = [
+        "//libs/exa",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_errors",
+    srcs = ["test_errors.py"],
+    deps = [
+        "//libs/exa",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_models_validation",
+    srcs = ["test_models_validation.py"],
+    deps = [
+        "//libs/exa",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_search",
+    srcs = ["test_search.py"],
+    deps = [
+        "//libs/exa",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)

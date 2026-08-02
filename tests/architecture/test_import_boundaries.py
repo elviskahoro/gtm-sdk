@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import pytest
 
 FORBIDDEN_ORCHESTRATION_ROOTS = {"cli", "src"}
+EXPECTED_TRACKED_LIB_FILES = 132
 MIN_ADAPTER_PATH_PARTS = 3
 MIN_LIBS_MODULE_PARTS = 2
 
@@ -59,7 +60,7 @@ def _tracked_lib_files(root: Path) -> list[Path]:
     git = shutil.which("git")
     if git is not None and (root / ".git").exists():
         result = subprocess.run(  # noqa: S603,S607 -- fixed git argv, shell disabled.
-            [git, "-C", str(root), "ls-files", "libs/**/*.py"],
+            [git, "-C", str(root), "ls-files", "libs/*.py", "libs/**/*.py"],
             capture_output=True,
             check=False,
             text=True,
@@ -122,9 +123,12 @@ def _is_orchestration_import(module: str) -> bool:
     return root in FORBIDDEN_ORCHESTRATION_ROOTS
 
 
-def _boundary_violations(root: Path) -> list[BoundaryViolation]:
+def _boundary_violations(
+    root: Path,
+    source_paths: list[Path],
+) -> list[BoundaryViolation]:
     violations: list[BoundaryViolation] = []
-    for source_path in _tracked_lib_files(root):
+    for source_path in source_paths:
         relative_path = source_path.relative_to(root)
         source_adapter = _adapter_for_path(relative_path)
         if source_adapter is None:
@@ -159,7 +163,15 @@ def _boundary_violations(root: Path) -> list[BoundaryViolation]:
 
 
 def test_lib_adapters_do_not_import_other_adapters_or_orchestration() -> None:
-    violations = _boundary_violations(_repo_root())
+    root = _repo_root()
+    source_paths = _tracked_lib_files(root)
+    if len(source_paths) != EXPECTED_TRACKED_LIB_FILES:
+        pytest.fail(
+            "tracked libs source scan found "
+            f"{len(source_paths)} files; expected {EXPECTED_TRACKED_LIB_FILES}",
+        )
+
+    violations = _boundary_violations(root, source_paths)
     formatted = [
         f"{violation.path}:{violation.line} -> {violation.module}"
         for violation in violations

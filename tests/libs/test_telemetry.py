@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import os
 
 import pytest
 
@@ -739,9 +740,8 @@ def test_collection_time_src_app_log_exporter_is_neutered() -> None:
     OTEL SDK's private attrs (pinned via uv.lock) to assert the exporter that
     actually got registered is the conftest no-op, not the real one.
     """
-    from src.modal_app import MODAL_APP
-
-    logger = telemetry_module._otlp_loggers.get(MODAL_APP)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    modal_app = os.environ.get("MODAL_APP", "gtm-sdk")
+    logger = telemetry_module._otlp_loggers.get(modal_app)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
     if logger is None:
         # Only a full-suite run imports src.app at collection (via the modal
         # wrapper test modules) under the collector-mode default env. In a

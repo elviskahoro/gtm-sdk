@@ -25,6 +25,13 @@ exports_files(
     visibility = ["//visibility:public"],
 )
 
+# keep
+filegroup(
+    name = "api_samples",
+    srcs = glob(["api/samples/**/*.json"]),
+    visibility = ["//tests:__subpackages__"],
+)
+
 modules_mapping(
     name = "modules_map",
     include_stub_packages = True,
