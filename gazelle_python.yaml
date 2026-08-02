@@ -3,6 +3,7 @@
 # To update this file, run:
 #   bazel run //:gazelle_python_manifest.update
 
+---
 manifest:
   modules_mapping:
     81d243bd2c585b0f4821__mypyc: charset_normalizer

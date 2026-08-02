@@ -1,0 +1,14 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    deps = [
+        "//libs/linear",
+        "//tests:conftest",
+        "@pypi//gtm_linear",
+        "@pypi//pytest",
+    ],
+)

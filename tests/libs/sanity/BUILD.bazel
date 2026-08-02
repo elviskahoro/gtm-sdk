@@ -1,0 +1,22 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    deps = [
+        "//libs/sanity",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_portable_text",
+    srcs = ["test_portable_text.py"],
+    deps = [
+        "//libs/sanity",
+        "//tests:conftest",
+    ],
+)

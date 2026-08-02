@@ -1,0 +1,13 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_uid",
+    srcs = ["test_uid.py"],
+    deps = [
+        "//libs/meetings",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

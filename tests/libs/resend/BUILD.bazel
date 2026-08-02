@@ -1,0 +1,12 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_email_input",
+    srcs = ["test_email_input.py"],
+    deps = [
+        "//libs/resend",
+        "//tests:conftest",
+    ],
+)

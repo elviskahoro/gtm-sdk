@@ -1,0 +1,23 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_from_sdk",
+    srcs = ["test_from_sdk.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/fathom",
+        "//tests:conftest",
+        "@pypi//fathom_python",
+    ],
+)
+
+pytest_test(
+    name = "test_models",
+    srcs = ["test_models.py"],
+    deps = [
+        "//libs/fathom",
+        "//tests:conftest",
+    ],
+)

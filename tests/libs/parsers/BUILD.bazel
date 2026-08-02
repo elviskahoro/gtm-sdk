@@ -1,0 +1,45 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_contacts_email_filter",
+    srcs = ["test_contacts_email_filter.py"],
+    deps = [
+        "//libs/parsers",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_contacts_properties",
+    srcs = ["test_contacts_properties.py"],
+    deps = [
+        "//libs/parsers",
+        "//tests:conftest",
+        "@pypi//hypothesis",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_countries",
+    srcs = ["test_countries.py"],
+    deps = [
+        "//libs/parsers",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_countries_properties",
+    srcs = ["test_countries_properties.py"],
+    deps = [
+        "//libs/parsers",
+        "//tests:conftest",
+        "@pypi//hypothesis",
+        "@pypi//pycountry",
+    ],
+)

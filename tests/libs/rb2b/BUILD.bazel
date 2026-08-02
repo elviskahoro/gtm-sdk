@@ -1,0 +1,12 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_models",
+    srcs = ["test_models.py"],
+    deps = [
+        "//libs/rb2b",
+        "//tests:conftest",
+    ],
+)

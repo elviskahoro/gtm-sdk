@@ -1,0 +1,15 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+# gazelle:python_generation_mode file
+
+pytest_test(
+    name = "test_telemetry",
+    srcs = ["test_telemetry.py"],
+    deps = [
+        "//libs:telemetry",
+        "//tests:conftest",
+        "@pypi//modal",
+        "@pypi//opentelemetry_sdk",
+        "@pypi//pytest",
+    ],
+)
