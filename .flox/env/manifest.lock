@@ -37,6 +37,20 @@
         "aarch64-linux",
         "x86_64-linux"
       ]
+    },
+    "build": {
+      "bd": {
+        "command": "  set -euo pipefail\n  version=\"1.1.0\"\n  case \"$(uname -s)-$(uname -m)\" in\n    Darwin-arm64)\n      asset=\"beads_${version}_darwin_arm64.tar.gz\"\n      sha256=\"c42e24d83b258f7ba9f52a6d2d5f6b055869dfe7807165055988b12e7ea8c564\"\n      ;;\n    *)\n      # TODO(#445 follow-up): pin Linux asset names/hashes once published\n      # from a Linux builder; until then this build only runs on darwin-arm64.\n      echo \"error: no pinned bd asset for $(uname -s)-$(uname -m)\" >&2\n      exit 1\n      ;;\n  esac\n  if [ -z \"${SSL_CERT_FILE:-}\" ] && [ -f \"${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt\" ]; then\n    export SSL_CERT_FILE=\"${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt\"\n  fi\n  tmp=\"$(mktemp -d)\"\n  trap 'rm -rf \"${tmp}\"' EXIT\n  curl -fsSL -o \"${tmp}/${asset}\" \\\n    \"https://github.com/gastownhall/beads/releases/download/v${version}/${asset}\"\n  echo \"${sha256}  ${tmp}/${asset}\" | sha256sum --check -\n  tar -xzf \"${tmp}/${asset}\" -C \"${tmp}\"\n  mkdir -p \"$out/bin\"\n  install -m755 \"${tmp}/bd\" \"$out/bin/bd\"\n",
+        "sandbox": "off",
+        "version": "1.1.0",
+        "description": "beads (bd) CLI repackaged from official upstream release binaries"
+      },
+      "roborev": {
+        "command": "  set -euo pipefail\n  version=\"0.62.1\"\n  case \"$(uname -s)-$(uname -m)\" in\n    Darwin-arm64)\n      asset=\"roborev_${version}_darwin_arm64.tar.gz\"\n      sha256=\"c90c6a7553c19faa9588d0a44962d62ddd82d0db607490d618a27aa2392296da\"\n      ;;\n    *)\n      # TODO(#445 follow-up): pin Linux asset names/hashes once published\n      # from a Linux builder; until then this build only runs on darwin-arm64.\n      echo \"error: no pinned roborev asset for $(uname -s)-$(uname -m)\" >&2\n      exit 1\n      ;;\n  esac\n  if [ -z \"${SSL_CERT_FILE:-}\" ] && [ -f \"${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt\" ]; then\n    export SSL_CERT_FILE=\"${FLOX_ENV}/etc/ssl/certs/ca-bundle.crt\"\n  fi\n  tmp=\"$(mktemp -d)\"\n  trap 'rm -rf \"${tmp}\"' EXIT\n  curl -fsSL -o \"${tmp}/${asset}\" \\\n    \"https://github.com/kenn-io/roborev/releases/download/v${version}/${asset}\"\n  echo \"${sha256}  ${tmp}/${asset}\" | sha256sum --check -\n  tar -xzf \"${tmp}/${asset}\" -C \"${tmp}\"\n  mkdir -p \"$out/bin\"\n  install -m755 \"${tmp}/roborev\" \"$out/bin/roborev\"\n",
+        "sandbox": "off",
+        "version": "0.62.1",
+        "description": "roborev CLI repackaged from official upstream release binaries"
+      }
     }
   },
   "packages": [
