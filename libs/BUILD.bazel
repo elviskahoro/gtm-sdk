@@ -1,0 +1,36 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode file
+# gazelle:resolve py opentelemetry.sdk._logs @pypi//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.sdk._logs.LoggerProvider @pypi//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.sdk._logs.export @pypi//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.sdk._logs.export.BatchLogRecordProcessor @pypi//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.sdk._logs.export.LogRecordExportResult @pypi//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.sdk._logs.export.LogRecordExporter @pypi//opentelemetry_sdk
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_library(
+    name = "telemetry",
+    srcs = ["telemetry.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//modal",
+        "@pypi//opentelemetry_api",
+        "@pypi//opentelemetry_exporter_otlp_proto_common",
+        "@pypi//opentelemetry_exporter_otlp_proto_http",
+        "@pypi//opentelemetry_sdk",
+        "@pypi//opentelemetry_semantic_conventions",
+    ],
+)

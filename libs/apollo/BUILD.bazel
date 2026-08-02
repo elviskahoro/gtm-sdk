@@ -1,0 +1,26 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "apollo",
+    srcs = [
+        "__init__.py",
+        "client.py",
+        "models.py",
+        "organizations.py",
+        "people.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//gtm_apollo",
+        "@pypi//pydantic",
+    ],
+)

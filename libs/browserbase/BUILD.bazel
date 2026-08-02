@@ -1,0 +1,20 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "browserbase",
+    srcs = [
+        "__init__.py",
+        "db.py",
+        "gmail_dom.py",
+    ],
+    visibility = ["//:__subpackages__"],
+)

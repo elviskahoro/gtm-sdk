@@ -1,0 +1,50 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+# gazelle:python_generation_mode project
+
+# keep
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.py"]),
+    visibility = ["//tests/architecture:__pkg__"],
+)
+
+py_library(
+    name = "attio",
+    srcs = [
+        "__init__.py",
+        "attributes.py",
+        "client.py",
+        "companies.py",
+        "contracts.py",
+        "errors.py",
+        "ext_tam.py",
+        "gtm_content.py",
+        "meetings.py",
+        "mentions.py",
+        "models/__init__.py",
+        "models/attributes.py",
+        "models/companies.py",
+        "models/ext_tam.py",
+        "models/gtm_content.py",
+        "models/meetings.py",
+        "models/mentions.py",
+        "models/notes.py",
+        "models/objects.py",
+        "models/people.py",
+        "models/tracking_events.py",
+        "notes.py",
+        "objects.py",
+        "people.py",
+        "preflight.py",
+        "sdk_boundary.py",
+        "tracking_events.py",
+        "upload_parsers.py",
+        "values.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//attio",
+        "@pypi//pydantic",
+    ],
+)
