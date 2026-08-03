@@ -1,6 +1,4 @@
-import json
 import os
-from pathlib import Path
 from typing import Any
 
 import narwhals as nw
@@ -200,58 +198,3 @@ def process_csv_with_lead_extraction(
     print("Processing complete")
 
     return result_df
-
-
-@nw.narwhalify
-def save_rows_as_json_files(
-    df: nw.DataFrame[Any],
-    output_directory: str,
-) -> int:
-    """Save each row of DataFrame as a separate JSON file.
-
-    Args:
-        df: Input DataFrame to save as JSON files
-        output_directory: Directory path where JSON files will be saved
-
-    Returns:
-        Number of JSON files created
-    """
-    output_path: Path = Path(output_directory)
-    output_path.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    files_created: int = 0
-
-    for idx, row in enumerate(df.iter_rows(named=True)):
-        name: str | None = row.get("name")
-
-        if name:
-            sanitized_name: str = "".join(
-                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
-            )
-            sanitized_name = sanitized_name.replace(" ", "_")
-            filename: str = f"{idx:05d}_{sanitized_name}.json"
-
-        else:
-            filename = f"{idx:05d}_unnamed.json"
-
-        file_path: Path = output_path / filename
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(
-                row,
-                f,
-                indent=2,
-                ensure_ascii=False,
-            )
-
-        files_created += 1
-
-        if (idx + 1) % 100 == 0:
-            print(f"Created {idx + 1} JSON files...")
-
-    print(f"Created {files_created} JSON files in {output_directory}")
-
-    return files_created
