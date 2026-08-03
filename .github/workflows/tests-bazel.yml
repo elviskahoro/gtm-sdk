@@ -65,3 +65,56 @@ jobs:
             BUILD.bazel \
             ":(glob)**/BUILD" \
             ":(glob)**/BUILD.bazel"
+
+  bazel_impacted:
+    name: Trunk impacted Bazel targets
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+
+      - name: Install bazel-diff
+        run: |
+          set -euo pipefail
+          bazel_diff_dir="${RUNNER_TEMP}/bazel-diff"
+          jar_path="${bazel_diff_dir}/bazel-diff_deploy.jar"
+
+          mkdir -p "${bazel_diff_dir}/bin"
+          curl -fsSL \
+            "https://github.com/Tinder/bazel-diff/releases/download/v33.0.0/bazel-diff_deploy.jar" \
+            -o "${jar_path}"
+          printf '%s  %s\n' \
+            "4b649929970167f75a188d184cd07f00c83a82b363c70f74d3c1ad1f7cdefd51" \
+            "${jar_path}" | sha256sum --check -
+          cat > "${bazel_diff_dir}/bin/bazel-diff" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          java_home="$(bazel info java-home)"
+          exec "${java_home}/bin/java" -jar "${RUNNER_TEMP}/bazel-diff/bazel-diff_deploy.jar" "$@"
+          EOF
+          chmod +x "${bazel_diff_dir}/bin/bazel-diff"
+          echo "${bazel_diff_dir}/bin" >> "${GITHUB_PATH}"
+          "${bazel_diff_dir}/bin/bazel-diff" -V
+
+      - name: Upload and test impacted Bazel targets
+        uses: trunk-io/bazel-action@3e7d4e893f2c4c3c1b16e07f3db8ff3585e4025d # v1.0.4
+        with:
+          bazel-workspace-path: .
+          bazel-diff-command-options: --config=ci
+          bazel-test-command: test --config=ci
+          target-branch: main
+          test-negative-tag-filter: manual
+          test-targets: "true"
+          trunk-token: ${{ secrets.TRUNK_API_TOKEN }}
+          upload-targets: "true"
