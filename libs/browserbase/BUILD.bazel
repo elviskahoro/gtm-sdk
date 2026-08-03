@@ -13,7 +13,6 @@ py_library(
     name = "browserbase",
     srcs = [
         "__init__.py",
-        "db.py",
     ],
     visibility = ["//:__subpackages__"],
 )
