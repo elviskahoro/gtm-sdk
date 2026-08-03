@@ -63,6 +63,7 @@ pytest_test(
         "//scripts:beads-rig-sync_to",  # keep
         "//tests:conftest",
         "@pypi//pytest",
+        "@pypi//typer",
     ],
 )
 
