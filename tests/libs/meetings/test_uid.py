@@ -1,6 +1,7 @@
+# ruff: noqa: S101 -- asserts are the point of a test file.
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -33,7 +34,7 @@ def test_canonical_uid_normalizes_timezone_to_utc_minute() -> None:
 
 
 def test_canonical_uid_matches_known_digest() -> None:
-    start = datetime(2026, 5, 20, 15, 0, 45, tzinfo=timezone.utc)
+    start = datetime(2026, 5, 20, 15, 0, 45, tzinfo=UTC)
     assert (
         canonical_meeting_uid(host_email="  HOST@DLTHUB.COM  ", start=start)
         == "dlt-mtg-a2edb3b0be554f119b203df0"
