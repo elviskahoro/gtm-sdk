@@ -1,7 +1,23 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
 exports_files(
     [
         "pytest_main.py",
         "pytest_test.bzl",
     ],
     visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "pytest_main",
+    srcs = ["pytest_main.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["@pypi//pytest"],
+)
+
+py_library(
+    name = "bazel",
+    srcs = ["pytest_main.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["@pypi//pytest"],
 )
