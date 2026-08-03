@@ -44,11 +44,14 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import click
+import typer
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
@@ -59,7 +62,11 @@ from libs.attio.errors import AttioError  # noqa: E402
 from libs.attio.preflight import fetch_token_scopes  # noqa: E402
 from scripts.lib.env import clean_env, infisical_run_example  # noqa: E402
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 _ATTIO_APP_BASE = "https://app.attio.com"
+app = typer.Typer(add_completion=False, help=__doc__)
 
 # Attio uses the PLURAL object slug for list-view URLs but the SINGULAR form in
 # an individual record's path (see module docstring). This maps the plural list
@@ -163,63 +170,87 @@ def _render(
     return "\n".join(lines)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--object",
-        dest="object_slug",
-        default=None,
-        help=(
-            "Emit a single object's list-view URL. Pass the PLURAL list slug "
-            "(e.g. companies, people). With --record-id, emits that record's "
-            "URL instead (plural is mapped to singular for standard objects)."
-        ),
-    )
-    parser.add_argument(
-        "--record-id",
-        dest="record_id",
-        default=None,
-        help="Record UUID for a single-record URL. Requires --object.",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit structured JSON instead of human-readable text.",
-    )
-    args = parser.parse_args()
-
-    if args.record_id is not None and args.object_slug is None:
-        print("--record-id requires --object.", file=sys.stderr)
+def _run(
+    *,
+    object_slug: str | None,
+    record_id: str | None,
+    json_output: bool,
+) -> int:
+    if record_id is not None and object_slug is None:
+        typer.echo("--record-id requires --object.", err=True)
         return 2
 
     if not clean_env(os.environ.get("ATTIO_API_KEY")):
-        print(
+        typer.echo(
             "ATTIO_API_KEY is not set. Run under infisical run so the key is "
             "injected:\n"
             f"  {infisical_run_example('scripts/attio-workspace_url-emit.py')}",
-            file=sys.stderr,
+            err=True,
         )
         return 2
 
     try:
         slug = resolve_workspace_slug()
     except (AttioError, ValueError) as exc:
-        print(f"attio workspace-url failed: {exc}", file=sys.stderr)
+        typer.echo(f"attio workspace-url failed: {exc}", err=True)
         return 1
 
     output = _render(
         slug,
-        object_slug=args.object_slug,
-        record_id=args.record_id,
-        json_output=args.json,
+        object_slug=object_slug,
+        record_id=record_id,
+        json_output=json_output,
     )
-    sys.stdout.write(output)
-    if not output.endswith("\n"):
-        sys.stdout.write("\n")
+    typer.echo(output)
     return 0
+
+
+@app.command(help=__doc__)
+def emit(
+    object_slug: str | None = typer.Option(
+        None,
+        "--object",
+        help=(
+            "Emit a single object's list-view URL. Pass the PLURAL list slug "
+            "(e.g. companies, people). With --record-id, emits that record's "
+            "URL instead (plural is mapped to singular for standard objects)."
+        ),
+    ),
+    record_id: str | None = typer.Option(
+        None,
+        "--record-id",
+        help="Record UUID for a single-record URL. Requires --object.",
+    ),
+    json_output: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--json",
+        help="Emit structured JSON instead of human-readable text.",
+    ),
+) -> int:
+    return _run(
+        object_slug=object_slug,
+        record_id=record_id,
+        json_output=json_output,
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
