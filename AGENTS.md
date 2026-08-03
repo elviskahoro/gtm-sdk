@@ -13,7 +13,7 @@ to mirror them.
 
 - `libs/<service>/` — wrap **one** external SDK/API. Idiomatic Python types/functions only.
 - `src/` — orchestration. Multi-step flows, side effects, Modal `@app.function` / `@modal.fastapi_endpoint` decorators.
-- `cli/` — Typer subapps. Parse → preflight → call `src/` → render. **No business logic.**
+- `cli/` — All CLI command surfaces use Typer subapps. Parse → preflight → call `src/` → render. **No business logic.**
 - `data-gen/` — independent, composable data products.
 - `webhooks/` — standalone Modal apps. See `webhooks/AGENTS.md`.
 - `api/specs/`, `api/samples/` — external API specs and fixture payloads. Read-only reference.
