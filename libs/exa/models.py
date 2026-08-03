@@ -5,7 +5,7 @@ Key design forces:
 2. Deprecated parameters (useAutoprompt, numSentences, etc.) absent + extra="forbid" rejects them.
 3. Category-conditional invariants enforced at model construction.
 4. outputSchema is first-class (structured output support).
-5. Per-call cost bubbled up (costDollars.total in every response).
+5. Per-call cost bubbled up (cost_dollars in every response).
 """
 
 from __future__ import annotations
@@ -199,14 +199,6 @@ class SearchOutput(BaseModel):
     # falsey (roborev finding).
     content: str | int | float | bool | list[Any] | dict[str, Any] | None = None
     grounding: OutputGrounding | None = None
-
-
-class CostDollars(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    search: float = 0.0
-    contents: float = 0.0
-    total: float = 0.0
 
 
 class SearchResponse(BaseModel):
