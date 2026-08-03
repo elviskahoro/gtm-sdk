@@ -35,11 +35,12 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
+
+import typer
 
 # Anchor on the script's own directory so the script runs correctly regardless
 # of CWD (per repo CLAUDE.md path-anchoring rule). `uv run path/to/script.py`
@@ -341,29 +342,15 @@ def run_diff() -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "--preview",
-        action="store_true",
-        help="Print what would happen; no writes.",
-    )
-    mode.add_argument(
-        "--apply",
-        action="store_true",
-        help="Create missing object + attributes.",
-    )
-    mode.add_argument(
-        "--diff",
-        action="store_true",
-        help="Read-only: compare the live workspace schema against ATTRIBUTES.",
-    )
-    args = parser.parse_args()
-    if args.diff:
-        return run_diff()
-    apply = bool(args.apply)
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+    rich_markup_mode=None,
+)
 
+
+def run_bootstrap(apply: bool) -> int:  # noqa: FBT001
     print(f"[object]      {OBJECT_API_SLUG}")
     obj_result = create_object(
         api_slug=OBJECT_API_SLUG,
@@ -423,6 +410,45 @@ def main() -> int:
     if not apply:
         print(f"{pending} creates pending. Run with --apply to execute.")
     return 0
+
+
+@app.command()
+def cli(
+    preview: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option("--preview", help="Print what would happen; no writes."),
+    ] = False,
+    apply: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option("--apply", help="Create missing object + attributes."),
+    ] = False,
+    diff: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option(
+            "--diff",
+            help="Read-only: compare the live workspace schema against ATTRIBUTES.",
+        ),
+    ] = False,
+) -> int:
+    if not (preview or apply or diff):
+        print("error: exactly one of --preview, --apply, or --diff is required")
+        return 2
+    if sum([preview, apply, diff]) > 1:
+        print("error: --preview, --apply, and --diff are mutually exclusive")
+        return 2
+    if diff:
+        return run_diff()
+    return run_bootstrap(apply=apply)
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        result = app(args=argv, standalone_mode=False)
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    return int(result or 0)
 
 
 if __name__ == "__main__":
