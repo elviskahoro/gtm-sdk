@@ -15,15 +15,15 @@ Auth: HOOKDECK_API_KEY in the environment — inject via Infisical. Run under
 `infisical run` so the key (and MODAL_WORKSPACE, if set) are present:
 
     infisical run --projectId "$INFISICAL_PROJECT_ID" --token "$INFISICAL_TOKEN" \\
-        --env=dev -- scripts/hookdeck-wire-webhook.py slack CaldotcomBookingWebhook
+        --env=dev -- scripts/hookdeck-webhook-wire.py slack CaldotcomBookingWebhook
 
 Examples:
     # cal.com → Slack, reusing an existing Hookdeck source named "caldotcom":
-    scripts/hookdeck-wire-webhook.py slack CaldotcomBookingWebhook \\
+    scripts/hookdeck-webhook-wire.py slack CaldotcomBookingWebhook \\
         --source-name caldotcom
 
     # print the request without sending it:
-    scripts/hookdeck-wire-webhook.py slack CaldotcomBookingWebhook --dry-run
+    scripts/hookdeck-webhook-wire.py slack CaldotcomBookingWebhook --dry-run
 
 Fan-out: pass `--source-name` matching an EXISTING Hookdeck source (e.g. the one
 already feeding the Attio connection) so the same cal.com webhook fans out to
@@ -43,13 +43,18 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
+import json
 import os
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, Annotated
 
+import click
 import requests
+import typer
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # scripts/ is intentionally excluded from the installed packages, so make the
 # repo-local cli/* and scripts.lib imports resolvable when run via `uv run`.
@@ -71,13 +76,19 @@ _HANDLER_ALIASES: dict[str, str] = {
     "slack": "export_to_slack",
 }
 
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+)
 
-def _fail(msg: str) -> NoReturn:
+
+def _fail(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
     raise SystemExit(1)
 
 
-def _resolve_model(source_alias: str) -> type:
+def _resolve_model(source_alias: str) -> type:  # noqa: RET503
     """Map a source display alias (e.g. CaldotcomBookingWebhook) to its class."""
     for _slug, model, display in SOURCES:
         if display == source_alias:
@@ -93,70 +104,48 @@ def _source_slug(source_alias: str) -> str:
     return source_alias.lower()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Create/upsert the Hookdeck connection for a deployed webhook.",
-    )
-    parser.add_argument("handler", help="handler name or alias (e.g. slack)")
-    parser.add_argument(
-        "source",
-        help="source class alias (e.g. CaldotcomBookingWebhook)",
-    )
-    parser.add_argument(
-        "--source-name",
-        default=None,
-        help="Hookdeck source name to route from (default: the source slug). "
-        "Pass an EXISTING source's name to fan out from it.",
-    )
-    parser.add_argument(
-        "--connection-name",
-        default=None,
-        help="Hookdeck connection name (default: the Modal app name).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the request body and exit without calling Hookdeck.",
-    )
-    args = parser.parse_args()
-
-    raw_handler = str(args.handler)
-    source_alias = str(args.source)
-    handler = _HANDLER_ALIASES.get(raw_handler, raw_handler)
+def _wire(
+    handler: str,
+    source: str,
+    source_name: str | None,
+    connection_name: str | None,
+    dry_run: bool,  # noqa: FBT001
+) -> int:
+    raw_handler = str(handler)
+    source_alias = str(source)
+    resolved_handler = _HANDLER_ALIASES.get(raw_handler, raw_handler)
     model = _resolve_model(source_alias)
 
-    app_name = app_name_for(handler, model)
+    app_name = app_name_for(resolved_handler, model)
     if app_name is None:
         _fail(
-            f"Source {args.source} does not expose the app-name method for "
-            f"handler '{handler}' — nothing to wire.",
+            f"Source {source} does not expose the app-name method for "
+            f"handler '{resolved_handler}' — nothing to wire.",
         )
     modal_url = modal_url_for_app(app_name)
 
-    source_name = args.source_name or _source_slug(args.source)
-    connection_name = args.connection_name or app_name
+    resolved_source_name = source_name or _source_slug(source)
+    resolved_connection_name = connection_name or app_name
     destination_name = app_name
 
     # Hookdeck 2024-09-01: the HTTP destination URL is a top-level `url` field
     # (matches cli/webhook/_hookdeck.py reading `d.get("url")`), NOT
     # `config.url` — that's the 2025-07-01 shape and a 422 here.
     body = {
-        "name": connection_name,
-        "source": {"name": source_name},
+        "name": resolved_connection_name,
+        "source": {"name": resolved_source_name},
         "destination": {"name": destination_name, "url": modal_url},
     }
 
-    print(f"Handler:        {handler}")
-    print(f"Source class:   {args.source}")
+    print(f"Handler:        {resolved_handler}")
+    print(f"Source class:   {source}")
     print(f"Modal app:      {app_name}")
     print(f"Modal URL:      {modal_url}")
-    print(f"Hookdeck source: {source_name}")
-    print(f"Connection:     {connection_name}")
+    print(f"Hookdeck source: {resolved_source_name}")
+    print(f"Connection:     {resolved_connection_name}")
     print()
 
-    if args.dry_run:
-        import json
-
+    if dry_run:
         print(f"DRY RUN — would PUT to {HOOKDECK_API_BASE}/connections:")
         print(json.dumps(body, indent=2))
         return 0
@@ -179,7 +168,7 @@ def main() -> int:
         _fail(
             "HOOKDECK_API_KEY is not set. Add it to Infisical and run under:\n  "
             + infisical_run_example(
-                f"scripts/hookdeck-wire-webhook.py {args.handler} {args.source}",
+                f"scripts/hookdeck-webhook-wire.py {handler} {source}",
                 env_placeholder="dev",
             ),
         )
@@ -212,6 +201,68 @@ def main() -> int:
     print()
     print("Next: run `gtm webhook sync` to refresh webhooks/registry.yaml.")
     return 0
+
+
+@app.command()
+def cli(
+    handler: Annotated[
+        str,
+        typer.Argument(help="handler name or alias (e.g. slack)"),
+    ],
+    source: Annotated[
+        str,
+        typer.Argument(help="source class alias (e.g. CaldotcomBookingWebhook)"),
+    ],
+    *,
+    source_name: Annotated[
+        str | None,
+        typer.Option(
+            "--source-name",
+            help="Hookdeck source name to route from (default: the source slug). "
+            "Pass an EXISTING source's name to fan out from it.",
+        ),
+    ] = None,
+    connection_name: Annotated[
+        str | None,
+        typer.Option(
+            "--connection-name",
+            help="Hookdeck connection name (default: the Modal app name).",
+        ),
+    ] = None,
+    dry_run: Annotated[  # noqa: FBT001
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="print the request body and exit without calling Hookdeck.",
+        ),
+    ] = False,
+) -> int:
+    return _wire(
+        handler=handler,
+        source=source,
+        source_name=source_name,
+        connection_name=connection_name,
+        dry_run=dry_run,
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
