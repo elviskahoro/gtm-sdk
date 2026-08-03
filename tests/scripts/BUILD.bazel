@@ -132,7 +132,7 @@ pytest_test(
     name = "test_deploy_webhook",
     srcs = ["test_deploy_webhook.py"],
     data = [
-        "//:webhook_export_to_attio_source",
+        "//:webhook_handler_sources",
         "//scripts:webhooks-handlers-redeploy.py",
     ],  # keep
     deps = [
