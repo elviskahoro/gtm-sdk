@@ -48,10 +48,10 @@ def fetch(
     r"""Fetch enrichment from Harvest API and write to file (no Attio changes).
 
     Example:
-        gtm enrichment enrich fetch \\
-            --config enrichment_config.json \\
-            --records records.json \\
-            --profile location \\
+        gtm enrichment enrich fetch \
+            --config enrichment_config.json \
+            --records records.json \
+            --profile location \
             --output enriched_output.json
     """
     try:
@@ -155,11 +155,11 @@ def upsert(
     r"""Batch upsert enriched records to Attio CRM.
 
     Example:
-        gtm enrichment enrich upsert \\
+        gtm enrichment enrich upsert \
             --input enriched_output.json
 
-        gtm enrichment enrich upsert \\
-            --input enriched_output.json \\
+        gtm enrichment enrich upsert \
+            --input enriched_output.json \
             --dry-run
     """
     try:
