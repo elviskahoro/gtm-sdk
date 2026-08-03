@@ -13,16 +13,6 @@ py_library(
     name = "linkedin",
     srcs = [
         "__init__.py",
-        "api_helpers.py",
-        "member_data.py",
     ],
-    pyi_deps = ["@pypi//types_requests"],
     visibility = ["//:__subpackages__"],
-    deps = [
-        "@pypi//dlt",
-        "@pypi//logfire",
-        "@pypi//orjson",
-        "@pypi//pydantic",
-        "@pypi//requests",
-    ],
 )
