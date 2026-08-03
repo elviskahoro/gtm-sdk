@@ -1,5 +1,4 @@
 import re
-from collections.abc import Callable
 from re import Match, Pattern
 from typing import Any
 
@@ -48,21 +47,6 @@ def parse_last_name_if_null_from_first_name(
         return first_name_new, last_name
 
     return first_name, None
-
-
-def parse_middle_name_if_null_from_first_name(
-    first_name: Any,
-) -> tuple[str | None, str | None]:
-    if first_name is None or not isinstance(first_name, str):
-        return None, None
-
-    parts: list[str] = first_name.strip().split()
-    if not parts:
-        return None, None
-
-    extracted_first_name: str = parts[0]
-    middle_name: str | None = " ".join(parts[1:]) if len(parts) > 1 else None
-    return extracted_first_name, middle_name
 
 
 def parse_first_middle_and_last_name(
@@ -202,48 +186,6 @@ def parse_year(
             pass
 
     return year_num
-
-
-def parse_birthday(
-    birthday: Any,
-) -> str | None:
-    if not birthday or not isinstance(birthday, str):
-        return None
-
-    birthday = birthday.strip()
-    birthday = birthday.strip("\"'")
-    if not birthday:
-        return None
-
-    return birthday
-
-
-def parse_source(
-    source: Any,
-) -> str | None:
-    if not source or not isinstance(source, str):
-        return None
-
-    source = source.strip().strip("\"'")
-    if not source:
-        return None
-
-    replacement_rules: list[tuple[Callable[[str], bool], str]] = [
-        (lambda s: s.lower().startswith("pom"), "Pomona"),
-        (lambda s: s.lower().startswith("berkeley"), "Berkeley"),
-        (lambda s: s.lower().startswith("epic"), "Epic"),
-        (lambda s: s.lower().startswith("qb"), "QuestBridge"),
-        (lambda s: s.lower().startswith("questbridge"), "QuestBridge"),
-        (lambda s: s.lower().startswith("mlt"), "MLT"),
-        (lambda s: s.lower().startswith("reality"), "Reality"),
-    ]
-    condition: Callable[[str], bool]
-    replacement: str
-    for condition, replacement in replacement_rules:
-        if condition(source):
-            return replacement.strip()
-
-    return source
 
 
 def parse_multiple_email_splitter_and_domain_filter(
