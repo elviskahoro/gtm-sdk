@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["gtm-linear==0.1.0"]
+# dependencies = ["gtm-linear==0.1.0", "typer>=0.15"]
 # ///
 r"""File (or bump) a Linear issue describing a failed CI run.
 
@@ -81,15 +81,16 @@ except (ImportError, OSError):  # pragma: no cover - exercised by the container 
 if __name__ == "__main__" and _bootstrap_uv is not None:
     _bootstrap_uv(script_path=__file__, mode="script")
 
-import argparse
 import os
 import re
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
+import click
 import httpx
+import typer
 from gtm_linear import IssueCreateInput, IssueUpdateInput
 from gtm_linear.exceptions import LinearError as _SdkLinearError
 from pydantic import ValidationError
@@ -131,6 +132,13 @@ _UUID_RE = re.compile(
 # has been broken.
 _OCCURRENCES_RE = re.compile(r"^[-*] Occurrences:\s*(\d+)", re.MULTILINE)
 _FIRST_SEEN_RE = re.compile(r"^[-*] First seen:\s*(.+)$", re.MULTILINE)
+
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+    rich_markup_mode=None,
+)
 
 
 class LinearError(RuntimeError):
@@ -254,59 +262,36 @@ def update_description(
         )
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workflow", required=True, help="Failing workflow name")
-    parser.add_argument("--run-url", required=True, help="Failing run's HTML URL")
-    parser.add_argument("--branch", default="unknown", help="Head branch")
-    parser.add_argument("--commit", default="unknown", help="Head SHA")
-    parser.add_argument(
-        "--diagnosis-file",
-        required=True,
-        type=Path,
-        help="Markdown diagnosis produced by the triage agent",
-    )
-    parser.add_argument(
-        "--timestamp",
-        default="",
-        help="ISO timestamp for this occurrence (defaults to the run URL only)",
-    )
-    parser.add_argument(
-        "--team",
-        default=LINEAR_TEAM,
-        help=f"Linear team key or UUID (default: {LINEAR_TEAM})",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Optional file to append 'identifier<TAB>url' to (e.g. a step summary)",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-
+def run_triage(
+    *,
+    workflow: str,
+    run_url: str,
+    branch: str,
+    commit: str,
+    diagnosis_file: Path,
+    timestamp: str,
+    team: str,
+    output: Path | None,
+) -> int:
     api_key = os.environ.get("LINEAR_API_KEY", "").strip()
     if not api_key:
         print("error: LINEAR_API_KEY must be set", file=sys.stderr)
         return 2
-    team = args.team.strip()
+    team = team.strip()
 
-    if not args.diagnosis_file.is_file():
+    if not diagnosis_file.is_file():
         print(
-            f"notice: no diagnosis at {args.diagnosis_file}; nothing to file.",
+            f"notice: no diagnosis at {diagnosis_file}; nothing to file.",
             file=sys.stderr,
         )
         return 0
-    diagnosis = args.diagnosis_file.read_text(encoding="utf-8").strip()
+    diagnosis = diagnosis_file.read_text(encoding="utf-8").strip()
     if not diagnosis:
         print("notice: diagnosis file is empty; nothing to file.", file=sys.stderr)
         return 0
 
-    marker = MARKER_TEMPLATE.format(workflow=args.workflow)
-    stamp = args.timestamp or args.run_url
+    marker = MARKER_TEMPLATE.format(workflow=workflow)
+    stamp = timestamp or run_url
 
     try:
         team_id = resolve_team_id(team, api_key)
@@ -319,9 +304,9 @@ def main(argv: list[str] | None = None) -> int:
                     build_footer(
                         marker=marker,
                         occurrences=1,
-                        run_url=args.run_url,
-                        branch=args.branch,
-                        commit=args.commit,
+                        run_url=run_url,
+                        branch=branch,
+                        commit=commit,
                         first_seen=stamp,
                         latest_seen=stamp,
                     ),
@@ -329,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             issue = create_issue(
                 team_id=team_id,
-                title=f"ci: {args.workflow} is failing",
+                title=f"ci: {workflow} is failing",
                 description=body,
                 api_key=api_key,
             )
@@ -346,9 +331,9 @@ def main(argv: list[str] | None = None) -> int:
                     build_footer(
                         marker=marker,
                         occurrences=occurrences,
-                        run_url=args.run_url,
-                        branch=args.branch,
-                        commit=args.commit,
+                        run_url=run_url,
+                        branch=branch,
+                        commit=commit,
                         first_seen=first_seen,
                         latest_seen=stamp,
                     ),
@@ -368,10 +353,76 @@ def main(argv: list[str] | None = None) -> int:
     identifier = str(issue.identifier)
     url = str(issue.url)
     print(f"{action} {identifier}: {url}")
-    if args.output is not None:
-        with args.output.open("a", encoding="utf-8") as handle:
+    if output is not None:
+        with output.open("a", encoding="utf-8") as handle:
             handle.write(f"{identifier}\t{url}\n")
     return 0
+
+
+@app.command()
+def cli(
+    workflow: Annotated[
+        str,
+        typer.Option("--workflow", help="Failing workflow name"),
+    ],
+    run_url: Annotated[
+        str,
+        typer.Option("--run-url", help="Failing run's HTML URL"),
+    ],
+    diagnosis_file: Annotated[
+        Path,
+        typer.Option(
+            "--diagnosis-file",
+            help="Markdown diagnosis produced by the triage agent",
+        ),
+    ],
+    branch: Annotated[str, typer.Option("--branch", help="Head branch")] = "unknown",
+    commit: Annotated[str, typer.Option("--commit", help="Head SHA")] = "unknown",
+    timestamp: Annotated[
+        str,
+        typer.Option(
+            "--timestamp",
+            help="ISO timestamp for this occurrence (defaults to the run URL only)",
+        ),
+    ] = "",
+    team: Annotated[
+        str,
+        typer.Option(
+            "--team",
+            help=f"Linear team key or UUID (default: {LINEAR_TEAM})",
+        ),
+    ] = LINEAR_TEAM,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            help="Optional file to append 'identifier<TAB>url' to (e.g. a step summary)",
+        ),
+    ] = None,
+) -> int:
+    return run_triage(
+        workflow=workflow,
+        run_url=run_url,
+        branch=branch,
+        commit=commit,
+        diagnosis_file=diagnosis_file,
+        timestamp=timestamp,
+        team=team,
+        output=output,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        result = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    return int(result or 0)
 
 
 if __name__ == "__main__":
