@@ -52,7 +52,6 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import json
 import os
 import sys
@@ -61,7 +60,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
+
+import click
+import typer
 
 # Anchor on the script's directory so output paths resolve regardless of the CWD
 # `uv run` was invoked from, and make repo-local packages importable.
@@ -71,7 +73,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 import dlt  # noqa: E402
 import requests  # noqa: E402
@@ -89,10 +91,9 @@ from libs.rb2b import (  # noqa: E402
 # Reuse the model's timestamp normalizer so the synthesized envelope timestamp
 # parses even when rb2b emits its documented `12:34:56:00.00+00.00` shape.
 from libs.rb2b.models import normalize_rb2b_timestamp  # noqa: E402
-from scripts.lib.env import infisical_run_example  # noqa: E402
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Sequence
 
 
 # --------------------------------------------------------------------------- #
@@ -603,7 +604,7 @@ def send(
     cfg: BackfillConfig,
     *,
     webhook_url: str | None,
-    dry_run: bool,
+    dry_run: bool,  # noqa: FBT001
     limit: int | None,
     rate_limit_s: float,
 ) -> tuple[int, int, int]:
@@ -670,79 +671,88 @@ def send(
 # --------------------------------------------------------------------------- #
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    example = infisical_run_example(
-        "scripts/rb2b-visits-backfill.py extract --limit 25",
-    )
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"Example:\n  {example}",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p_extract = sub.add_parser(
-        "extract",
-        help="Pull GCS + Hookdeck, dedupe via dlt, write out/rb2b_visits.jsonl.",
-    )
-    p_extract.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Cap rows pulled per source (smoke testing). Default: all.",
-    )
-    p_extract.add_argument(
-        "--gcs-only",
-        action="store_true",
-        help="Skip Hookdeck and backfill only from GCS (intentional opt-in).",
-    )
-
-    p_send = sub.add_parser(
-        "send",
-        help="Replay out/rb2b_visits.jsonl to the Modal webhook, one by one.",
-    )
-    p_send.add_argument(
-        "--webhook-url",
-        default=None,
-        help="Override the resolved Modal webhook URL.",
-    )
-    p_send.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Map + validate + print envelopes without POSTing.",
-    )
-    p_send.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Stop after N sends (skipped/already-sent records don't count).",
-    )
-    p_send.add_argument(
-        "--rate-limit",
-        type=float,
-        default=0.2,
-        help="Seconds to sleep between successful POSTs (default: 0.2).",
-    )
-    return parser
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-    cfg = RB2B_CONFIG
+@app.command()
+def extract_cmd(
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit",
+            help="Cap rows pulled per source (smoke testing). Default: all.",
+        ),
+    ] = None,
+    gcs_only: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option(
+            "--gcs-only",
+            help="Skip Hookdeck and backfill only from GCS (intentional opt-in).",
+        ),
+    ] = False,  # noqa: FBT003
+) -> int:
+    """Pull GCS + Hookdeck, dedupe via dlt, write out/rb2b_visits.jsonl."""
+    extract(RB2B_CONFIG, limit=limit, gcs_only=gcs_only)
+    return 0
 
-    if args.command == "extract":
-        extract(cfg, limit=args.limit, gcs_only=args.gcs_only)
-        return 0
-    if args.command == "send":
-        send(
-            cfg,
-            webhook_url=args.webhook_url,
-            dry_run=args.dry_run,
-            limit=args.limit,
-            rate_limit_s=args.rate_limit,
+
+@app.command()
+def send_cmd(
+    webhook_url: Annotated[
+        str | None,
+        typer.Option("--webhook-url", help="Override the resolved Modal webhook URL."),
+    ] = None,
+    dry_run: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Map + validate + print envelopes without POSTing.",
+        ),
+    ] = False,  # noqa: FBT003
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit",
+            help="Stop after N sends (skipped/already-sent records don't count).",
+        ),
+    ] = None,
+    rate_limit: Annotated[
+        float,
+        typer.Option(
+            "--rate-limit",
+            help="Seconds to sleep between successful POSTs (default: 0.2).",
+        ),
+    ] = 0.2,
+) -> int:
+    """Replay out/rb2b_visits.jsonl to the Modal webhook, one by one."""
+    send(
+        RB2B_CONFIG,
+        webhook_url=webhook_url,
+        dry_run=dry_run,
+        limit=limit,
+        rate_limit_s=rate_limit,
+    )
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
         )
-        return 0
-    return 1
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
