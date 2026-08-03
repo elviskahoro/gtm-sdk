@@ -110,7 +110,7 @@ jobs:
       - name: Upload and test impacted Bazel targets
         uses: trunk-io/bazel-action@3e7d4e893f2c4c3c1b16e07f3db8ff3585e4025d # v1.0.4
         with:
-          bazel-workspace-path: .
+          bazel-workspace-path: ${{ github.workspace }}
           bazel-diff-command-options: --config=ci
           bazel-test-command: test --config=ci
           target-branch: main
