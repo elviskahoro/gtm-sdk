@@ -67,7 +67,6 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import csv
 import json
 import os
@@ -75,7 +74,13 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, get_args
+from typing import TYPE_CHECKING, Any, get_args
+
+import click
+import typer
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # Anchor on the script's directory so paths resolve regardless of the CWD
 # `uv run` was invoked from, and so local `src`/`cli`/`libs` imports work.
@@ -97,6 +102,8 @@ from src.octolens.backfill import (  # noqa: E402
     include_mention,
 )
 from src.octolens.webhook import Webhook  # noqa: E402
+
+app = typer.Typer(add_completion=False, help=__doc__)
 
 # Source platforms the inbound-webhook Mention model accepts. The v2 API spans a
 # superset (medium, stackoverflow, producthunt, tiktok, ...); api-source rows
@@ -688,136 +695,59 @@ def send(
         print("[send] dry-run only — re-run with --apply to POST for real.")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default=DEFAULT_DATA_DIR,
-        help="directory of octolens-mentions-*.csv (or set OCTOLENS_DATA_DIR)",
-    )
-    parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
-    parser.add_argument(
-        "--source",
-        choices=("csv", "api"),
-        default="csv",
-        help=(
-            "where mentions come from: 'csv' (local Octolens exports, default) or "
-            "'api' (live v2 REST API, real relevance + all-time; needs OCTOLENS_API_KEY)"
-        ),
-    )
-    parser.add_argument(
-        "--include-low",
-        action="store_true",
-        help=(
-            "api source only: also fetch low-relevance mentions (includeAll). "
-            "The webhook drops 'low' before Attio, so this only adds skipped POSTs"
-        ),
-    )
-    parser.add_argument(
-        "--page-size",
-        type=int,
-        default=100,
-        help="api source only: mentions per page (1-100)",
-    )
-    parser.add_argument(
-        "--max-pages",
-        type=int,
-        default=None,
-        help="api source only: cap pages fetched (safety for exploratory runs)",
-    )
-    parser.add_argument(
-        "--keyword",
-        action="append",
-        dest="keywords_filter",
-        default=None,
-        help=(
-            "api source only: tracked keyword text to filter by, server-side "
-            "(repeatable). Defaults to dlt + dlthub"
-        ),
-    )
-    parser.add_argument(
-        "--keyword-id",
-        action="append",
-        dest="keyword_ids",
-        type=int,
-        default=None,
-        help=(
-            "api source only: numeric keyword id to filter by (repeatable). "
-            "Bypasses the keyword-text lookup; takes precedence over --keyword"
-        ),
-    )
-    parser.add_argument(
-        "--keyword-filtered",
-        action="store_true",
-        help=(
-            "api source only: fast path — filter server-side by the dlt/dlthub "
-            "tracked keywords instead of walking the full org feed. Misses "
-            "content/URL-only matches the default exhaustive pull would catch. "
-            "Implied when --keyword/--keyword-id is given"
-        ),
-    )
-    parser.add_argument("--rebuild", action="store_true", help="regenerate the JSONL")
-    parser.add_argument(
-        "--relevance",
-        choices=("low", "medium", "high", "unknown"),
-        default="unknown",
-        help="relevance_score stamped on every backfilled mention",
-    )
-    parser.add_argument("--send", action="store_true", help="run the send phase")
-    parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="actually POST (else dry-run)",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="cap mentions processed",
-    )
-    parser.add_argument(
-        "--endpoint-url",
-        default=modal_url_for_app(Webhook.attio_get_app_name()),
-        help="Attio webhook URL (defaults from MODAL_WORKSPACE; override for prod)",
-    )
-    parser.add_argument("--timeout", type=float, default=30.0)
-    args = parser.parse_args()
-
-    if args.source == "api":
+def _run(
+    *,
+    data_dir: Path | None,
+    out_dir: Path,
+    source: str,
+    include_low: bool,  # noqa: FBT001,FBT002
+    page_size: int,
+    max_pages: int | None,
+    keywords_filter: list[str] | None,
+    keyword_ids: list[int] | None,
+    keyword_filtered: bool,  # noqa: FBT001,FBT002
+    rebuild: bool,  # noqa: FBT001,FBT002
+    relevance: str,
+    send: bool,  # noqa: FBT001,FBT002
+    apply: bool,  # noqa: FBT001,FBT002
+    limit: int | None,
+    endpoint_url: str,
+    timeout: float,
+) -> int:
+    if source == "api":
         # Exhaustive (full-feed) is the default for recall parity with CSV; the
         # keyword filter is an explicit opt-in, also implied by naming a keyword.
-        explicit_keyword = bool(args.keywords_filter) or bool(args.keyword_ids)
-        all_mentions = not (args.keyword_filtered or explicit_keyword)
+        explicit_keyword = bool(keywords_filter) or bool(keyword_ids)
+        all_mentions = not (keyword_filtered or explicit_keyword)
         jsonl_path = build_jsonl_from_api(
-            args.out_dir,
-            rebuild=args.rebuild,
-            include_low=args.include_low,
-            page_size=args.page_size,
-            max_pages=args.max_pages,
-            keyword_texts=args.keywords_filter or ["dlt", "dlthub"],
-            keyword_ids=args.keyword_ids,
+            out_dir,
+            rebuild=rebuild,
+            include_low=include_low,
+            page_size=page_size,
+            max_pages=max_pages,
+            keyword_texts=keywords_filter or ["dlt", "dlthub"],
+            keyword_ids=keyword_ids,
             all_mentions=all_mentions,
             # Reuse a prior build only in the send handoff; a plain build/preview
             # always re-fetches live so the API path is never silently stale.
-            allow_reuse=args.send,
+            allow_reuse=send,
         )
     else:
-        if args.data_dir is None:
+        if data_dir is None:
             raise SystemExit(
                 "No data dir: pass --data-dir or set OCTOLENS_DATA_DIR "
                 "(e.g. ~/Documents/ai/data/octolens).",
             )
-        jsonl_path = build_jsonl(args.data_dir, args.out_dir, rebuild=args.rebuild)
+        jsonl_path = build_jsonl(data_dir, out_dir, rebuild=rebuild)
 
-    if not args.send:
+    if not send:
         # Preview a few mapped+validated payloads so the mapper is verifiable
         # without sending anything.
         print("\n[preview] sample mapped payloads:")
         for row in _load_rows(jsonl_path)[:3]:
             payload = build_webhook_payload(
                 row,
-                relevance=args.relevance,
+                relevance=relevance,
                 source_file=row.get("_source_file", "unknown"),
             )
             Webhook.model_validate(payload)  # raises if the mapper is wrong
@@ -825,19 +755,159 @@ def main() -> None:
         print(
             "\n[preview] build complete. Re-run with --send (then --apply) to deliver.",
         )
-        return
+        return 0
 
-    send(
+    send_result = send(
         jsonl_path,
-        source=args.source,
-        endpoint_url=args.endpoint_url,
-        relevance=args.relevance,
-        apply=args.apply,
-        limit=args.limit,
-        timeout=args.timeout,
-        sent_log=args.out_dir / "sent.log",
+        source=source,
+        endpoint_url=endpoint_url,
+        relevance=relevance,
+        apply=apply,
+        limit=limit,
+        timeout=timeout,
+        sent_log=out_dir / "sent.log",
+    )
+    return 0
+
+
+@app.command(help=__doc__)
+def backfill(
+    data_dir: Path | None = typer.Option(
+        DEFAULT_DATA_DIR,
+        "--data-dir",
+        help="directory of octolens-mentions-*.csv (or set OCTOLENS_DATA_DIR)",
+    ),
+    out_dir: Path = typer.Option(
+        DEFAULT_OUT_DIR,
+        "--out-dir",
+        help="output directory for mentions.jsonl and sent.log",
+    ),
+    source: str = typer.Option(
+        "csv",
+        "--source",
+        help=(
+            "where mentions come from: 'csv' (local Octolens exports, default) or "
+            "'api' (live v2 REST API, real relevance + all-time; needs OCTOLENS_API_KEY)"
+        ),
+    ),
+    include_low: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--include-low",
+        help=(
+            "api source only: also fetch low-relevance mentions (includeAll). "
+            "The webhook drops 'low' before Attio, so this only adds skipped POSTs"
+        ),
+    ),
+    page_size: int = typer.Option(
+        100,
+        "--page-size",
+        help="api source only: mentions per page (1-100)",
+    ),
+    max_pages: int | None = typer.Option(
+        None,
+        "--max-pages",
+        help="api source only: cap pages fetched (safety for exploratory runs)",
+    ),
+    keywords_filter: list[str] | None = typer.Option(
+        None,
+        "--keyword",
+        help=(
+            "api source only: tracked keyword text to filter by, server-side "
+            "(repeatable). Defaults to dlt + dlthub"
+        ),
+    ),
+    keyword_ids: list[int] | None = typer.Option(
+        None,
+        "--keyword-id",
+        help=(
+            "api source only: numeric keyword id to filter by (repeatable). "
+            "Bypasses the keyword-text lookup; takes precedence over --keyword"
+        ),
+    ),
+    keyword_filtered: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--keyword-filtered",
+        help=(
+            "api source only: fast path — filter server-side by the dlt/dlthub "
+            "tracked keywords instead of walking the full org feed. Misses "
+            "content/URL-only matches the default exhaustive pull would catch. "
+            "Implied when --keyword/--keyword-id is given"
+        ),
+    ),
+    rebuild: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--rebuild",
+        help="regenerate the JSONL",
+    ),
+    relevance: str = typer.Option(
+        "unknown",
+        "--relevance",
+        help="relevance_score stamped on every backfilled mention",
+    ),
+    send: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--send",
+        help="run the send phase",
+    ),
+    apply: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--apply",
+        help="actually POST (else dry-run)",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        help="cap mentions processed",
+    ),
+    endpoint_url: str = typer.Option(
+        modal_url_for_app(Webhook.attio_get_app_name()),
+        "--endpoint-url",
+        help="Attio webhook URL (defaults from MODAL_WORKSPACE; override for prod)",
+    ),
+    timeout: float = typer.Option(
+        30.0,
+        "--timeout",
+        help="HTTP timeout in seconds",
+    ),
+) -> int:
+    return _run(
+        data_dir=data_dir,
+        out_dir=out_dir,
+        source=source,
+        include_low=include_low,
+        page_size=page_size,
+        max_pages=max_pages,
+        keywords_filter=keywords_filter,
+        keyword_ids=keyword_ids,
+        keyword_filtered=keyword_filtered,
+        rebuild=rebuild,
+        relevance=relevance,
+        send=send,
+        apply=apply,
+        limit=limit,
+        endpoint_url=endpoint_url,
+        timeout=timeout,
     )
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
