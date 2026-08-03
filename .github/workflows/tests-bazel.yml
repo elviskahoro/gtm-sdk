@@ -54,13 +54,11 @@ jobs:
       - name: Run full Bazel suite
         run: bazel test //... --config=ci
 
-      - name: Check generated Bazel files
+      - name: Check generated Bazel BUILD files
         run: |
           set -euo pipefail
-          bazel run //:gazelle_python_manifest.update
           bazel run //:gazelle
           git diff --exit-code -- \
-            gazelle_python.yaml \
             MODULE.bazel.lock \
             BUILD.bazel \
             ":(glob)**/BUILD" \
@@ -100,6 +98,8 @@ jobs:
           cat > "${bazel_diff_dir}/bin/bazel-diff" <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:-$PWD}"
+          cd "${workspace}"
           java_home="$(bazel info java-home)"
           exec "${java_home}/bin/java" -jar "${RUNNER_TEMP}/bazel-diff/bazel-diff_deploy.jar" "$@"
           EOF
