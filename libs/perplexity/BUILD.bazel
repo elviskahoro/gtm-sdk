@@ -18,8 +18,5 @@ py_library(
         "perplexity_client.py",
     ],
     visibility = ["//:__subpackages__"],
-    deps = [
-        "@pypi//httpx",
-        "@pypi//pydantic",
-    ],
+    deps = ["@pypi//pydantic"],
 )
