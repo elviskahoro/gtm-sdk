@@ -101,20 +101,6 @@ class NoShowAttendee(BaseModel):
     noShow: bool = False
 
 
-class RecordingItem(BaseModel):
-    """Cal.com recording metadata (used by call_recordings flows, not webhooks)."""
-
-    id: str
-    roomName: str
-    startTs: int
-    status: str
-    duration: int
-    shareToken: str
-    maxParticipants: int | None = None
-    downloadLink: str | None = None
-    error: str | None = None
-
-
 class Transcript(BaseModel):
     urls: list[str]
 
