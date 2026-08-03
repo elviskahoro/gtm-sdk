@@ -41,11 +41,15 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import json
 import os
 import sys
+from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import click
+import typer
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
@@ -63,11 +67,24 @@ from scripts.lib.env import (  # noqa: E402
     read_infisical_credentials,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 # Sentinel propagated through `os.execvp` -> `infisical run` -> child python.
 # Prevents an infinite re-bootstrap loop when the chosen Infisical env simply
 # does not contain `ATTIO_API_KEY` (the child would otherwise see an empty key
 # and call _bootstrap_via_infisical() again, ad infinitum).
 _BOOTSTRAP_SENTINEL_ENV = "_ATTIO_PROBE_BOOTSTRAPPED"
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+)
+
+
+class InfisicalEnv(str, Enum):
+    dev = "dev"
+    prod = "prod"
 
 
 class AttioProbeError(RuntimeError):
@@ -174,36 +191,21 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--env",
-        choices=["dev", "prod"],
-        default=None,
-        help=(
-            "Infisical environment to read ATTIO_API_KEY from. "
-            "Required unless INFISICAL_ENV is set. There is no silent default — "
-            "a wrong env returns a different workspace slug with no warning."
-        ),
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Print the full /v2/self JSON payload instead of just the slug.",
-    )
-    args = parser.parse_args()
-
+def _run(*, env: InfisicalEnv | None, json_output: bool) -> int:
     api_key = clean_env(os.environ.get("ATTIO_API_KEY"))
     if not api_key:
         # The Infisical env is only needed when we're going to bootstrap; if
         # the operator pre-injected ATTIO_API_KEY (e.g. via another secret
         # manager or a direct shell export), we should run with that key as
         # documented.
-        env = args.env or clean_env(os.environ.get("INFISICAL_ENV"))
-        if env not in {"dev", "prod"}:
+        infisical_env = (
+            env.value
+            if env is not None
+            else clean_env(
+                os.environ.get("INFISICAL_ENV"),
+            )
+        )
+        if infisical_env not in {"dev", "prod"}:
             print(
                 "Infisical environment is required to bootstrap ATTIO_API_KEY. "
                 "Pass --env=dev|prod or set INFISICAL_ENV. (Refusing to default "
@@ -212,13 +214,13 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 2
-        forward = [f"--env={env}"]
-        if args.json:
+        forward = [f"--env={infisical_env}"]
+        if json_output:
             forward.append("--json")
-        return _bootstrap_via_infisical(env, forward)
+        return _bootstrap_via_infisical(infisical_env, forward)
 
     try:
-        output = probe(api_key=api_key, json_output=args.json)
+        output = probe(api_key=api_key, json_output=json_output)
     except (AttioProbeError, ValueError) as exc:
         # ValueError covers extract_workspace_slug raising on inactive tokens
         # where Attio omits workspace_slug entirely.
@@ -229,6 +231,45 @@ def main() -> int:
     if not output.endswith("\n"):
         sys.stdout.write("\n")
     return 0
+
+
+@app.command()
+def cli(
+    env: InfisicalEnv | None = typer.Option(
+        None,
+        "--env",
+        help=(
+            "Infisical environment to read ATTIO_API_KEY from. "
+            "Required unless INFISICAL_ENV is set. There is no silent default — "
+            "a wrong env returns a different workspace slug with no warning."
+        ),
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the full /v2/self JSON payload instead of just the slug.",
+    ),
+) -> int:
+    return _run(env=env, json_output=json_output)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
