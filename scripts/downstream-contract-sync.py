@@ -52,6 +52,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+import click
 import typer
 
 if TYPE_CHECKING:
@@ -473,6 +474,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=list(argv) if argv is not None else None,
             standalone_mode=False,
         )
+    except click.ClickException as exc:
+        typer.echo(exc.format_message(), err=True)
+        return exc.exit_code
     except SystemExit as exc:
         code = exc.code
         if code is None:

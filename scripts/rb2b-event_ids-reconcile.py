@@ -61,6 +61,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import click
 import typer
 
 # Anchor on the script's directory so output paths resolve regardless of the CWD
@@ -476,8 +477,12 @@ def reconcile(
 
 
 def main(argv: list[str] | None = None) -> int:
-    app(args=argv, standalone_mode=False)
-    return 0
+    try:
+        result = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

@@ -129,6 +129,7 @@ DEFAULT_OUT_DIR = REPO_ROOT / "out" / "octolens-backfill"
 # different params — a different source, keyword filter, relevance window, or
 # page cap — can't silently reuse a stale cache in the same out-dir.
 _BUILD_MARKER = ".build-fingerprint"
+_INVALID_SOURCE = "must be either 'api' or 'csv'"
 
 
 def _reuse_cached_jsonl(
@@ -714,6 +715,11 @@ def _run(
     endpoint_url: str,
     timeout: float,
 ) -> int:
+    if source not in {"api", "csv"}:
+        raise typer.BadParameter(
+            _INVALID_SOURCE,
+            param_hint="--source",
+        )  # noqa: TRY003
     if source == "api":
         # Exhaustive (full-feed) is the default for recall parity with CSV; the
         # keyword filter is an explicit opt-in, also implied by naming a keyword.

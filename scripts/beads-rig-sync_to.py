@@ -69,6 +69,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import click
 import typer
 
 # This script lives in <repo>/scripts/, so the repo root is its parent's
@@ -232,7 +233,7 @@ def sync(
         help="Refresh the export and report what would import, but change nothing.",
     ),
 ) -> None:
-    """Export here, import into the rig. Raises BdCommandError if bd fails."""
+    """Snapshot the source first so a rig import receives a consistent DB view."""
     try:
         source_beads_path = resolve_source_beads(source_beads)
         if source_beads_path is None:
@@ -295,6 +296,9 @@ def main(argv: list[str] | None = None) -> int:
     """Compatibility wrapper for tests and direct invocation."""
     try:
         app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
     except SystemExit as exc:
         return exc.code if isinstance(exc.code, int) else 1
     return 0

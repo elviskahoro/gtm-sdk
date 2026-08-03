@@ -65,6 +65,7 @@ OBJECT_API_SLUG = "people"
 
 app = typer.Typer(
     add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
     help="Bootstrap github identity attributes on the people object.",
 )
 

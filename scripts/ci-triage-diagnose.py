@@ -74,6 +74,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import click
 import typer
 
 # Terminal states from RunState. BLOCKED means the agent is waiting on input that
@@ -423,9 +424,12 @@ app = typer.Typer(
 )
 
 
-def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  # noqa: ANN401
-    args = parse_args(argv)
-
+def run_diagnosis(  # noqa: ANN401, PLR0911
+    args: argparse.Namespace,
+    *,
+    client: Any | None = None,  # noqa: ANN401
+) -> int:
+    """Run the diagnosis after the CLI or an injected test wrapper builds options."""
     if client is None:
         if not os.environ.get("WARP_API_KEY", "").strip():
             print("error: WARP_API_KEY must be set", file=sys.stderr)
@@ -516,6 +520,60 @@ def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  #
     args.output.write_text(diagnosis + "\n", encoding="utf-8")
     print(f"wrote {args.output} ({len(diagnosis)} chars)")
     return 0
+
+
+@app.command("diagnose")
+def cli(
+    repo: str = typer.Option(os.environ.get("GITHUB_REPOSITORY", "?")),
+    workflow: str = typer.Option(...),
+    run_url: str = typer.Option(..., "--run-url"),
+    branch: str = typer.Option("unknown"),
+    commit: str = typer.Option("unknown"),
+    event: str = typer.Option("unknown"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    diff_file: Path | None = typer.Option(None, "--diff-file"),
+    output: Path = typer.Option(...),
+    environment_id: str = typer.Option(os.environ.get("OZ_ENVIRONMENT_ID", "")),
+    harness: str = typer.Option(os.environ.get("OZ_HARNESS", "")),
+    model_id: str = typer.Option(os.environ.get("OZ_MODEL_ID", "")),
+    timeout_seconds: int = typer.Option(DEFAULT_TIMEOUT_SECONDS),
+    list_environments: bool = typer.Option(False, "--list-environments"),  # noqa: FBT001, FBT002, FBT003
+) -> int:
+    """Diagnose a failed CI run via Oz."""
+    return run_diagnosis(
+        argparse.Namespace(
+            repo=repo,
+            workflow=workflow,
+            run_url=run_url,
+            branch=branch,
+            commit=commit,
+            event=event,
+            log_file=log_file,
+            diff_file=diff_file,
+            output=output,
+            environment_id=environment_id,
+            harness=harness,
+            model_id=model_id,
+            timeout_seconds=timeout_seconds,
+            list_environments=list_environments,
+        ),
+    )
+
+
+def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  # noqa: ANN401
+    """Run the Typer CLI, or inject a client for offline tests."""
+    if client is not None:
+        return run_diagnosis(parse_args(argv), client=client)
+    try:
+        result = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

@@ -220,6 +220,21 @@ def test_send_dry_run_skips_already_sent(tmp_path: Path, capsys: Any) -> None:
     assert "evt_1" not in printed  # the already-sent record was skipped
 
 
+def test_cli_commands_preserve_documented_names() -> None:
+    assert [command.name for command in backfill.app.registered_commands] == [  # noqa: S101
+        "extract",
+        "send",
+    ]
+
+
+def test_send_command_returns_nonzero_for_failed_records(monkeypatch: Any) -> None:  # noqa: ANN401
+    def fake_send(*_args: object, **_kwargs: object) -> tuple[int, int, int]:
+        return 1, 0, 1
+
+    monkeypatch.setattr(backfill, "send", fake_send)
+    assert backfill.send_cmd(rate_limit=0) == 1  # noqa: S101
+
+
 def _cfg_for(out: Path) -> Any:
     return backfill.BackfillConfig(
         name="t",

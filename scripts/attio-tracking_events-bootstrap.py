@@ -94,7 +94,11 @@ from libs.attio.preflight import assert_attio_token_scopes
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-app = typer.Typer(add_completion=False, help=__doc__)
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+)
 
 # This script only mutates schema (creates/restores attributes, seeds select
 # options) — it never writes records — so its required scope is
@@ -142,7 +146,7 @@ _ATTRIBUTES: tuple[tuple[str, str, str, dict[str, object] | None], ...] = (
 )
 
 
-def _run(apply: bool) -> int:
+def _run(*, apply: bool) -> int:
     results: list[tuple[str, str]] = []
 
     if apply:

@@ -280,7 +280,7 @@ async def run_trunk(
 
 
 async def run_ci(only: str | None, skip: Sequence[str]) -> int:
-    jobs = {"unit", "integration", "trunk"}
+    jobs = {job.value for job in JobName}
     if only:
         jobs = {only}
     jobs -= set(skip)

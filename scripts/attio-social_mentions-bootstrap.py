@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
+import click
 import typer
 
 # Anchor on the script's own directory so the script runs correctly regardless
@@ -431,10 +432,16 @@ def cli(
     ] = False,
 ) -> int:
     if not (preview or apply or diff):
-        print("error: exactly one of --preview, --apply, or --diff is required")
+        typer.echo(
+            "error: exactly one of --preview, --apply, or --diff is required",
+            err=True,
+        )
         return 2
     if sum([preview, apply, diff]) > 1:
-        print("error: --preview, --apply, and --diff are mutually exclusive")
+        typer.echo(
+            "error: --preview, --apply, and --diff are mutually exclusive",
+            err=True,
+        )
         return 2
     if diff:
         return run_diff()
@@ -444,6 +451,9 @@ def cli(
 def main(argv: list[str] | None = None) -> int:
     try:
         result = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
     except SystemExit as exc:
         if isinstance(exc.code, int):
             return exc.code

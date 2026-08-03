@@ -18,6 +18,9 @@ Auth: HOOKDECK_API_KEY in the environment — inject via Infisical. Run under
         --env=dev -- scripts/hookdeck-webhook-wire.py slack CaldotcomBookingWebhook
 
 Examples:
+    All examples require the ``infisical run --projectId ... --token ... --env``
+    invocation shown above; do not run the bare script without those credentials.
+
     # cal.com → Slack, reusing an existing Hookdeck source named "caldotcom":
     scripts/hookdeck-webhook-wire.py slack CaldotcomBookingWebhook \\
         --source-name caldotcom

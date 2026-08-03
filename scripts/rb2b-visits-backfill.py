@@ -678,7 +678,7 @@ app = typer.Typer(
 )
 
 
-@app.command()
+@app.command("extract")
 def extract_cmd(
     limit: Annotated[
         int | None,
@@ -695,12 +695,12 @@ def extract_cmd(
         ),
     ] = False,  # noqa: FBT003
 ) -> int:
-    """Pull GCS + Hookdeck, dedupe via dlt, write out/rb2b_visits.jsonl."""
+    """Combine overlapping archives before deduplication so historical coverage is complete."""
     extract(RB2B_CONFIG, limit=limit, gcs_only=gcs_only)
     return 0
 
 
-@app.command()
+@app.command("send")
 def send_cmd(
     webhook_url: Annotated[
         str | None,
@@ -728,15 +728,15 @@ def send_cmd(
         ),
     ] = 0.2,
 ) -> int:
-    """Replay out/rb2b_visits.jsonl to the Modal webhook, one by one."""
-    send(
+    """Keep replay serialized and resumable so retries avoid duplicates and rate spikes."""
+    _sent, _skipped, failed = send(
         RB2B_CONFIG,
         webhook_url=webhook_url,
         dry_run=dry_run,
         limit=limit,
         rate_limit_s=rate_limit,
     )
-    return 0
+    return 1 if failed else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:

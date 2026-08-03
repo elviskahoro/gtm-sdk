@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import click
 import typer
 
 if TYPE_CHECKING:
@@ -83,6 +84,9 @@ def sync(
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        typer.echo(exc.format_message(), err=True)
+        return exc.exit_code
     except SystemExit as exc:
         return exc.code if isinstance(exc.code, int) else 1
     return 0

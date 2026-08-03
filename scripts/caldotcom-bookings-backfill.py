@@ -487,7 +487,7 @@ def backfill(
         help="POST envelopes to the live Modal webhook (idempotent; safe to re-run).",
     ),
     dry_run: bool = typer.Option(  # noqa: FBT001,FBT002
-        True,  # noqa: FBT003
+        False,  # noqa: FBT003
         "--dry-run",
         help="Default. Fetch, filter, and write envelopes to out/ without POSTing.",
     ),

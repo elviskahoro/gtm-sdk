@@ -11,13 +11,9 @@ UI - this script just produces the list the operator deletes from.
 
 This is a READ-ONLY scan. It streams every meeting in a date range, pairs each
 api-token meeting with the same-slot system meeting it duplicates, and writes
-three CSVs (see ``src.attio.orphan_meetings``):
-
-- ``orphans_confident.csv`` - overlap == 1.00, identical participants + minute.
-  SAFE to delete by hand in the Attio UI.
-- ``orphans_review.csv``    - overlap 0.50-<1.00, likely false positives. JUDGE
-  each by hand; do NOT bulk-delete.
-- ``orphans.csv``           - the combined set (carries a ``confidence`` column).
+the generated orphan reports. ``src.attio.orphan_meetings.write_orphan_csvs``
+and this command's generated help are the authoritative descriptions of their
+names and confidence classifications.
 
 Meetings exist only in the PROD Attio workspace (the feature is unprovisioned in
 dev), so run this against ``--env=prod``.
@@ -75,6 +71,7 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "out" / "orphan-cleanup"
 # server-side query so we page ~12.5k rows instead of the whole workspace.
 DEFAULT_START = "2023-09-01"
 DEFAULT_END = "2026-09-01"
+_DATE_ERROR = "must be an ISO 8601 date or datetime"
 
 app = typer.Typer(
     add_completion=False,
@@ -107,8 +104,20 @@ def _run(
     limit: int | None,
     allow_non_prod: bool,  # noqa: FBT001
 ) -> int:
-    parsed_start = _parse_date(start)
-    parsed_end = _parse_date(end, end_of_day=True)
+    try:
+        parsed_start = _parse_date(start)
+    except ValueError as exc:
+        raise typer.BadParameter(
+            _DATE_ERROR,
+            param_hint="--start",
+        ) from exc
+    try:
+        parsed_end = _parse_date(end, end_of_day=True)
+    except ValueError as exc:
+        raise typer.BadParameter(
+            _DATE_ERROR,
+            param_hint="--end",
+        ) from exc
 
     print("# Attio orphan-meeting scan (READ-ONLY)")
     print(f"# range {parsed_start.date()} .. {parsed_end.date()}")

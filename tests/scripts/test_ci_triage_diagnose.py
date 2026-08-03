@@ -456,6 +456,10 @@ def test_config_includes_environment_and_harness_when_given(script: Any) -> None
     assert config["model_id"] == "some-model"
 
 
+def test_active_cli_is_registered_as_a_typer_command(script: Any) -> None:  # noqa: ANN401
+    assert [command.name for command in script.app.registered_commands] == ["diagnose"]  # noqa: S101
+
+
 def test_run_start_failure_is_reported_as_exit_one(
     script: Any,
     tmp_path: Path,
