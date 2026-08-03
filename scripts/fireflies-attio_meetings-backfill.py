@@ -46,23 +46,33 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import datetime as dt
 import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import click
+import typer
+
 from libs.fireflies import from_motherduck_row
-from scripts.lib.env import clean_env, infisical_run_example, parse_dotenv
+from scripts.lib.env import clean_env, parse_dotenv
 from src.fireflies import DATABASE, iter_assembled_rows, to_attio_operations
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from src.attio.ops import AttioOp
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 TMP_DIR = REPO_ROOT / "tmp"
 _TOKEN_ENV = "MOTHERDUCK_TOKEN"  # nosec B105 -- env var name, not a credential
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+app = typer.Typer(add_completion=False, help=__doc__)
 
 
 def _ensure_motherduck_token() -> None:
@@ -79,33 +89,6 @@ def _ensure_motherduck_token() -> None:
     value = clean_env(parse_dotenv(env_file.read_text()).get(_TOKEN_ENV))
     if value:
         os.environ[_TOKEN_ENV] = value
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Backfill Attio Meeting records from the MotherDuck "
-        "fireflies-backfill database.",
-        epilog="Example:\n  "
-        + infisical_run_example("scripts/fireflies-attio_meetings-backfill.py"),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Write to Attio. Default is a dry run that only prints the planned ops.",
-    )
-    parser.add_argument(
-        "--no-notes",
-        action="store_true",
-        help="Upsert Meetings only; skip the Fireflies summary note.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Stop after this many transcripts. Useful for a small test run.",
-    )
-    return parser
 
 
 def _describe_op(op: Any) -> str:
@@ -126,25 +109,27 @@ def _describe_op(op: Any) -> str:
     return f"{op.op_type} {op.model_dump()}"
 
 
-def main() -> int:
-    args = _build_parser().parse_args()
+def _run(
+    *,
+    execute: bool,  # noqa: FBT001,FBT002
+    no_notes: bool,  # noqa: FBT001,FBT002
+    limit: int | None,
+) -> int:
     _ensure_motherduck_token()
 
     lines: list[str] = []
 
     def emit(msg: str) -> None:
-        print(msg)
+        typer.echo(msg)
         lines.append(msg)
 
-    mode = "EXECUTE" if args.execute else "DRY RUN"
+    mode = "EXECUTE" if execute else "DRY RUN"
     emit(f"# Fireflies → Attio meeting backfill ({mode})")
 
     from libs.motherduck import connect
-    from src.attio.export import execute
+    from src.attio.export import execute as execute_ops
 
-    if args.execute:
-        # Fail fast on a misconfigured Attio token instead of failing every row
-        # deep inside a write (ai-ica).
+    if execute:
         from libs.attio.preflight import assert_attio_token_scopes
 
         assert_attio_token_scopes()
@@ -153,21 +138,10 @@ def main() -> int:
 
     processed = written = failed = 0
     fail_details: list[str] = []
-    # Dedup observability (ai-av8): tally how *successful* meeting ops resolved
-    # so the smoke test can prove participant-matching worked.
-    #  - ``matched_existing``: collapsed onto a pre-existing calendar-synced /
-    #    Fathom / Cal.com meeting via ``match_existing_by_participants`` (action
-    #    "noop", no new row) — this is the dedup signal we care about.
-    #  - ``via_find_or_create``: no participant match, so it went through
-    #    ``find_or_create_meeting`` on the synthetic ical_uid. The Attio layer
-    #    reports action "created" for this path whether the row was freshly
-    #    inserted OR returned existing-by-ical_uid (a replay), so we do NOT try
-    #    to split fresh-vs-replay here — it cannot be told apart from the action.
-    # Failed meeting ops are excluded (they show up in the ``failed`` summary).
     meetings_matched = meetings_via_find_or_create = 0
 
     for raw in iter_assembled_rows(con):
-        if args.limit is not None and processed >= args.limit:
+        if limit is not None and processed >= limit:
             break
         processed += 1
         rec_id = raw.get("id", "?")
@@ -175,7 +149,7 @@ def main() -> int:
             recording = from_motherduck_row(raw)
             ops: list[AttioOp] = to_attio_operations(
                 recording,
-                include_notes=not args.no_notes,
+                include_notes=not no_notes,
             )
         except Exception as exc:  # noqa: BLE001 — one bad row must not abort the run
             failed += 1
@@ -188,36 +162,25 @@ def main() -> int:
         for op in ops:
             emit(f"    - {_describe_op(op)}")
 
-        if not args.execute:
+        if not execute:
             continue
 
-        result = execute(ops)
-        # Surface what each op actually did — record_id, action, and the
-        # matched_existing flag — instead of discarding execute()'s outcomes.
-        # This is the empirical dedup proof for the smoke test (ai-av8): a
-        # Fireflies meeting that coincides with an existing meeting must report
-        # action=noop matched_existing=True, not action=created.
+        result = execute_ops(ops)
         for outcome in result.outcomes:
             matched = bool(outcome.envelope.meta.get("matched_existing"))
             emit(
                 f"    -> {outcome.op_type} action={outcome.envelope.action} "
                 f"matched_existing={matched} record_id={outcome.record_id}",
             )
-            # OpOutcome.op_type is the op class name (type(op).__name__), e.g.
-            # "UpsertMeeting" — not the snake_case AttioOp.op_type.
             if outcome.op_type == "UpsertMeeting":
                 if matched:
                     meetings_matched += 1
                 elif outcome.envelope.action != "failed":
-                    # Non-matched success → the find_or_create path.
                     meetings_via_find_or_create += 1
         if result.success:
             written += 1
         else:
             failed += 1
-            # Surface the failing op's actual error envelope, not just the
-            # opaque fail_reason ("op_failed"), so failures are triageable from
-            # the report alone.
             err_detail = ""
             if result.fail_index is not None and result.fail_index < len(
                 result.outcomes,
@@ -235,29 +198,66 @@ def main() -> int:
     emit("")
     emit(
         f"## Summary: processed={processed} "
-        + (f"written={written} " if args.execute else "")
+        + (f"written={written} " if execute else "")
         + f"failed={failed}",
     )
-    if args.execute:
-        # The dedup payoff: matched_existing meetings collapsed onto a
-        # pre-existing row (no duplicate); via_find_or_create went through the
-        # synthetic-ical_uid path (no participant match found).
+    if execute:
         emit(
             f"- meetings: matched_existing={meetings_matched} "
             f"via_find_or_create={meetings_via_find_or_create}",
         )
     for detail in fail_details:
         emit(f"- FAIL {detail}")
-    if not args.execute:
+    if not execute:
         emit("\n(dry run — pass --execute to write to Attio)")
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%d%H%M%S")
     report = TMP_DIR / f"fireflies-backfill-{stamp}.md"
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"\nReport written to {report}")
+    typer.echo(f"\nReport written to {report}")
 
     return 1 if failed else 0
+
+
+@app.command(help=__doc__)
+def backfill(
+    execute: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--execute",
+        help="Write to Attio. Default is a dry run that only prints the planned ops.",
+    ),
+    no_notes: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--no-notes",
+        help="Upsert Meetings only; skip the Fireflies summary note.",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        help="Stop after this many transcripts. Useful for a small test run.",
+    ),
+) -> int:
+    return _run(execute=execute, no_notes=no_notes, limit=limit)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
