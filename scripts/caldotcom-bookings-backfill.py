@@ -279,7 +279,7 @@ def _post_with_retry(
 app = typer.Typer(add_completion=False, help=__doc__)
 
 
-def _run(
+def _run(  # noqa: PLR0912,PLR0915
     *,
     dry_run: bool,
     apply: bool,

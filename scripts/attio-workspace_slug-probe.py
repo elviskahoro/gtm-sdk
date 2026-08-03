@@ -44,7 +44,7 @@ if __name__ == "__main__":
 import json
 import os
 import sys
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -82,7 +82,7 @@ app = typer.Typer(
 )
 
 
-class InfisicalEnv(str, Enum):
+class InfisicalEnv(StrEnum):
     dev = "dev"
     prod = "prod"
 
@@ -244,8 +244,8 @@ def cli(
             "a wrong env returns a different workspace slug with no warning."
         ),
     ),
-    json_output: bool = typer.Option(
-        False,
+    json_output: bool = typer.Option(  # noqa: FBT001
+        False,  # noqa: FBT003
         "--json",
         help="Print the full /v2/self JSON payload instead of just the slug.",
     ),

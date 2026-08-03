@@ -296,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         app(args=argv, standalone_mode=False)
     except SystemExit as exc:
-        return exc.code or 0
+        return exc.code if isinstance(exc.code, int) else 1
     return 0
 
 

@@ -440,9 +440,11 @@ def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  #
 
         client = OzAPI()
 
+    active_client: Any = client
+
     if args.list_environments:
         try:
-            print(client.agent.list_environments())
+            print(active_client.agent.list_environments())
         except Exception as exc:  # noqa: BLE001 - diagnostic path
             print(f"error: could not list environments: {exc}", file=sys.stderr)
             return 1
@@ -460,7 +462,7 @@ def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  #
     )
 
     try:
-        started = client.agent.run(
+        started = active_client.agent.run(
             prompt=prompt,
             # plan mode so the result comes back as a PLAN artifact, whose response
             # embeds markdown. See the module docstring.

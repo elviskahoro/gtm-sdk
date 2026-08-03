@@ -47,7 +47,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 import click
 import requests
@@ -83,12 +83,12 @@ app = typer.Typer(
 )
 
 
-def _fail(msg: str) -> None:
+def _fail(msg: str) -> NoReturn:
     print(f"ERROR: {msg}", file=sys.stderr)
     raise SystemExit(1)
 
 
-def _resolve_model(source_alias: str) -> type:  # noqa: RET503
+def _resolve_model(source_alias: str) -> type:
     """Map a source display alias (e.g. CaldotcomBookingWebhook) to its class."""
     for _slug, model, display in SOURCES:
         if display == source_alias:

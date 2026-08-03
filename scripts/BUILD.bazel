@@ -165,7 +165,10 @@ py_binary(
     name = "beads-rig-sync_to",
     srcs = ["beads-rig-sync_to.py"],
     visibility = ["//:__subpackages__"],
-    deps = ["//scripts/lib"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//typer",
+    ],
 )
 
 py_binary(

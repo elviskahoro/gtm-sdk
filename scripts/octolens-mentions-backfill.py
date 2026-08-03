@@ -708,7 +708,7 @@ def _run(
     keyword_filtered: bool,  # noqa: FBT001,FBT002
     rebuild: bool,  # noqa: FBT001,FBT002
     relevance: str,
-    send: bool,  # noqa: FBT001,FBT002
+    should_send: bool,  # noqa: FBT001,FBT002
     apply: bool,  # noqa: FBT001,FBT002
     limit: int | None,
     endpoint_url: str,
@@ -730,17 +730,18 @@ def _run(
             all_mentions=all_mentions,
             # Reuse a prior build only in the send handoff; a plain build/preview
             # always re-fetches live so the API path is never silently stale.
-            allow_reuse=send,
+            allow_reuse=should_send,
         )
     else:
         if data_dir is None:
-            raise SystemExit(
+            message = (
                 "No data dir: pass --data-dir or set OCTOLENS_DATA_DIR "
-                "(e.g. ~/Documents/ai/data/octolens).",
+                "(e.g. ~/Documents/ai/data/octolens)."
             )
+            raise SystemExit(message)
         jsonl_path = build_jsonl(data_dir, out_dir, rebuild=rebuild)
 
-    if not send:
+    if not should_send:
         # Preview a few mapped+validated payloads so the mapper is verifiable
         # without sending anything.
         print("\n[preview] sample mapped payloads:")
@@ -757,7 +758,7 @@ def _run(
         )
         return 0
 
-    send_result = send(
+    send(
         jsonl_path,
         source=source,
         endpoint_url=endpoint_url,
@@ -882,7 +883,7 @@ def backfill(
         keyword_filtered=keyword_filtered,
         rebuild=rebuild,
         relevance=relevance,
-        send=send,
+        should_send=send,
         apply=apply,
         limit=limit,
         endpoint_url=endpoint_url,
