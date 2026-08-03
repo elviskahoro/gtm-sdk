@@ -43,13 +43,16 @@ filegroup(
 # keep
 filegroup(
     name = "github_workflow_sources",
-    srcs = glob([
-        ".github/workflows/**/*.Dockerfile",
-        ".github/workflows/**/*.dockerignore",
-        ".github/workflows/**/*.py",
-        ".github/workflows/**/*.txt",
-        ".github/workflows/**/*.yml",
-    ]),
+    srcs = glob(
+        [
+            ".github/workflows/**/*.Dockerfile",
+            ".github/workflows/**/*.dockerignore",
+            ".github/workflows/**/*.py",
+            ".github/workflows/**/*.txt",
+            ".github/workflows/**/*.yml",
+        ],
+        allow_empty = True,
+    ) + ["//.github/workflows/ci:workflow_ci_sources"],
     visibility = ["//tests/workflows:__pkg__"],
 )
 

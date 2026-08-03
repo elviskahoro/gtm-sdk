@@ -1,0 +1,82 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+# keep
+filegroup(
+    name = "workflow_ci_sources",
+    srcs = glob([
+        "*.Dockerfile",
+        "*.dockerignore",
+        "*.py",
+        "constraints/*.txt",
+    ]),
+    visibility = ["//:__pkg__"],
+)
+
+py_binary(
+    name = "pytest_dagger",
+    srcs = ["pytest_dagger.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
+    name = "pytest_dependency_key",
+    srcs = ["pytest_dependency_key.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_binary(
+    name = "pytest_dependency_pack",
+    srcs = ["pytest_dependency_pack.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_binary(
+    name = "pytest_integration_dagger",
+    srcs = ["pytest_integration_dagger.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
+    name = "triage_dagger",
+    srcs = ["triage_dagger.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
+    name = "triage_diagnose_dagger",
+    srcs = ["triage_diagnose_dagger.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_library(
+    name = "ci",
+    srcs = [
+        "pytest_dagger.py",
+        "pytest_dependency_key.py",
+        "pytest_dependency_pack.py",
+        "pytest_integration_dagger.py",
+        "triage_dagger.py",
+        "triage_diagnose_dagger.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
