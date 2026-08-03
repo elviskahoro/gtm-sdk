@@ -49,8 +49,9 @@ explicit `api_key=` argument → `api_key_scope` contextvar → env var.
 
 ## Orchestration (`src/`)
 
-- `src/app.py` — Modal `App` definition, image build, endpoint-module registration
-  (`_ENDPOINT_MODULES`). **Edit here when adding new Modal endpoints.**
+- `src/app.py` — endpoint-module registration (`_ENDPOINT_MODULES`); re-exports
+  `app`, `image` from `src.modal_runtime`. **Edit here when adding new Modal endpoints.**
+- `src/modal_runtime.py` — Modal `App` definition and image build.
 - `src/modal_app.py` — `MODAL_APP` name (env-overridable via `MODAL_APP`, default `gtm-sdk`).
 - `src/secrets_bootstrap.py` — Infisical-backed secret hydration for Modal functions
   (`KEY_SCOPES`, `@with_secrets`, `bootstrap_secret()`).
