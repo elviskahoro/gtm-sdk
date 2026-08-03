@@ -10,6 +10,10 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
@@ -37,6 +41,8 @@ def _load_script_module():
 _MOD = _load_script_module()
 InverseAttr = _MOD.InverseAttr
 evaluate_inverse_multiselect = _MOD.evaluate_inverse_multiselect
+_RUNNER_EXIT_CODE = 7
+_USAGE_ERROR_EXIT_CODE = 2
 
 
 def _attr(target: str, multiselect: bool) -> object:
@@ -116,3 +122,55 @@ def test_has_duplicate_links_detects_repeat() -> None:
             {"object_slug": "companies", "record_id": "c1"},
         ],
     )
+
+
+def test_main_routes_typer_options_to_existing_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script_module()
+    calls: list[dict[str, object]] = []
+
+    def stub_run(**kwargs: object) -> int:
+        calls.append(kwargs)
+        return _RUNNER_EXIT_CODE
+
+    monkeypatch.setattr(module, "_run", stub_run)
+
+    assert (  # noqa: S101
+        module.main(
+            [
+                "--env",
+                "prod",
+                "--idempotency-check",
+                "--execute",
+                "--person-email",
+                "person@example.com",
+                "--company-domain",
+                "example.com",
+                "--organizer-email",
+                "organizer@example.com",
+                "--json",
+            ],
+        )
+        == _RUNNER_EXIT_CODE
+    )
+    assert calls == [  # noqa: S101
+        {
+            "env": module.InfisicalEnv.prod,
+            "idempotency_check": True,
+            "execute": True,
+            "person_email": "person@example.com",
+            "company_domain": "example.com",
+            "organizer_email": "organizer@example.com",
+            "json_output": True,
+        },
+    ]
+
+
+def test_main_rejects_execute_without_idempotency_check(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_script_module()
+
+    assert module.main(["--execute"]) == _USAGE_ERROR_EXIT_CODE  # noqa: S101
+    assert "--idempotency-check" in capsys.readouterr().err  # noqa: S101
