@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["oz-agent-sdk==0.14.0", "httpx>=0.23.0"]
+# dependencies = ["oz-agent-sdk==0.14.0", "httpx>=0.23.0", "typer>=0.15"]
 # ///
 r"""Ask an Oz cloud agent why a CI run failed, and write its findings to a file.
 
@@ -73,6 +73,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+
+import typer
 
 # Terminal states from RunState. BLOCKED means the agent is waiting on input that
 # will never arrive in CI, so it is terminal for our purposes.
@@ -361,6 +363,7 @@ def _fetch_url(url: str) -> str:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments. Kept for backward compatibility with tests."""
     parser = argparse.ArgumentParser(description="Diagnose a failed CI run via Oz.")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", "?"))
     parser.add_argument("--workflow", required=True)
@@ -396,7 +399,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def build_config(args: argparse.Namespace) -> dict[str, Any]:
+def build_config(args: argparse.Namespace) -> dict[str, Any]:  # noqa: ANN401
     """Assemble the cloud-run config, omitting anything unset.
 
     Empty strings are dropped rather than sent: the API treats an absent
@@ -412,7 +415,15 @@ def build_config(args: argparse.Namespace) -> dict[str, Any]:
     return config
 
 
-def main(argv: list[str] | None = None, *, client: Any = None) -> int:
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+    rich_markup_mode=None,
+)
+
+
+def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  # noqa: ANN401
     args = parse_args(argv)
 
     if client is None:
