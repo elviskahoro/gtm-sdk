@@ -1,0 +1,353 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_attio_inspect_meeting_relationship",
+    srcs = ["test_attio_inspect_meeting_relationship.py"],
+    data = ["//scripts:attio-meeting_relationship-inspect.py"],  # keep
+    deps = [
+        "//scripts:attio-meeting_relationship-inspect",  # keep
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_meetings_find_orphan",
+    srcs = ["test_attio_meetings_find_orphan.py"],
+    data = ["//scripts:attio-meetings-find_orphan.py"],  # keep
+    deps = [
+        "//scripts:attio-meetings-find_orphan",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_workspace_slug_probe",
+    srcs = ["test_attio_workspace_slug_probe.py"],
+    data = ["//scripts:attio-workspace_slug-probe.py"],  # keep
+    deps = [
+        "//scripts:attio-workspace_slug-probe",  # keep
+        "//scripts/lib",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_workspace_url_emit",
+    srcs = ["test_attio_workspace_url_emit.py"],
+    data = ["//scripts:attio-workspace_url-emit.py"],  # keep
+    deps = [
+        "//scripts:attio-workspace_url-emit",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_bazel_requirements_sync",
+    srcs = ["test_bazel_requirements_sync.py"],
+    data = ["//scripts:bazel-requirements-sync.py"],  # keep
+    pyi_deps = ["@pypi//pytest"],
+    deps = [
+        "//scripts:bazel-requirements-sync",  # keep
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_beads_rig_sync",
+    srcs = ["test_beads_rig_sync.py"],
+    data = ["//scripts:beads-rig-sync_to.py"],  # keep
+    deps = [
+        "//scripts:beads-rig-sync_to",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_caldotcom_backfill",
+    srcs = ["test_caldotcom_backfill.py"],
+    data = [
+        "//:api_samples",
+        "//scripts:caldotcom-bookings-backfill.py",
+    ],  # keep
+    deps = [
+        "//libs/caldotcom",
+        "//scripts:caldotcom-bookings-backfill",  # keep
+        "//tests:conftest",
+        "@pypi//httpx",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_ci_triage_container_imports",
+    srcs = ["test_ci_triage_container_imports.py"],
+    data = [
+        "//scripts:ci-triage-diagnose.py",
+        "//scripts:ci-triage-linear-issue.py",
+    ],  # keep
+    deps = [
+        "//scripts:ci-triage-diagnose",  # keep
+        "//scripts:ci-triage-linear-issue",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_ci_triage_diagnose",
+    srcs = ["test_ci_triage_diagnose.py"],
+    data = ["//scripts:ci-triage-diagnose.py"],  # keep
+    deps = [
+        "//scripts:ci-triage-diagnose",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_ci_triage_linear_issue",
+    srcs = ["test_ci_triage_linear_issue.py"],
+    data = ["//scripts:ci-triage-linear-issue.py"],  # keep
+    deps = [
+        "//scripts:ci-triage-linear-issue",  # keep
+        "//tests:conftest",
+        "@pypi//gtm_linear",
+        "@pypi//httpx",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_conductor_workspace_setup",
+    srcs = ["test_conductor_workspace_setup.py"],
+    data = ["//scripts:conductor-workspace-setup.sh"],  # keep
+    deps = ["//tests:conftest"],
+)
+
+pytest_test(
+    name = "test_deploy_webhook",
+    srcs = ["test_deploy_webhook.py"],
+    data = [
+        "//:webhook_export_to_attio_source",
+        "//scripts:webhooks-handlers-redeploy.py",
+    ],  # keep
+    deps = [
+        "//scripts:webhooks-handlers-redeploy",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_deploy_webhook_dagger",
+    srcs = ["test_deploy_webhook_dagger.py"],
+    data = [
+        "//:webhook_export_to_attio_source",
+        "//scripts:webhooks-handlers-redeploy.py",
+    ],  # keep
+    deps = [
+        "//scripts:webhooks-handlers-redeploy",  # keep
+        "//src:secrets_bootstrap",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_deploy_webhook_dagger_real",
+    srcs = ["test_deploy_webhook_dagger_real.py"],
+    data = [
+        "//:webhook_export_to_attio_source",
+        "//scripts:webhooks-handlers-redeploy.py",
+    ],  # keep
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        "//scripts:webhooks-handlers-redeploy",  # keep
+        "//tests:conftest",
+        "@pypi//dagger_io",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_deploy_webhook_uv_bootstrap",
+    srcs = ["test_deploy_webhook_uv_bootstrap.py"],
+    data = ["//scripts:webhooks-handlers-redeploy.py"],  # keep
+    deps = [
+        "//scripts:webhooks-handlers-redeploy",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_downstream_contract_sync",
+    srcs = ["test_downstream_contract_sync.py"],
+    data = ["//scripts:downstream-contract-sync.py"],  # keep
+    deps = [
+        "//scripts:downstream-contract-sync",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_env_helpers",
+    srcs = ["test_env_helpers.py"],
+    deps = [
+        "//scripts/lib",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_fathom_backfill",
+    srcs = ["test_fathom_backfill.py"],
+    data = [
+        "//:api_samples",
+        "//scripts:fathom-attio_meetings-backfill.py",
+    ],  # keep
+    deps = [
+        "//libs/attio",
+        "//scripts:fathom-attio_meetings-backfill",  # keep
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//fathom_python",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_fireflies_backfill",
+    srcs = ["test_fireflies_backfill.py"],
+    data = ["//scripts:fireflies-attio_meetings-backfill.py"],  # keep
+    deps = [
+        "//libs/attio",
+        "//libs/motherduck",
+        "//scripts:fireflies-attio_meetings-backfill",  # keep
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_gcp_etl_image_dependencies",
+    srcs = ["test_gcp_etl_image_dependencies.py"],
+    data = ["//:webhook_handler_sources"],  # keep
+    deps = ["//tests:conftest"],
+)
+
+pytest_test(
+    name = "test_hookdeck_connection_events_dump",
+    srcs = ["test_hookdeck_connection_events_dump.py"],
+    data = ["//scripts:hookdeck-connection_events-dump.py"],  # keep
+    deps = [
+        "//scripts:hookdeck-connection_events-dump",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_octolens_backfill",
+    srcs = ["test_octolens_backfill.py"],
+    data = ["//scripts:octolens-mentions-backfill.py"],  # keep
+    deps = [
+        "//libs/octolens",
+        "//scripts:octolens-mentions-backfill",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_pr_review_threads",
+    srcs = ["test_pr_review_threads.py"],
+    data = ["//scripts:pr-review-threads.py"],  # keep
+    deps = [
+        "//scripts:pr-review-threads",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_rb2b_reconcile_event_ids",
+    srcs = ["test_rb2b_reconcile_event_ids.py"],
+    data = ["//scripts:rb2b-event_ids-reconcile.py"],  # keep
+    deps = [
+        "//libs/rb2b",
+        "//scripts:rb2b-event_ids-reconcile",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_rb2b_visits_backfill",
+    srcs = ["test_rb2b_visits_backfill.py"],
+    data = [
+        "//:api_samples",
+        "//scripts:rb2b-visits-backfill.py",
+    ],  # keep
+    deps = [
+        "//libs/rb2b",
+        "//scripts:rb2b-visits-backfill",  # keep
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)
+
+pytest_test(
+    name = "test_uv_bootstrap",
+    srcs = ["test_uv_bootstrap.py"],
+    data = [
+        "//scripts:agent-skills-sync.py",
+        "//scripts:attio-meeting_relationship-inspect.py",
+        "//scripts:attio-meetings-find_orphan.py",
+        "//scripts:attio-people-bootstrap.py",
+        "//scripts:attio-social_mentions-bootstrap.py",
+        "//scripts:attio-tracking_events-bootstrap.py",
+        "//scripts:attio-workspace_slug-probe.py",
+        "//scripts:attio-workspace_url-emit.py",
+        "//scripts:beads-rig-sync_to.py",
+        "//scripts:caldotcom-bookings-backfill.py",
+        "//scripts:ci-triage-diagnose.py",
+        "//scripts:ci-triage-linear-issue.py",
+        "//scripts:docs-cli_reference-generate.py",
+        "//scripts:docs-pages-lint.py",
+        "//scripts:downstream-contract-sync.py",
+        "//scripts:entire-hooks-setup.py",
+        "//scripts:fathom-attio_meetings-backfill.py",
+        "//scripts:fireflies-attio_meetings-backfill.py",
+        "//scripts:hookdeck-connection_events-dump.py",
+        "//scripts:hookdeck-webhook-wire.py",
+        "//scripts:octolens-mentions-backfill.py",
+        "//scripts:rb2b-event_ids-reconcile.py",
+        "//scripts:rb2b-visits-backfill.py",
+    ],  # keep
+    deps = [
+        "//scripts/lib",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_uv_resolve",
+    srcs = ["test_uv_resolve.py"],
+    deps = [
+        "//scripts/lib",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

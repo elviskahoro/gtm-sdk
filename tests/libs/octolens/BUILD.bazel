@@ -10,6 +10,7 @@ filegroup(
 filegroup(
     name = "events_fixture",
     srcs = ["fixtures/events.json"],
+    visibility = ["//tests/src/octolens:__pkg__"],
 )
 
 pytest_test(

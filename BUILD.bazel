@@ -14,6 +14,7 @@ exports_files(
     [
         "pyproject.toml",
         "requirements_bazel.txt",
+        "uv.lock",
     ],
     visibility = ["//visibility:public"],
 )
@@ -23,6 +24,33 @@ filegroup(
     name = "api_samples",
     srcs = glob(["api/samples/**/*.json"]),
     visibility = ["//tests:__subpackages__"],
+)
+
+# keep
+filegroup(
+    name = "webhook_handler_sources",
+    srcs = glob(["webhooks/*.py"]),
+    visibility = ["//tests:__subpackages__"],
+)
+
+# keep
+filegroup(
+    name = "webhook_export_to_attio_source",
+    srcs = ["webhooks/export_to_attio.py"],
+    visibility = ["//tests/scripts:__pkg__"],
+)
+
+# keep
+filegroup(
+    name = "github_workflow_sources",
+    srcs = glob([
+        ".github/workflows/**/*.Dockerfile",
+        ".github/workflows/**/*.dockerignore",
+        ".github/workflows/**/*.py",
+        ".github/workflows/**/*.txt",
+        ".github/workflows/**/*.yml",
+    ]),
+    visibility = ["//tests/workflows:__pkg__"],
 )
 
 modules_mapping(

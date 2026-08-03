@@ -1,0 +1,111 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_companies_modal_wrappers",
+    srcs = ["test_companies_modal_wrappers.py"],
+    pyi_deps = ["@pypi//modal"],
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_deployment_parity",
+    srcs = ["test_deployment_parity.py"],
+    deps = [
+        "//src/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_enrichment",
+    srcs = ["test_enrichment.py"],
+    deps = [
+        "//libs/attio",
+        "//libs/exa",
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_export",
+    srcs = ["test_export.py"],
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)
+
+pytest_test(
+    name = "test_export_mention",
+    srcs = ["test_export_mention.py"],
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_http_status_responses",
+    srcs = ["test_http_status_responses.py"],
+    pyi_deps = ["@pypi//modal"],
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_meeting_match",
+    srcs = ["test_meeting_match.py"],
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_ops",
+    srcs = ["test_ops.py"],
+    deps = [
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_orphan_meetings",
+    srcs = ["test_orphan_meetings.py"],
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_people_modal_wrappers",
+    srcs = ["test_people_modal_wrappers.py"],
+    pyi_deps = ["@pypi//modal"],
+    deps = [
+        "//libs/attio",
+        "//src:modal_app",
+        "//src/attio",
+        "//tests:conftest",
+    ],
+)

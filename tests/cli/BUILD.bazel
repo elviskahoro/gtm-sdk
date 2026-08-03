@@ -1,0 +1,125 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_accounts_cli",
+    srcs = ["test_accounts_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/accounts",
+        "//tests:conftest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_companies_cli",
+    srcs = ["test_attio_companies_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/attio",
+        "//tests:conftest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_enrichment_cli",
+    srcs = ["test_attio_enrichment_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/attio",
+        "//tests:conftest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_people_cli",
+    srcs = ["test_attio_people_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/attio",
+        "//tests:conftest",
+        "@pypi//modal",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_preflight",
+    srcs = ["test_attio_preflight.py"],
+    deps = [
+        "//cli/attio",
+        "//libs/attio",
+        "//libs/infisical",
+        "//tests:conftest",
+        "@pypi//modal",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_exa_cli",
+    srcs = ["test_exa_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/exa",
+        "//tests:conftest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_gmail_url_cli",
+    srcs = ["test_gmail_url_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/gmail",
+        "//tests:conftest",
+        "@pypi//pytest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_granola_cli",
+    srcs = ["test_granola_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/granola",
+        "//libs/granola",
+        "//tests:conftest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_json_validation",
+    srcs = ["test_json_validation.py"],
+    deps = [
+        "//cli:json_validation",
+        "//tests:conftest",
+        "@pypi//pydantic",
+    ],
+)
+
+pytest_test(
+    name = "test_parallel_cli",
+    srcs = ["test_parallel_cli.py"],
+    deps = [
+        "//cli:main",
+        "//cli/parallel",
+        "//tests:conftest",
+        "@pypi//typer",
+    ],
+)
+
+pytest_test(
+    name = "test_validation_error",
+    srcs = ["test_validation_error.py"],
+    deps = [
+        "//cli:main",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

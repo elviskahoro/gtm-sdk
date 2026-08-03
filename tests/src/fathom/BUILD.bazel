@@ -1,0 +1,57 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_attio_get_operations",
+    srcs = ["test_attio_get_operations.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/fathom",
+        "//libs/meetings",
+        "//src/attio",
+        "//src/fathom",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)
+
+pytest_test(
+    name = "test_message_attio",
+    srcs = ["test_message_attio.py"],
+    deps = [
+        "//src/fathom",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_message_etl",
+    srcs = ["test_message_etl.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//src/fathom",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_utils",
+    srcs = ["test_utils.py"],
+    deps = [
+        "//libs/fathom",
+        "//src/fathom",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_webhook_replay",
+    srcs = ["test_webhook_replay.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/attio",
+        "//src/attio",
+        "//src/fathom",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)

@@ -1,0 +1,22 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_modal_wrappers",
+    srcs = ["test_modal_wrappers.py"],
+    pyi_deps = ["@pypi//modal"],
+    deps = [
+        "//src/accounts",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_tasks",
+    srcs = ["test_tasks.py"],
+    deps = [
+        "//libs/parallel",
+        "//src/accounts",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

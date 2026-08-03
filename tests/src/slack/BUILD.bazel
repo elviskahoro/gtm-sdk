@@ -1,0 +1,14 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_caldotcom_slack_export",
+    srcs = ["test_caldotcom_slack_export.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/caldotcom",
+        "//src/caldotcom",
+        "//src/slack",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)

@@ -1,0 +1,26 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_registry",
+    srcs = ["test_registry.py"],
+    deps = [
+        "//cli/webhook",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_sync_app_name",
+    srcs = ["test_sync_app_name.py"],
+    deps = [
+        "//cli/webhook",
+        "//src/caldotcom",
+        "//src/fathom",
+        "//src/octolens",
+        "//src/rb2b",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

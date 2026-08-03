@@ -1,0 +1,37 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_event_sequence",
+    srcs = ["test_event_sequence.py"],
+    data = [
+        "//:api_samples",
+        "//:webhook_handler_sources",
+        "//scripts:webhooks-handlers-redeploy.py",
+    ],  # keep
+    deps = [
+        "//libs:telemetry",
+        "//libs/attio",
+        "//libs/dlt",  # keep
+        "//libs/filesystem",  # keep
+        "//libs/infisical",  # keep
+        "//libs/logging",
+        "//libs/slack",  # keep
+        "//scripts:webhooks-handlers-redeploy",  # keep
+        "//src:secrets_bootstrap",  # keep
+        "//src/attio",  # keep
+        "//src/caldotcom",  # keep
+        "//src/fathom",  # keep
+        "//src/octolens",  # keep
+        "//src/rb2b",  # keep
+        "//src/slack",  # keep
+        "//tests:conftest",
+        "@pypi//fastapi",
+        "@pypi//flatsplode",  # keep
+        "@pypi//gcsfs",  # keep
+        "@pypi//modal",  # keep
+        "@pypi//orjson",
+        "@pypi//pydantic",  # keep
+        "@pypi//pytest",
+        "@pypi//uuid7",  # keep
+    ],
+)

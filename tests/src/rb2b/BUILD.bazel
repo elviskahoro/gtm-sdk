@@ -1,0 +1,42 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_attio_filters",
+    srcs = ["test_attio_filters.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//src/rb2b",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_get_operations",
+    srcs = ["test_attio_get_operations.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//src/rb2b",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)
+
+pytest_test(
+    name = "test_clay_export",
+    srcs = ["test_clay_export.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//src/rb2b",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)
+
+pytest_test(
+    name = "test_tags",
+    srcs = ["test_tags.py"],
+    deps = [
+        "//src/rb2b",
+        "//tests:conftest",
+    ],
+)

@@ -1,0 +1,32 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_attio_get_operations",
+    srcs = ["test_attio_get_operations.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/caldotcom",
+        "//libs/meetings",
+        "//src/attio",
+        "//src/caldotcom",
+        "//tests:conftest",
+        "@pypi//orjson",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_webhook_fixtures",
+    srcs = ["test_webhook_fixtures.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/caldotcom",
+        "//libs/meetings",
+        "//src/attio",
+        "//src/caldotcom",
+        "//tests:conftest",
+        "@pypi//orjson",
+        "@pypi//pytest",
+    ],
+)
