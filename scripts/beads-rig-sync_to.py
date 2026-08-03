@@ -64,11 +64,12 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+import typer
 
 # This script lives in <repo>/scripts/, so the repo root is its parent's
 # parent. Anchor on __file__ — `uv run scripts/...` does NOT chdir, so the
@@ -210,84 +211,92 @@ def report_bd_failure(exc: BdCommandError) -> None:
         print(detail, file=sys.stderr)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--rig-beads",
-        help="Path to the rig's .beads directory (overrides $GT_TOWN_ROOT / default).",
-    )
-    parser.add_argument(
-        "--source-beads",
-        help="Path to this repo's .beads directory (overrides the walk-up default).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Refresh the export and report what would import, but change nothing.",
-    )
-    opts = parser.parse_args()
+app = typer.Typer(
+    help=__doc__,
+    rich_markup_mode=None,
+)
 
+
+@app.command()
+def sync(
+    rig_beads: str | None = typer.Option(
+        default=None,
+        help="Path to the rig's .beads directory (overrides $GT_TOWN_ROOT / default).",
+    ),
+    source_beads: str | None = typer.Option(
+        default=None,
+        help="Path to this repo's .beads directory (overrides the walk-up default).",
+    ),
+    dry_run: bool = typer.Option(  # noqa: FBT001
+        default=False,
+        help="Refresh the export and report what would import, but change nothing.",
+    ),
+) -> None:
+    """Export here, import into the rig. Raises BdCommandError if bd fails."""
     try:
-        return run_sync(opts)
+        source_beads_path = resolve_source_beads(source_beads)
+        if source_beads_path is None:
+            print(
+                f"error: no .beads dir found at or above {REPO_ROOT}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        source_export = EXPORT_PATH
+        rig_beads_path = resolve_rig_beads(rig_beads)
+
+        if not rig_beads_path.is_dir():
+            print(
+                f"error: rig beads dir not found: {rig_beads_path}\n"
+                "Is the Gas Town rig created? From the town dir, try: gastown rig list",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+        # 1. Dump the live DB to the scratch export.
+        #    Run `bd export` from the .beads parent so bd targets this exact DB
+        #    (its own walk-up would otherwise depend on the invocation CWD), and
+        #    pass an absolute -o so the output lands in tmp/ regardless of that cwd.
+        source_export.parent.mkdir(parents=True, exist_ok=True)
+        print(f"→ exporting beads from {source_beads_path.parent}")
+        run_bd(
+            ["export", "--include-memories", "-o", str(source_export)],
+            cwd=source_beads_path.parent,
+        )
+        line_count = sum(1 for _ in source_export.open())
+        print(f"  {line_count} record(s) in {source_export}")
+
+        # 2. Import into the rig DB (cwd = rig so bd targets the rig's .beads).
+        rig_repo = rig_beads_path.parent
+        # A real import writes, which triggers the rig's auto-export git-add warning;
+        # disable it first. --dry-run writes nothing, so it never warns — skip the
+        # config write there to keep the dry run truly read-only.
+        if not dry_run:
+            ensure_rig_export_git_add_disabled(rig_repo)
+        import_args = ["import", str(source_export)]
+        if dry_run:
+            import_args.append("--dry-run")
+        print(f"→ {'dry-run import into' if dry_run else 'importing into'} {rig_repo}")
+        result = run_bd(import_args, cwd=rig_repo)
+        # bd routes the import summary ("Would import N issues") to stderr.
+        summary = (result.stdout + result.stderr).strip()
+        if summary:
+            print(summary)
+
+        if dry_run:
+            print("✓ dry run complete — no changes written")
+        else:
+            print("✓ sync complete")
     except BdCommandError as exc:
         report_bd_failure(exc)
-        return 1
+        raise SystemExit(1) from None
 
 
-def run_sync(opts: argparse.Namespace) -> int:
-    """Export here, import into the rig. Raises BdCommandError if bd fails."""
-    source_beads = resolve_source_beads(opts.source_beads)
-    if source_beads is None:
-        print(
-            f"error: no .beads dir found at or above {REPO_ROOT}",
-            file=sys.stderr,
-        )
-        return 1
-    source_export = EXPORT_PATH
-    rig_beads = resolve_rig_beads(opts.rig_beads)
-
-    if not rig_beads.is_dir():
-        print(
-            f"error: rig beads dir not found: {rig_beads}\n"
-            "Is the Gas Town rig created? From the town dir, try: gastown rig list",
-            file=sys.stderr,
-        )
-        return 1
-
-    # 1. Dump the live DB to the scratch export.
-    #    Run `bd export` from the .beads parent so bd targets this exact DB
-    #    (its own walk-up would otherwise depend on the invocation CWD), and
-    #    pass an absolute -o so the output lands in tmp/ regardless of that cwd.
-    source_export.parent.mkdir(parents=True, exist_ok=True)
-    print(f"→ exporting beads from {source_beads.parent}")
-    run_bd(
-        ["export", "--include-memories", "-o", str(source_export)],
-        cwd=source_beads.parent,
-    )
-    line_count = sum(1 for _ in source_export.open())
-    print(f"  {line_count} record(s) in {source_export}")
-
-    # 2. Import into the rig DB (cwd = rig so bd targets the rig's .beads).
-    rig_repo = rig_beads.parent
-    # A real import writes, which triggers the rig's auto-export git-add warning;
-    # disable it first. --dry-run writes nothing, so it never warns — skip the
-    # config write there to keep the dry run truly read-only.
-    if not opts.dry_run:
-        ensure_rig_export_git_add_disabled(rig_repo)
-    import_args = ["import", str(source_export)]
-    if opts.dry_run:
-        import_args.append("--dry-run")
-    print(f"→ {'dry-run import into' if opts.dry_run else 'importing into'} {rig_repo}")
-    result = run_bd(import_args, cwd=rig_repo)
-    # bd routes the import summary ("Would import N issues") to stderr.
-    summary = (result.stdout + result.stderr).strip()
-    if summary:
-        print(summary)
-
-    if opts.dry_run:
-        print("✓ dry run complete — no changes written")
-    else:
-        print("✓ sync complete")
+def main(argv: list[str] | None = None) -> int:
+    """Compatibility wrapper for tests and direct invocation."""
+    try:
+        app(args=argv, standalone_mode=False)
+    except SystemExit as exc:
+        return exc.code or 0
     return 0
 
 
