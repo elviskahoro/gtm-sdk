@@ -24,7 +24,6 @@ py_library(
         "@pypi//emoji",
         "@pypi//narwhals",
         "@pypi//phonenumbers",
-        "@pypi//pyarrow",
         "@pypi//pycountry",
     ],
 )
