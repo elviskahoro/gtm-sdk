@@ -1,0 +1,89 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+py_library(
+    name = "conftest",
+    testonly = True,
+    srcs = ["conftest.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//libs/attio",
+        "@pypi//attio",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_mention_writer_live",
+    srcs = ["test_attio_mention_writer_live.py"],
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        ":conftest",
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_attio_person_email_write_live",
+    srcs = ["test_attio_person_email_write_live.py"],
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        ":conftest",
+        "//libs/attio",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_conftest_preflight",
+    srcs = ["test_conftest_preflight.py"],
+    deps = [
+        ":conftest",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_cross_provider_uid",
+    srcs = ["test_cross_provider_uid.py"],
+    data = ["//:api_samples"],  # keep
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        ":conftest",
+        "//libs/meetings",
+        "//src/attio",
+        "//src/caldotcom",
+        "//src/fathom",
+        "//tests:conftest",
+        "@pypi//orjson",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_gtm_remote_smoke",
+    srcs = ["test_gtm_remote_smoke.py"],
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        ":conftest",
+        "//src:modal_app",
+        "//tests:conftest",
+        "@pypi//modal",
+        "@pypi//pytest",
+    ],
+)

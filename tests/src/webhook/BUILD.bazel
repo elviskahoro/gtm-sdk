@@ -1,0 +1,22 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+pytest_test(
+    name = "test_protocol_conformance",
+    srcs = ["test_protocol_conformance.py"],
+    deps = [
+        "//libs/webhook",
+        "//src/caldotcom",
+        "//src/fathom",
+        "//src/octolens",
+        "//src/rb2b",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

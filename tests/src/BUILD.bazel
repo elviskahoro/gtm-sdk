@@ -1,0 +1,73 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_api_keys",
+    srcs = ["test_api_keys.py"],
+    deps = [
+        "//src:api_keys",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_dash0_telemetry_integration",
+    srcs = ["test_dash0_telemetry_integration.py"],
+    deps = [
+        "//src:otel_collector",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_enrichment",
+    srcs = ["test_enrichment.py"],
+    deps = [
+        "//src:enrichment",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_modal_runtime",
+    srcs = ["test_modal_runtime.py"],
+    deps = [
+        "//libs/logging",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_otel_collector",
+    srcs = ["test_otel_collector.py"],
+    deps = [
+        "//src:otel_collector",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_query_model_validation",
+    srcs = ["test_query_model_validation.py"],
+    deps = [
+        "//src/attio",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_secrets_bootstrap",
+    srcs = ["test_secrets_bootstrap.py"],
+    deps = [
+        "//libs/apollo",
+        "//libs/attio",
+        "//libs/infisical",
+        "//src:secrets_bootstrap",
+        "//tests:conftest",
+        "@pypi//modal",
+        "@pypi//pytest",
+    ],
+)

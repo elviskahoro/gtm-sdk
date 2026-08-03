@@ -1,0 +1,14 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_to_attio",
+    srcs = ["test_to_attio.py"],
+    data = ["//tests/libs/fireflies:transcript_row_fixture"],  # keep
+    deps = [
+        "//libs/fireflies",
+        "//libs/meetings",
+        "//src/attio",
+        "//src/fireflies",
+        "//tests:conftest",
+    ],
+)

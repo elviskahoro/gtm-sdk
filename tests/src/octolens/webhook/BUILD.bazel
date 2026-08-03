@@ -1,0 +1,37 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_mention_attio",
+    srcs = ["test_mention_attio.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//src/attio",
+        "//src/octolens",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_mention_clay",
+    srcs = ["test_mention_clay.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//src/octolens",
+        "//tests:conftest",
+        "@pypi//orjson",
+    ],
+)
+
+pytest_test(
+    name = "test_mention_filters",
+    srcs = ["test_mention_filters.py"],
+    data = ["//:api_samples"],  # keep
+    deps = [
+        "//libs/octolens",
+        "//src/octolens",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)

@@ -1,0 +1,21 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+pytest_test(
+    name = "test_blog_download",
+    srcs = ["test_blog_download.py"],
+    pyi_deps = ["@pypi//types_pyyaml"],
+    deps = [
+        "//libs/sanity",
+        "//src/sanity",
+        "//tests:conftest",
+        "@pypi//pytest",
+        "@pypi//pyyaml",
+    ],
+)

@@ -1,0 +1,14 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_search",
+    srcs = ["test_search.py"],
+    pyi_deps = ["@pypi//modal"],
+    deps = [
+        "//libs/exa",
+        "//src/exa",
+        "//tests:conftest",
+        "@pypi//pydantic",
+        "@pypi//pytest",
+    ],
+)

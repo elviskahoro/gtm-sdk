@@ -1,0 +1,47 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_integration_workflow",
+    srcs = ["test_integration_workflow.py"],
+    data = ["//:github_workflow_sources"],  # keep
+    pyi_deps = ["@pypi//types_pyyaml"],
+    deps = [
+        "//tests:conftest",
+        "@pypi//pytest",
+        "@pypi//pyyaml",
+    ],
+)
+
+pytest_test(
+    name = "test_pytest_dependency_pack",
+    srcs = ["test_pytest_dependency_pack.py"],
+    data = ["//:github_workflow_sources"],  # keep
+    deps = ["//tests:conftest"],
+)
+
+pytest_test(
+    name = "test_triage_workflow",
+    srcs = ["test_triage_workflow.py"],
+    data = [
+        "//:github_workflow_sources",
+        "//scripts:workflow_test_script_sources",
+    ],  # keep
+    pyi_deps = ["@pypi//types_pyyaml"],
+    deps = [
+        "//tests:conftest",
+        "@pypi//pytest",
+        "@pypi//pyyaml",
+    ],
+)
+
+pytest_test(
+    name = "test_unit_workflow",
+    srcs = ["test_unit_workflow.py"],
+    data = [
+        "//:github_workflow_sources",
+        "//:pyproject.toml",
+        "//:uv.lock",
+        "//scripts:workflow_test_script_sources",
+    ],  # keep
+    deps = ["//tests:conftest"],
+)

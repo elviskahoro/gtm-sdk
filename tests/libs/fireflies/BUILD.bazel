@@ -5,6 +5,7 @@ load("//bazel:pytest_test.bzl", "pytest_test")
 filegroup(
     name = "transcript_row_fixture",
     srcs = ["fixtures/transcript_row.json"],
+    visibility = ["//tests/src/fireflies:__pkg__"],
 )
 
 pytest_test(

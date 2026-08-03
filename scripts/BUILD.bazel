@@ -40,11 +40,31 @@ exports_files(
 
 # keep
 exports_files(
+    ["conductor-workspace-setup.sh"],
+    visibility = ["//tests/scripts:__pkg__"],
+)
+
+# keep
+exports_files(
     ["webhooks-handlers-redeploy.py"],
     visibility = [
         "//tests/scripts:__pkg__",
         "//tests/webhooks:__pkg__",
     ],
+)
+
+# keep
+filegroup(
+    name = "workflow_test_script_sources",
+    srcs = [
+        "ci-suite-validate.py",
+        "ci-triage-diagnose.py",
+        "ci-triage-diagnose.py.lock",
+        "ci-triage-linear-issue.py",
+        "ci-triage-linear-issue.py.lock",
+        "webhooks-handlers-redeploy.py",
+    ],
+    visibility = ["//tests/workflows:__pkg__"],
 )
 
 py_library(

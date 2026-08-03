@@ -1,0 +1,31 @@
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+pytest_test(
+    name = "test_attio_get_operations",
+    srcs = ["test_attio_get_operations.py"],
+    deps = [
+        "//src/octolens",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_backfill",
+    srcs = ["test_backfill.py"],
+    deps = [
+        "//libs/octolens",
+        "//src/octolens",
+        "//tests:conftest",
+    ],
+)
+
+pytest_test(
+    name = "test_etl_mention",
+    srcs = ["test_etl_mention.py"],
+    data = ["//tests/libs/octolens:events_fixture"],  # keep
+    deps = [
+        "//src/octolens",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

@@ -1,18 +1,10 @@
 load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
 
 # gazelle:python_generation_mode file
 # gazelle:python_include_ancestor_conftest true
 # gazelle:resolve py opentelemetry.sdk._logs.export @pypi//opentelemetry_sdk
 # gazelle:resolve py opentelemetry.sdk._logs.export.LogRecordExportResult @pypi//opentelemetry_sdk
-# gazelle:exclude cli
-# gazelle:exclude integration
-# gazelle:exclude scripts
-# gazelle:exclude src
-# gazelle:exclude test_downstream_contract.py
-# gazelle:exclude test_hypothesis_plugin.py
-# gazelle:exclude test_smoke_telemetry.py
-# gazelle:exclude webhooks
-# gazelle:exclude workflows
 
 py_library(
     name = "conftest",
@@ -26,6 +18,36 @@ py_library(
         "@pypi//hypothesis",
         "@pypi//opentelemetry_exporter_otlp_proto_http",
         "@pypi//opentelemetry_sdk",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_downstream_contract",
+    srcs = ["test_downstream_contract.py"],
+    deps = [
+        ":conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_hypothesis_plugin",
+    srcs = ["test_hypothesis_plugin.py"],
+    deps = [
+        ":conftest",
+        "@pypi//hypothesis",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_smoke_telemetry",
+    srcs = ["test_smoke_telemetry.py"],
+    deps = [
+        ":conftest",
+        "//libs:telemetry",
+        "//src:otel_collector",
         "@pypi//pytest",
     ],
 )

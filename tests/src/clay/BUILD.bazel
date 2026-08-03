@@ -1,0 +1,18 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel:pytest_test.bzl", "pytest_test")
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+pytest_test(
+    name = "test_export",
+    srcs = ["test_export.py"],
+    deps = [
+        "//src/clay",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
