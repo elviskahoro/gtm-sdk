@@ -307,6 +307,17 @@ merge:
   # Do NOT add path-filtered workflows here (e.g. "Docs checks") -- they do not report
   # on every PR, so requiring them deadlocks the queue. Same for the workflow_run-
   # triggered "Triage CI failure", which by design only runs after a failure.
+  #
+  # "Full Bazel suite" (tests-bazel.yml, job bazel_full) has no `if:` guard -- it
+  # reports on both push-to-main and pull_request, so it's safe here (gs-7j1).
+  #
+  # "Trunk impacted Bazel targets" (job bazel_impacted) is NOT listed: it runs
+  # `if: github.event_name == 'pull_request' && ...same-repo check`, by design --
+  # there's no target-branch diff to compute on a push, and fork PRs can't see
+  # the Trunk API token. Requiring it would reproduce the exact deadlock this
+  # section warns about (a push to main would wait forever on a status that
+  # never arrives). Revisit only if it grows a push-context equivalent.
   required_statuses:
     - Lint and type check with Trunk
     - Unit tests
+    - Full Bazel suite

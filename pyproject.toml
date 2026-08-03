@@ -84,6 +84,25 @@ required-version = ">=0.11.8,<0.12"
 # entry-point name is idempotent in both directions, which is also why
 # Hypothesis documents `-p no:hypothesispytest` as the way to disable it.
 addopts = "--import-mode=importlib -m 'not integration' -p hypothesispytest"
+# Bazel drops output symlinks (bazel-bin, bazel-out, bazel-testlogs, and a
+# workspace-named one e.g. bazel-gtm-sdk) at the repo root. Left unguarded,
+# pytest recurses into bazel-out's external-repo mirror and collects vendored
+# third-party tests -- one such test calls sys.exit(1) on a version check,
+# which crashes pytest's collection with INTERNALERROR instead of a clean
+# pass/fail. Explicit list because setting norecursedirs replaces pytest's
+# built-in default entirely rather than extending it.
+norecursedirs = [
+  ".*",
+  "*.egg",
+  "_darcs",
+  "build",
+  "CVS",
+  "dist",
+  "node_modules",
+  "venv",
+  "{arch}",
+  "bazel-*",
+]
 filterwarnings = [
   # jsonpath-python 1.1.6 (latest; pulled in transitively via fathom-python) touches
   # deprecated ast.Num/Str/Bytes/NameConstant at import time. Not fixable upstream yet.
