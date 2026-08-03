@@ -242,39 +242,6 @@ class CloudGoogle:
                     file_data.string,
                 )
 
-    @staticmethod
-    def export_to_filesystem(
-        destination_file_data: Iterator[WritableFile],
-        bucket_url: str,
-    ) -> str:
-        """Export data to filesystem (GCS or local).
-
-        Args:
-            destination_file_data: Iterator of file data to export
-            bucket_url: The target bucket URL or local path
-
-        Returns:
-            Success message
-
-        Raises:
-            ValueError: If bucket_url is invalid
-        """
-        return CloudGoogle.to_filesystem(destination_file_data, bucket_url)
-
-    @staticmethod
-    def export_to_gcs(
-        destination_file_data: Iterator[WritableFile],
-    ) -> None:
-        """Export data specifically to Google Cloud Storage.
-
-        Args:
-            destination_file_data: Iterator of file data to export
-
-        Raises:
-            ValueError: If GCP credentials are not properly set
-        """
-        CloudGoogle.to_filesystem_gcs(destination_file_data)
-
 
 def test_clean_bucket_name() -> None:
     """Test clean_bucket_name replaces hyphens with underscores."""
@@ -596,37 +563,6 @@ def test_to_filesystem_gcs_write_error() -> None:
 
         with pytest.raises(OSError, match="Write failed"):
             CloudGoogle.to_filesystem_gcs(iter(file_data))
-
-
-def test_export_to_filesystem() -> None:
-    """Test export_to_filesystem delegates to to_filesystem."""
-    from unittest.mock import patch
-
-    with patch.object(
-        CloudGoogle,
-        "to_filesystem",
-        return_value="Success",
-    ) as mock_to_fs:
-        file_data: list[_TestWritableFile] = [
-            _TestWritableFile(string="test", path="test.json"),
-        ]
-        result: str = CloudGoogle.export_to_filesystem(iter(file_data), "gs://bucket")
-
-        mock_to_fs.assert_called_once()
-        assert result == "Success"
-
-
-def test_export_to_gcs() -> None:
-    """Test export_to_gcs delegates to to_filesystem_gcs."""
-    from unittest.mock import patch
-
-    with patch.object(CloudGoogle, "to_filesystem_gcs") as mock_to_gcs:
-        file_data: list[_TestWritableFile] = [
-            _TestWritableFile(string="test", path="test.json"),
-        ]
-        CloudGoogle.export_to_gcs(iter(file_data))
-
-        mock_to_gcs.assert_called_once()
 
 
 def test_gcp_credentials_namedtuple() -> None:
