@@ -16,7 +16,6 @@ from libs.caldotcom.models import (
     NoShowAttendee,
     Organizer,
     PingPayload,
-    RecordingItem,
     Transcript,
     Webhook,
 )
@@ -37,7 +36,6 @@ __all__ = [
     "NoShowAttendee",
     "Organizer",
     "PingPayload",
-    "RecordingItem",
     "Transcript",
     "Webhook",
 ]
