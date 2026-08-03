@@ -20,6 +20,7 @@ live Gas Town rig after months of drift:
 from __future__ import annotations
 
 import importlib.util
+import os
 import stat
 import subprocess
 import sys
@@ -119,10 +120,16 @@ def _run_script(
     bin_dir: Path,
 ) -> subprocess.CompletedProcess[str]:
     env_path = f"{bin_dir}:{Path(sys.executable).parent}:/usr/bin:/bin"
+    env = {"PATH": env_path, "HOME": str(bin_dir.parent)}
+    # Bazel exposes declared Python dependencies through PYTHONPATH. Preserve
+    # that one interpreter setting while continuing to isolate every other
+    # ambient variable from the subprocess behavior under test.
+    if pythonpath := os.environ.get("PYTHONPATH"):
+        env["PYTHONPATH"] = pythonpath
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH), *args],
         cwd=REPO_ROOT,
-        env={"PATH": env_path, "HOME": str(bin_dir.parent)},
+        env=env,
         text=True,
         capture_output=True,
         check=False,
