@@ -32,6 +32,14 @@ def test_canonical_uid_normalizes_timezone_to_utc_minute() -> None:
     ) == canonical_meeting_uid(host_email="host@dlthub.com", start=pst_start)
 
 
+def test_canonical_uid_matches_known_digest() -> None:
+    start = datetime(2026, 5, 20, 15, 0, 45, tzinfo=timezone.utc)
+    assert (
+        canonical_meeting_uid(host_email="  HOST@DLTHUB.COM  ", start=start)
+        == "dlt-mtg-a2edb3b0be554f119b203df0"
+    )
+
+
 def test_canonical_uid_truncates_seconds() -> None:
     minute_start = datetime(2026, 5, 20, 15, 0, 0, tzinfo=timezone.utc)
     seconds_start = datetime(2026, 5, 20, 15, 0, 45, tzinfo=timezone.utc)
