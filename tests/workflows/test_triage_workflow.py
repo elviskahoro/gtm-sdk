@@ -334,7 +334,8 @@ def test_gtm_linear_pin_agrees_everywhere_it_appears() -> None:
     version = pin.group(1)
 
     script = FILING_SCRIPT.read_text(encoding="utf-8")
-    assert f'dependencies = ["gtm-linear=={version}"]' in script, (
+    pep_723_header = script.split("# ///", 2)[1]
+    assert f'"gtm-linear=={version}"' in pep_723_header, (
         "the PEP 723 header drives the host fallback; keep it on the container pin"
     )
 

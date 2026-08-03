@@ -37,11 +37,13 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Annotated, Literal
+
+import click
+import typer
 
 # Anchor on the script's own directory so the script runs correctly regardless
 # of CWD (per repo CLAUDE.md path-anchoring rule). `uv run path/to/script.py`
@@ -56,8 +58,16 @@ from libs.attio.attributes import (  # noqa: E402
     list_attributes,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 OBJECT_API_SLUG = "people"
 
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help="Bootstrap github identity attributes on the people object.",
+)
 
 AttrType = Literal["text"]
 
@@ -102,6 +112,62 @@ ATTRIBUTES: tuple[AttrSpec, ...] = (
         description="https://github.com/<handle> profile URL.",
     ),
 )
+
+
+def _apply_or_preview_attributes(apply: bool) -> int:  # noqa: FBT001
+    """Create/preview github attributes on the people object."""
+    print(f"[object]      {OBJECT_API_SLUG} (system object — attributes only)")
+
+    pending = 0
+    for spec in ATTRIBUTES:
+        attr_result = create_attribute(
+            target_object=OBJECT_API_SLUG,
+            title=spec.title,
+            api_slug=spec.api_slug,
+            attribute_type=spec.attribute_type,
+            description=spec.description,
+            is_multiselect=spec.is_multiselect,
+            is_required=spec.is_required,
+            is_unique=spec.is_unique,
+            apply=apply,
+        )
+        if apply:
+            if attr_result.attribute_created:
+                status = "created"
+            elif attr_result.attribute_restored:
+                status = (
+                    "restored + retitled"
+                    if attr_result.attribute_title_updated
+                    else "restored (un-archived)"
+                )
+            elif attr_result.attribute_title_updated:
+                status = "title updated"
+            else:
+                status = "exists (skip)"
+        # Preview: report every write --apply WOULD perform (incl. a title PATCH
+        # on an active attribute), so an operator never misses a live mutation.
+        elif not attr_result.attribute_exists and not attr_result.attribute_archived:
+            status = "would-create"
+            pending += 1
+        elif attr_result.attribute_archived:
+            status = (
+                "would-restore + retitle"
+                if attr_result.attribute_title_drifts
+                else "would-restore"
+            )
+            pending += 1
+        elif attr_result.attribute_title_drifts:
+            status = "would-retitle"
+            pending += 1
+        else:
+            status = "exists (skip)"
+        print(
+            f"[attribute]   {spec.api_slug:15s}  {spec.attribute_type:6s}  {status}",
+        )
+
+    if not apply:
+        print(f"{pending} change(s) pending. Run with --apply to execute.")
+    return 0
 
 
 def run_diff() -> int:
@@ -206,80 +272,57 @@ def run_diff() -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "--preview",
-        action="store_true",
-        help="Print what would happen; no writes.",
-    )
-    mode.add_argument(
-        "--apply",
-        action="store_true",
-        help="Create missing attributes on the people object.",
-    )
-    mode.add_argument(
-        "--diff",
-        action="store_true",
-        help="Read-only: compare the live people schema against ATTRIBUTES.",
-    )
-    args = parser.parse_args()
-    if args.diff:
+@app.command()
+def cli(
+    *,
+    preview: Annotated[
+        bool,
+        typer.Option("--preview", help="Print what would happen; no writes."),
+    ] = False,
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Create missing attributes on the people object."),
+    ] = False,
+    diff: Annotated[
+        bool,
+        typer.Option(
+            "--diff",
+            help="Read-only: compare the live people schema against ATTRIBUTES.",
+        ),
+    ] = False,
+) -> int:
+    count = sum([preview, apply, diff])
+    if count != 1:
+        typer.echo(
+            "Error: exactly one of --preview, --apply, or --diff is required",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+    if diff:
         return run_diff()
-    apply = bool(args.apply)
 
-    print(f"[object]      {OBJECT_API_SLUG} (system object — attributes only)")
+    return _apply_or_preview_attributes(apply=apply)
 
-    pending = 0
-    for spec in ATTRIBUTES:
-        attr_result = create_attribute(
-            target_object=OBJECT_API_SLUG,
-            title=spec.title,
-            api_slug=spec.api_slug,
-            attribute_type=spec.attribute_type,
-            description=spec.description,
-            is_multiselect=spec.is_multiselect,
-            is_required=spec.is_required,
-            is_unique=spec.is_unique,
-            apply=apply,
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
         )
-        if apply:
-            if attr_result.attribute_created:
-                status = "created"
-            elif attr_result.attribute_restored:
-                status = (
-                    "restored + retitled"
-                    if attr_result.attribute_title_updated
-                    else "restored (un-archived)"
-                )
-            elif attr_result.attribute_title_updated:
-                status = "title updated"
-            else:
-                status = "exists (skip)"
-        # Preview: report every write --apply WOULD perform (incl. a title PATCH
-        # on an active attribute), so an operator never misses a live mutation.
-        elif not attr_result.attribute_exists and not attr_result.attribute_archived:
-            status = "would-create"
-            pending += 1
-        elif attr_result.attribute_archived:
-            status = (
-                "would-restore + retitle"
-                if attr_result.attribute_title_drifts
-                else "would-restore"
-            )
-            pending += 1
-        elif attr_result.attribute_title_drifts:
-            status = "would-retitle"
-            pending += 1
-        else:
-            status = "exists (skip)"
-        print(
-            f"[attribute]   {spec.api_slug:15s}  {spec.attribute_type:6s}  {status}",
-        )
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except click.exceptions.Exit as exc:
+        return exc.exit_code
 
-    if not apply:
-        print(f"{pending} change(s) pending. Run with --apply to execute.")
+    if isinstance(result, int):
+        return result
     return 0
 
 

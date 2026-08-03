@@ -71,6 +71,11 @@ def test_reuse_refused_on_filter_param_change(tmp_path: Path) -> None:
         _MODULE._reuse_cached_jsonl(jsonl, fingerprint=_FP, rebuild=False)
 
 
+def test_invalid_source_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
+    assert _MODULE.main(["--source", "typo"]) == 2  # noqa: PLR2004, S101
+    assert "--source" in capsys.readouterr().err  # noqa: S101
+
+
 def test_sent_key_uses_source_id_distinguishing_same_url() -> None:
     # Two distinct mentions sharing a URL get distinct resume keys (source_id),
     # so a resumed --send can't skip the second.

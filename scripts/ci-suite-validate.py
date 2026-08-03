@@ -27,16 +27,22 @@ non-zero if any job fails.
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import os
 import sys
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING, Annotated
 
 import anyio
+import click
 import dagger
+import typer
 from dagger import dag
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_CI_DIR = REPO_ROOT / ".github" / "workflows" / "ci"
@@ -69,6 +75,18 @@ GIT_INIT_CMD = pytest_dagger.GIT_INIT_CMD
 
 TRUNK_INSTALL = "curl -fsSL https://get.trunk.io | bash -s -- -y"
 TRUNK_CMD = "trunk check --all --ci"
+
+
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+
+
+class JobName(StrEnum):
+    unit = "unit"
+    integration = "integration"
+    trunk = "trunk"
 
 
 @dataclass
@@ -261,26 +279,11 @@ async def run_trunk(
         results.append(JobResult("trunk", ok=False, detail=str(exc)))
 
 
-async def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--only",
-        choices=["unit", "integration", "trunk"],
-        help="Run only one job.",
-    )
-    parser.add_argument(
-        "--skip",
-        action="append",
-        choices=["unit", "integration", "trunk"],
-        default=[],
-        help="Skip a job (repeatable).",
-    )
-    args = parser.parse_args()
-
-    jobs = {"unit", "integration", "trunk"}
-    if args.only:
-        jobs = {args.only}
-    jobs -= set(args.skip)
+async def run_ci(only: str | None, skip: Sequence[str]) -> int:
+    jobs = {job.value for job in JobName}
+    if only:
+        jobs = {only}
+    jobs -= set(skip)
 
     results: list[JobResult] = []
 
@@ -312,8 +315,44 @@ async def main() -> None:
         print(f"  [{status}] {r.name}{suffix}")
 
     if any(not r.ok for r in results):
-        sys.exit(1)
+        return 1
+    return 0
+
+
+@app.command()
+def cli(
+    only: Annotated[
+        JobName | None,
+        typer.Option("--only", help="Run only one job."),
+    ] = None,
+    skip: Annotated[
+        list[JobName] | None,
+        typer.Option("--skip", help="Skip a job (repeatable)."),
+    ] = None,
+) -> None:
+    code = anyio.run(
+        run_ci,
+        only.value if only is not None else None,
+        [job.value for job in skip or []],
+    )
+    raise typer.Exit(code)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
-    anyio.run(main)
+    raise SystemExit(main())

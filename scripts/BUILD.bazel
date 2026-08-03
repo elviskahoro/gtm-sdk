@@ -91,6 +91,8 @@ py_binary(
         "//libs/attio",
         "//scripts/lib",
         "@pypi//attio",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -102,6 +104,8 @@ py_binary(
         "//libs/attio",
         "//scripts/lib",
         "//src/attio",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -112,6 +116,8 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -122,6 +128,8 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -132,6 +140,8 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -142,6 +152,8 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -152,6 +164,8 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -159,13 +173,21 @@ py_binary(
     name = "bazel-requirements-sync",
     srcs = ["bazel-requirements-sync.py"],
     visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//click",
+        "@pypi//typer",
+    ],
 )
 
 py_binary(
     name = "beads-rig-sync_to",
     srcs = ["beads-rig-sync_to.py"],
     visibility = ["//:__subpackages__"],
-    deps = ["//scripts/lib"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
+    ],
 )
 
 py_binary(
@@ -177,7 +199,9 @@ py_binary(
         "//libs/caldotcom",
         "//scripts/lib",
         "//src/caldotcom",
+        "@pypi//click",
         "@pypi//httpx",
+        "@pypi//typer",
     ],
 )
 
@@ -187,7 +211,9 @@ py_binary(
     visibility = ["//:__subpackages__"],
     deps = [
         "@pypi//anyio",
+        "@pypi//click",
         "@pypi//dagger_io",
+        "@pypi//typer",
     ],
 )
 
@@ -197,7 +223,9 @@ py_binary(
     visibility = ["//:__subpackages__"],
     deps = [
         "//scripts/lib",
+        "@pypi//click",
         "@pypi//httpx",
+        "@pypi//typer",
     ],
 )
 
@@ -208,9 +236,11 @@ py_binary(
     deps = [
         "//libs/linear",
         "//scripts/lib",
+        "@pypi//click",
         "@pypi//gtm_linear",
         "@pypi//httpx",
         "@pypi//pydantic",
+        "@pypi//typer",
     ],
 )
 
@@ -258,7 +288,11 @@ py_binary(
     name = "downstream-contract-sync",
     srcs = ["downstream-contract-sync.py"],
     visibility = ["//:__subpackages__"],
-    deps = ["//scripts/lib"],
+    deps = [
+        "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
+    ],
 )
 
 py_binary(
@@ -278,6 +312,8 @@ py_binary(
         "//scripts/lib",
         "//src/attio",
         "//src/fathom",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -292,6 +328,8 @@ py_binary(
         "//scripts/lib",
         "//src/attio",
         "//src/fireflies",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -313,7 +351,9 @@ py_binary(
     deps = [
         "//cli/webhook",
         "//scripts/lib",
+        "@pypi//click",
         "@pypi//requests",
+        "@pypi//typer",
     ],
 )
 
@@ -326,8 +366,10 @@ py_binary(
         "//libs/octolens",
         "//scripts/lib",
         "//src/octolens",
+        "@pypi//click",
         "@pypi//httpx",
         "@pypi//orjson",
+        "@pypi//typer",
     ],
 )
 
@@ -349,6 +391,8 @@ py_binary(
         "//libs/attio",
         "//libs/rb2b",
         "//scripts/lib",
+        "@pypi//click",
+        "@pypi//typer",
     ],
 )
 
@@ -362,9 +406,11 @@ py_binary(
         "//libs/dlt",
         "//libs/rb2b",
         "//scripts/lib",
+        "@pypi//click",
         "@pypi//dlt",
         "@pypi//gcsfs",
         "@pypi//requests",
+        "@pypi//typer",
     ],
 )
 

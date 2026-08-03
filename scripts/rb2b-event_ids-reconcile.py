@@ -55,12 +55,14 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import click
+import typer
 
 # Anchor on the script's directory so output paths resolve regardless of the CWD
 # `uv run` was invoked from, and make repo-local packages importable.
@@ -75,10 +77,14 @@ from libs.attio.sdk_boundary import (  # noqa: E402
     is_unknown_filter_attribute,
 )
 from libs.rb2b import compute_event_id  # noqa: E402
-from scripts.lib.env import infisical_run_example  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+app = typer.Typer(
+    help=__doc__,
+    rich_markup_mode="markdown",
+)
 
 _OBJECT = "tracking_events"
 _RB2B_EVENT_TYPE = "rb2b_visit"
@@ -403,51 +409,38 @@ def write_plan(plan: ReconPlan, out_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Example:\n  "
-        + infisical_run_example("scripts/rb2b-event_ids-reconcile.py"),
-    )
-    parser.add_argument(
-        "--apply",
-        action="store_true",
+@app.command()
+def reconcile(
+    apply: bool = typer.Option(  # noqa: FBT001
+        default=False,
         help="Execute deletes/patches. Default is a dry run (plan only).",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
+    ),
+    limit: int | None = typer.Option(
         default=None,
-        help="Cap the number of rb2b rows scanned. Dry-run smoke testing only — "
-        "incompatible with --apply.",
-    )
-    parser.add_argument(
-        "--out",
-        type=Path,
+        help="Cap the number of rb2b rows scanned. Dry-run smoke testing only — incompatible with --apply.",
+    ),
+    out: Path = typer.Option(
         default=_DEFAULT_OUT,
         help=f"Where to write the planned-action JSONL (default: {_DEFAULT_OUT}).",
-    )
-    args = parser.parse_args(argv)
-
-    if args.limit is not None and args.limit <= 0:
-        parser.error("--limit must be a positive integer.")
-    # A partial scan can't be applied safely: an old row's canonical twin may
-    # lie beyond the scanned window, so plan_reconciliation would wrongly promote
-    # the old row (or delete the wrong member of a truncated group). --limit is
-    # for dry-run smoke testing only.
-    if args.apply and args.limit is not None:
-        parser.error(
+    ),
+) -> None:
+    if limit is not None and limit <= 0:
+        typer.echo("--limit must be a positive integer.", err=True)
+        raise SystemExit(1)
+    if apply and limit is not None:
+        typer.echo(
             "--apply cannot be combined with --limit: a truncated scan can "
             "mis-reconcile rows whose canonical twin is outside the window. "
             "Run --apply against the full dataset.",
+            err=True,
         )
+        raise SystemExit(1)
 
     with get_client() as client:
-        rows = fetch_rows(client, args.limit)
+        rows = fetch_rows(client, limit)
         print(f"Scanned {len(rows)} rb2b tracking_events rows.")
         plan = plan_reconciliation(rows)
-        write_plan(plan, args.out)
+        write_plan(plan, out)
 
         summary = plan.summary()
         print(
@@ -458,12 +451,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{summary['skipped_anonymous']} skipped-anonymous, "
             f"{summary['unparseable']} unparseable.",
         )
-        print(f"Full plan written to {args.out}")
+        print(f"Full plan written to {out}")
 
-        # Anonymous rows are never auto-reconciled (see expected_external_id).
-        # A nonzero count is unexpected for real rb2b traffic — flag it loudly so
-        # the operator inspects those bodies by hand rather than assuming the run
-        # covered everything.
         if summary["skipped_anonymous"]:
             print(
                 f"WARNING: {summary['skipped_anonymous']} anonymous row(s) skipped "
@@ -471,20 +460,29 @@ def main(argv: list[str] | None = None) -> int:
                 "JSONL; they are not reconciled automatically.",
             )
 
-        if not args.apply:
+        if not apply:
             print("Dry run — no records modified. Re-run with --apply to execute.")
-            return 0
+            raise SystemExit(0)
 
         if not plan.deletes and not plan.promotions:
             print("Nothing to apply.")
-            return 0
+            raise SystemExit(0)
 
-        result = apply_plan(client, plan, args.out)
+        result = apply_plan(client, plan, out)
         print(
             f"Applied: {result['promoted']} promoted, "
             f"{result['deleted']} deleted, {result['failed']} failed.",
         )
-        return 1 if result["failed"] else 0
+        raise SystemExit(1 if result["failed"] else 0)
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        result = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

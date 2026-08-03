@@ -36,13 +36,14 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import difflib
 import json
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import click
+import typer
 import typer.main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +60,13 @@ BANNER = (
 
 # Pages in docs/cli/ that are hand-written and never touched by the generator.
 HAND_WRITTEN = {"index.mdx"}
+
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    rich_markup_mode=None,
+    pretty_exceptions_enable=False,
+)
 
 
 def _frontmatter_scalar(value: str) -> str:
@@ -328,17 +336,19 @@ def _check(generated: dict[str, str]) -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="verify committed pages match a fresh generation (CI drift gate)",
-    )
-    args = parser.parse_args()
-
+@app.command(help=__doc__)
+def cli(
+    *,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="verify committed pages match a fresh generation (CI drift gate)",
+        ),
+    ] = False,
+) -> int:
     generated = _generate()
-    if args.check:
+    if check:
         return _check(generated)
 
     DOCS_CLI_DIR.mkdir(parents=True, exist_ok=True)
@@ -347,6 +357,18 @@ def main() -> int:
         print(f"wrote docs/cli/{filename}")
     print(f"{len(generated)} pages generated.")
     return 0
+
+
+def main() -> int:
+    try:
+        return app(standalone_mode=False) or 0
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
 
 
 if __name__ == "__main__":

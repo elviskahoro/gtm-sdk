@@ -20,6 +20,7 @@ live Gas Town rig after months of drift:
 from __future__ import annotations
 
 import importlib.util
+import os
 import stat
 import subprocess
 import sys
@@ -119,10 +120,20 @@ def _run_script(
     bin_dir: Path,
 ) -> subprocess.CompletedProcess[str]:
     env_path = f"{bin_dir}:{Path(sys.executable).parent}:/usr/bin:/bin"
+    # Bazel's pytest launcher adds declared wheel runfiles directly to sys.path
+    # instead of exporting PYTHONPATH. Pass that import path to the child using
+    # the same interpreter while continuing to isolate every other ambient
+    # variable from the subprocess behavior under test.
+    pythonpath = os.pathsep.join(path for path in sys.path if path)
+    env = {
+        "PATH": env_path,
+        "HOME": str(bin_dir.parent),
+        "PYTHONPATH": pythonpath,
+    }
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH), *args],
         cwd=REPO_ROOT,
-        env={"PATH": env_path, "HOME": str(bin_dir.parent)},
+        env=env,
         text=True,
         capture_output=True,
         check=False,

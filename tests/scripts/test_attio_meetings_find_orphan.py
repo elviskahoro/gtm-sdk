@@ -87,3 +87,13 @@ def test_summary_logs_counts_without_sensitive_token_data(
     assert "# scanned=3 system=1 api-token=1 other=1" in output
     assert "password" not in output.lower()
     assert "secret" not in output.lower()
+
+
+@pytest.mark.parametrize("option", ["--start", "--end"])
+def test_invalid_date_is_a_usage_error(
+    script_module: ModuleType,
+    option: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert script_module.main([option, "not-a-date"]) == 2  # noqa: PLR2004
+    assert option in capsys.readouterr().err  # noqa: S101

@@ -82,11 +82,23 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import click
+import typer
 
 from libs.attio.attributes import create_attribute, ensure_select_options
 from libs.attio.preflight import assert_attio_token_scopes
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+)
 
 # This script only mutates schema (creates/restores attributes, seeds select
 # options) — it never writes records — so its required scope is
@@ -134,7 +146,7 @@ _ATTRIBUTES: tuple[tuple[str, str, str, dict[str, object] | None], ...] = (
 )
 
 
-def main(apply: bool) -> int:
+def _run(*, apply: bool) -> int:
     results: list[tuple[str, str]] = []
 
     if apply:
@@ -202,15 +214,43 @@ def main(apply: bool) -> int:
     )
 
     for slug, status in results:
-        print(f"  {slug:32s} {status}")
-    print(f"\nMode: {'apply' if apply else 'preview'}")
+        typer.echo(f"  {slug:32s} {status}")
+    typer.echo(f"\nMode: {'apply' if apply else 'preview'}")
     return 0
 
 
+@app.command(help=__doc__)
+def bootstrap(
+    preview: bool = typer.Option(False, "--preview", help="Preview mode (read-only)"),  # noqa: FBT001, FBT003
+    apply: bool = typer.Option(False, "--apply", help="Apply changes"),  # noqa: FBT001, FBT003
+) -> int:
+    if preview and apply:
+        typer.echo("--preview and --apply are mutually exclusive", err=True)
+        return 2
+    if not preview and not apply:
+        typer.echo("One of --preview or --apply is required", err=True)
+        return 2
+    return _run(apply=apply)  # noqa: FBT003
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
+
+
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--preview", action="store_true")
-    g.add_argument("--apply", action="store_true")
-    args = ap.parse_args()
-    raise SystemExit(main(apply=args.apply))
+    raise SystemExit(main())

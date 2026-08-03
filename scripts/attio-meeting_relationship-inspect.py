@@ -61,16 +61,22 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import json
 import os
 import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import uuid4
+
+import click
+import typer
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
@@ -87,6 +93,21 @@ from scripts.lib.env import (  # noqa: E402
 # Prevents an infinite re-bootstrap loop when the chosen Infisical env simply
 # does not contain `ATTIO_API_KEY`.
 _BOOTSTRAP_SENTINEL_ENV = "_ATTIO_MEETING_REL_BOOTSTRAPPED"
+
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+    rich_markup_mode=None,
+)
+
+
+class InfisicalEnv(StrEnum):
+    """The only Infisical environments this production-sensitive tool accepts."""
+
+    dev = "dev"
+    prod = "prod"
+
 
 # The object slug under which Attio exposes meetings. Used both for the schema
 # inspection target and for reading a meeting back via the meetings sub-SDK.
@@ -730,70 +751,26 @@ def _bootstrap_via_infisical(env: str, forward_args: list[str]) -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--env",
-        choices=["dev", "prod"],
-        default=None,
-        help=(
-            "Infisical environment to read ATTIO_API_KEY from. Required unless "
-            "INFISICAL_ENV is set. Meetings are ALPHA and prod-only; dev 404s."
-        ),
-    )
-    parser.add_argument(
-        "--idempotency-check",
-        action="store_true",
-        help="Run the empirical PROD writes (idempotency + no-contention).",
-    )
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Required to actually POST test meetings to PROD.",
-    )
-    parser.add_argument(
-        "--person-email",
-        default="elvis@dlthub.com",
-        help="Email of a known prod Person to link in the test meetings.",
-    )
-    parser.add_argument(
-        "--company-domain",
-        default="dlthub.com",
-        help="Domain of a known prod Company to link in the test meetings.",
-    )
-    parser.add_argument(
-        "--organizer-email",
-        default="ai-3hq-verify-organizer@dlthub.com",
-        help=(
-            "Meeting organizer/participant email. MUST differ from "
-            "--person-email so participant auto-linking does not confound the "
-            "linked_records contention test. Defaults to a throwaway address."
-        ),
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit machine-readable JSON instead of human text.",
-    )
-    args = parser.parse_args()
-
-    # --execute only has meaning for the empirical writes. Reject it on its own
-    # so an operator who typed `--execute` (expecting a prod run) is not silently
-    # dropped onto the read-only config path and misled into thinking the
-    # empirical probe ran.
-    if args.execute and not args.idempotency_check:
-        parser.error(
-            "--execute requires --idempotency-check (it only gates the "
-            "empirical PROD writes; the config inspection is read-only).",
-        )
-
+def _run(
+    *,
+    env: InfisicalEnv | None,
+    idempotency_check: bool,
+    execute: bool,
+    person_email: str,
+    company_domain: str,
+    organizer_email: str,
+    json_output: bool,
+) -> int:
     api_key = clean_env(os.environ.get("ATTIO_API_KEY"))
     if not api_key:
-        env = args.env or clean_env(os.environ.get("INFISICAL_ENV"))
-        if env not in {"dev", "prod"}:
+        infisical_env = (
+            env.value
+            if env is not None
+            else clean_env(
+                os.environ.get("INFISICAL_ENV"),
+            )
+        )
+        if infisical_env not in {"dev", "prod"}:
             print(
                 "Infisical environment is required to bootstrap ATTIO_API_KEY. "
                 "Pass --env=dev|prod or set INFISICAL_ENV. (Refusing to default "
@@ -801,31 +778,31 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 2
-        forward = [f"--env={env}"]
-        if args.idempotency_check:
+        forward = [f"--env={infisical_env}"]
+        if idempotency_check:
             forward.append("--idempotency-check")
-        if args.execute:
+        if execute:
             forward.append("--execute")
-        forward += ["--person-email", args.person_email]
-        forward += ["--company-domain", args.company_domain]
-        forward += ["--organizer-email", args.organizer_email]
-        if args.json:
+        forward += ["--person-email", person_email]
+        forward += ["--company-domain", company_domain]
+        forward += ["--organizer-email", organizer_email]
+        if json_output:
             forward.append("--json")
-        return _bootstrap_via_infisical(env, forward)
+        return _bootstrap_via_infisical(infisical_env, forward)
 
     # In --json mode, suppress per-function human prints and emit ONE combined
     # JSON object at the end, so the output is always a single valid document.
-    render = not args.json
+    render = not json_output
     config_verdict, config_payload = run_config_inspection(render=render)
 
-    if not args.idempotency_check:
-        if args.json:
+    if not idempotency_check:
+        if json_output:
             print(json.dumps(config_payload, indent=2, default=str))
         # Config-only run: STOP is a hard fail; INCONCLUSIVE exits non-zero to
         # signal the operator should run the empirical gate.
         return 0 if config_verdict.status == "pass" else 1
 
-    if not args.execute:
+    if not execute:
         print(
             "\n--idempotency-check writes throwaway meetings to PROD (no DELETE "
             "on /v2/meetings). Re-run with --execute to proceed.",
@@ -834,12 +811,12 @@ def main() -> int:
         return 2
 
     result, empirical_payload = run_empirical_check(
-        person_email=args.person_email,
-        company_domain=args.company_domain,
-        organizer_email=args.organizer_email,
+        person_email=person_email,
+        company_domain=company_domain,
+        organizer_email=organizer_email,
         render=render,
     )
-    if args.json:
+    if json_output:
         print(
             json.dumps(
                 {"config": config_payload, "empirical": empirical_payload},
@@ -848,6 +825,100 @@ def main() -> int:
             ),
         )
     return 0 if result.passed else 1
+
+
+@app.command()
+def cli(
+    env: InfisicalEnv | None = typer.Option(
+        None,
+        "--env",
+        help=(
+            "Infisical environment to read ATTIO_API_KEY from. Required unless "
+            "INFISICAL_ENV is set. Meetings are ALPHA and prod-only; dev 404s."
+        ),
+    ),
+    idempotency_check: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option(
+            "--idempotency-check",
+            help="Run the empirical PROD writes (idempotency + no-contention).",
+        ),
+    ] = False,
+    execute: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option(
+            "--execute",
+            help="Required to actually POST test meetings to PROD.",
+        ),
+    ] = False,
+    person_email: str = typer.Option(
+        "elvis@dlthub.com",
+        "--person-email",
+        help="Email of a known prod Person to link in the test meetings.",
+    ),
+    company_domain: str = typer.Option(
+        "dlthub.com",
+        "--company-domain",
+        help="Domain of a known prod Company to link in the test meetings.",
+    ),
+    organizer_email: str = typer.Option(
+        "ai-3hq-verify-organizer@dlthub.com",
+        "--organizer-email",
+        help=(
+            "Meeting organizer/participant email. MUST differ from "
+            "--person-email so participant auto-linking does not confound the "
+            "linked_records contention test. Defaults to a throwaway address."
+        ),
+    ),
+    json_output: Annotated[  # noqa: FBT002
+        bool,
+        typer.Option(
+            "--json",
+            help="Emit machine-readable JSON instead of human text.",
+        ),
+    ] = False,
+) -> int:
+    # --execute only has meaning for the empirical writes. Reject it on its own
+    # so an operator who typed `--execute` (expecting a prod run) is not silently
+    # dropped onto the read-only config path and misled into thinking the
+    # empirical probe ran.
+    if execute and not idempotency_check:
+        msg = (
+            "requires --idempotency-check (it only gates the empirical PROD "
+            "writes; the config inspection is read-only)."
+        )
+        raise typer.BadParameter(
+            msg,
+            param_hint="--execute",
+        )
+    return _run(
+        env=env,
+        idempotency_check=idempotency_check,
+        execute=execute,
+        person_email=person_email,
+        company_domain=company_domain,
+        organizer_email=organizer_email,
+        json_output=json_output,
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        typer.echo(exc.code, err=True)
+        return 1
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

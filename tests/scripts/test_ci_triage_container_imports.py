@@ -138,7 +138,7 @@ def test_script_runs_without_the_repo_around_it(
     assert result.returncode == 0, (
         f"{script_name} cannot start in its own container's tree:\n{result.stderr}"
     )
-    assert "usage:" in result.stdout
+    assert "usage:" in result.stdout.casefold()
 
 
 @pytest.mark.parametrize(("script_name", "packages"), CONTAINER_TREES)

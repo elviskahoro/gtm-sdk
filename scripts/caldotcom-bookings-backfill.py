@@ -58,14 +58,15 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import json
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+import typer
+from click import ClickException
 
 # Anchor on the script's own directory so paths resolve regardless of CWD (per
 # repo CLAUDE.md path-anchoring rule). `uv run path/to/script.py` does NOT chdir.
@@ -84,6 +85,9 @@ from scripts.lib.env import infisical_run_example  # noqa: E402
 from src.caldotcom.webhook.booking import (  # noqa: E402
     _caldotcom_status_to_attio,  # pyright: ignore[reportPrivateUsage]
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # The deployed Modal app the live cal.com webhook runs as. Matches
 # ``src/caldotcom/webhook/booking.py::attio_get_app_name``.
@@ -272,95 +276,65 @@ def _post_with_retry(
     return None, last_error
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Default. Fetch, filter, and write envelopes to out/ without POSTing.",
-    )
-    mode.add_argument(
-        "--apply",
-        action="store_true",
-        help="POST envelopes to the live Modal webhook (idempotent; safe to re-run).",
-    )
-    parser.add_argument(
-        "--lifecycle",
-        default="",
-        help="Comma list for the API 'status' query param "
-        "(upcoming/recurring/past/cancelled/unconfirmed). Default: empty = no "
-        "filter = ALL lifecycle buckets, for a complete historical replay "
-        "consistent with --status all. Narrow with e.g. --lifecycle past,upcoming.",
-    )
-    parser.add_argument(
-        "--status",
-        default="all",
-        help="Comma list of NORMALIZED Attio RSVP values to replay "
-        "(accepted/pending/declined/tentative), or 'all'. Matches the webhook's "
-        "own normalization (cancelled/rejected → declined, unknown/missing → "
-        "accepted), so narrowing here selects exactly what production would "
-        "ingest. Default: all — replay every booking, mirroring the live webhook.",
-    )
-    parser.add_argument(
-        "--after-start",
-        default=None,
-        help="ISO-8601 afterStart filter.",
-    )
-    parser.add_argument("--before-end", default=None, help="ISO-8601 beforeEnd filter.")
-    parser.add_argument(
-        "--page-size",
-        type=int,
-        default=100,
-        help="API take/page size.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Cap the number of records replayed (smoke test). Applies after filtering.",
-    )
-    args = parser.parse_args()
+app = typer.Typer(add_completion=False, help=__doc__)
 
-    if args.page_size < 1:
-        parser.error("--page-size must be >= 1")
-    if args.limit is not None and args.limit < 1:
-        parser.error("--limit must be >= 1")
 
-    apply = bool(args.apply)
+def _run(  # noqa: PLR0912,PLR0915
+    *,
+    dry_run: bool,
+    apply: bool,
+    lifecycle: str,
+    status: str,
+    after_start: str | None,
+    before_end: str | None,
+    page_size: int,
+    limit: int | None,
+) -> int:
+    if page_size < 1:
+        typer.echo("--page-size must be >= 1", err=True)
+        raise SystemExit(2)
+    if limit is not None and limit < 1:
+        typer.echo("--limit must be >= 1", err=True)
+        raise SystemExit(2)
 
-    lifecycle = [s.strip().lower() for s in args.lifecycle.split(",") if s.strip()]
-    unknown_lifecycle = sorted(set(lifecycle) - _LIFECYCLE_VOCAB)
+    if dry_run and apply:
+        typer.echo("--dry-run and --apply are mutually exclusive", err=True)
+        raise SystemExit(2)
+
+    lifecycle_list = [s.strip().lower() for s in lifecycle.split(",") if s.strip()]
+    unknown_lifecycle = sorted(set(lifecycle_list) - _LIFECYCLE_VOCAB)
     if unknown_lifecycle:
-        parser.error(
+        typer.echo(
             f"--lifecycle has unknown bucket(s) {unknown_lifecycle}; "
             f"allowed: {sorted(_LIFECYCLE_VOCAB)} (or empty = all buckets).",
+            err=True,
         )
+        raise SystemExit(2)
 
-    status_arg = args.status.strip().lower()
+    status_arg = status.strip().lower()
     allowed_statuses: set[str] | None
     if status_arg == "all":
         allowed_statuses = None
     else:
-        allowed_statuses = {
-            s.strip().lower() for s in args.status.split(",") if s.strip()
-        }
+        allowed_statuses = {s.strip().lower() for s in status.split(",") if s.strip()}
         unknown_status = sorted(allowed_statuses - _STATUS_VOCAB)
         if unknown_status:
-            parser.error(
+            typer.echo(
                 f"--status has unknown value(s) {unknown_status}; "
                 f"allowed: {sorted(_STATUS_VOCAB)} or 'all'.",
+                err=True,
             )
+            raise SystemExit(2)
 
     # ---- Fetch ----
     with CalcomClient.from_env() as client:
         bookings = client.list_bookings(
-            lifecycle_status=lifecycle or None,
-            after_start=args.after_start,
-            before_end=args.before_end,
-            page_size=args.page_size,
+            lifecycle_status=lifecycle_list or None,
+            after_start=after_start,
+            before_end=before_end,
+            page_size=page_size,
         )
-    print(f"[backfill] fetched {len(bookings)} bookings (lifecycle={lifecycle})")
+    print(f"[backfill] fetched {len(bookings)} bookings (lifecycle={lifecycle_list})")
 
     # ---- Dedup on the stable booking key (uid), keeping the last seen ----
     by_uid: dict[str, BookingCreatedPayload] = {}
@@ -400,8 +374,8 @@ def main() -> int:
             f"{' …' if len(skipped_gate) > 10 else ''}",
         )
 
-    if args.limit is not None:
-        kept = kept[: args.limit]
+    if limit is not None:
+        kept = kept[:limit]
         print(f"[backfill] limited to {len(kept)} records")
 
     # ---- Map to envelopes + validate locally before any POST ----
@@ -503,6 +477,82 @@ def main() -> int:
         )
         return 1
     return 0
+
+
+@app.command(help=__doc__)
+def backfill(
+    apply: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--apply",
+        help="POST envelopes to the live Modal webhook (idempotent; safe to re-run).",
+    ),
+    dry_run: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--dry-run",
+        help="Default. Fetch, filter, and write envelopes to out/ without POSTing.",
+    ),
+    lifecycle: str = typer.Option(
+        "",
+        "--lifecycle",
+        help="Comma list for the API 'status' query param "
+        "(upcoming/recurring/past/cancelled/unconfirmed). Default: empty = no "
+        "filter = ALL lifecycle buckets, for a complete historical replay "
+        "consistent with --status all. Narrow with e.g. --lifecycle past,upcoming.",
+    ),
+    status: str = typer.Option(
+        "all",
+        "--status",
+        help="Comma list of NORMALIZED Attio RSVP values to replay "
+        "(accepted/pending/declined/tentative), or 'all'. Matches the webhook's "
+        "own normalization (cancelled/rejected → declined, unknown/missing → "
+        "accepted), so narrowing here selects exactly what production would "
+        "ingest. Default: all — replay every booking, mirroring the live webhook.",
+    ),
+    after_start: str | None = typer.Option(
+        None,
+        "--after-start",
+        help="ISO-8601 afterStart filter.",
+    ),
+    before_end: str | None = typer.Option(
+        None,
+        "--before-end",
+        help="ISO-8601 beforeEnd filter.",
+    ),
+    page_size: int = typer.Option(
+        100,
+        "--page-size",
+        help="API take/page size.",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        help="Cap the number of records replayed (smoke test). Applies after filtering.",
+    ),
+) -> int:
+    return _run(
+        dry_run=dry_run,
+        apply=apply,
+        lifecycle=lifecycle,
+        status=status,
+        after_start=after_start,
+        before_end=before_end,
+        page_size=page_size,
+        limit=limit,
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except ClickException as exc:
+        exc.show()
+        raise SystemExit(exc.exit_code) from exc
+    except SystemExit:
+        raise
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ pytest_test(
     name = "test_attio_inspect_meeting_relationship",
     srcs = ["test_attio_inspect_meeting_relationship.py"],
     data = ["//scripts:attio-meeting_relationship-inspect.py"],  # keep
+    pyi_deps = ["@pypi//pytest"],
     deps = [
         "//scripts:attio-meeting_relationship-inspect",  # keep
         "//tests:conftest",

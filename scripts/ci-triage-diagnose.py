@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["oz-agent-sdk==0.14.0", "httpx>=0.23.0"]
+# dependencies = ["oz-agent-sdk==0.14.0", "httpx>=0.23.0", "typer>=0.15"]
 # ///
 r"""Ask an Oz cloud agent why a CI run failed, and write its findings to a file.
 
@@ -73,6 +73,9 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+
+import click
+import typer
 
 # Terminal states from RunState. BLOCKED means the agent is waiting on input that
 # will never arrive in CI, so it is terminal for our purposes.
@@ -361,6 +364,7 @@ def _fetch_url(url: str) -> str:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments. Kept for backward compatibility with tests."""
     parser = argparse.ArgumentParser(description="Diagnose a failed CI run via Oz.")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", "?"))
     parser.add_argument("--workflow", required=True)
@@ -396,7 +400,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def build_config(args: argparse.Namespace) -> dict[str, Any]:
+def build_config(args: argparse.Namespace) -> dict[str, Any]:  # noqa: ANN401
     """Assemble the cloud-run config, omitting anything unset.
 
     Empty strings are dropped rather than sent: the API treats an absent
@@ -412,9 +416,20 @@ def build_config(args: argparse.Namespace) -> dict[str, Any]:
     return config
 
 
-def main(argv: list[str] | None = None, *, client: Any = None) -> int:
-    args = parse_args(argv)
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+    rich_markup_mode=None,
+)
 
+
+def run_diagnosis(  # noqa: ANN401, PLR0911
+    args: argparse.Namespace,
+    *,
+    client: Any | None = None,  # noqa: ANN401
+) -> int:
+    """Run the diagnosis after the CLI or an injected test wrapper builds options."""
     if client is None:
         if not os.environ.get("WARP_API_KEY", "").strip():
             print("error: WARP_API_KEY must be set", file=sys.stderr)
@@ -429,9 +444,11 @@ def main(argv: list[str] | None = None, *, client: Any = None) -> int:
 
         client = OzAPI()
 
+    active_client: Any = client
+
     if args.list_environments:
         try:
-            print(client.agent.list_environments())
+            print(active_client.agent.list_environments())
         except Exception as exc:  # noqa: BLE001 - diagnostic path
             print(f"error: could not list environments: {exc}", file=sys.stderr)
             return 1
@@ -449,7 +466,7 @@ def main(argv: list[str] | None = None, *, client: Any = None) -> int:
     )
 
     try:
-        started = client.agent.run(
+        started = active_client.agent.run(
             prompt=prompt,
             # plan mode so the result comes back as a PLAN artifact, whose response
             # embeds markdown. See the module docstring.
@@ -503,6 +520,60 @@ def main(argv: list[str] | None = None, *, client: Any = None) -> int:
     args.output.write_text(diagnosis + "\n", encoding="utf-8")
     print(f"wrote {args.output} ({len(diagnosis)} chars)")
     return 0
+
+
+@app.command("diagnose")
+def cli(
+    repo: str = typer.Option(os.environ.get("GITHUB_REPOSITORY", "?")),
+    workflow: str = typer.Option(...),
+    run_url: str = typer.Option(..., "--run-url"),
+    branch: str = typer.Option("unknown"),
+    commit: str = typer.Option("unknown"),
+    event: str = typer.Option("unknown"),
+    log_file: Path | None = typer.Option(None, "--log-file"),
+    diff_file: Path | None = typer.Option(None, "--diff-file"),
+    output: Path = typer.Option(...),
+    environment_id: str = typer.Option(os.environ.get("OZ_ENVIRONMENT_ID", "")),
+    harness: str = typer.Option(os.environ.get("OZ_HARNESS", "")),
+    model_id: str = typer.Option(os.environ.get("OZ_MODEL_ID", "")),
+    timeout_seconds: int = typer.Option(DEFAULT_TIMEOUT_SECONDS),
+    list_environments: bool = typer.Option(False, "--list-environments"),  # noqa: FBT001, FBT002, FBT003
+) -> int:
+    """Diagnose a failed CI run via Oz."""
+    return run_diagnosis(
+        argparse.Namespace(
+            repo=repo,
+            workflow=workflow,
+            run_url=run_url,
+            branch=branch,
+            commit=commit,
+            event=event,
+            log_file=log_file,
+            diff_file=diff_file,
+            output=output,
+            environment_id=environment_id,
+            harness=harness,
+            model_id=model_id,
+            timeout_seconds=timeout_seconds,
+            list_environments=list_environments,
+        ),
+    )
+
+
+def main(argv: list[str] | None = None, *, client: Any | None = None) -> int:  # noqa: ANN401
+    """Run the Typer CLI, or inject a client for offline tests."""
+    if client is not None:
+        return run_diagnosis(parse_args(argv), client=client)
+    try:
+        result = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show(file=sys.stderr)
+        return exc.exit_code
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1 if exc.code else 0
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":

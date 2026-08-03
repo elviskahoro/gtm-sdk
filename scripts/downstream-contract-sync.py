@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["typer>=0.15"]
 # ///
 """Regenerate ``contracts/downstream_api.toml`` from a consumer checkout.
 
@@ -45,16 +45,28 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="script")
 
-import argparse
 import ast
 import difflib
 import sys
 import tomllib
 from pathlib import Path
+from typing import TYPE_CHECKING, Annotated
+
+import click
+import typer
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 CONTRACT_PATH = REPO_ROOT / "contracts" / "downstream_api.toml"
+
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=__doc__,
+)
 
 # Top-level packages this repo publishes (see `[tool.setuptools.packages.find]`
 # in pyproject.toml).
@@ -391,26 +403,9 @@ def load_existing() -> tuple[dict[str, dict[str, set[str]]], dict[str, str]]:
     return consumers, descriptions
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "consumers",
-        nargs="+",
-        type=Path,
-        help="paths to downstream consumer checkouts to scan",
-    )
-    parser.add_argument(
-        "--write",
-        action="store_true",
-        help="apply the change (default: print a diff and exit non-zero if stale)",
-    )
-    args = parser.parse_args()
-
+def sync_contract(consumer_paths: Sequence[Path], *, write: bool) -> int:
     consumers, descriptions = load_existing()
-    for path in args.consumers:
+    for path in consumer_paths:
         try:
             scanned = scan_consumer(path)
         except ConsumerScanError as error:
@@ -437,7 +432,7 @@ def main() -> int:
         print(f"{CONTRACT_PATH.relative_to(REPO_ROOT)} is up to date")
         return 0
 
-    if args.write:
+    if write:
         CONTRACT_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONTRACT_PATH.write_text(rendered, encoding="utf-8")
         print(f"wrote {CONTRACT_PATH.relative_to(REPO_ROOT)}")
@@ -453,6 +448,45 @@ def main() -> int:
     )
     print("\ncontract is stale; re-run with --write to apply", file=sys.stderr)
     return 1
+
+
+@app.command()
+def cli(
+    consumers: Annotated[
+        list[Path],
+        typer.Argument(help="paths to downstream consumer checkouts to scan"),
+    ],
+    *,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write",
+            help="apply the change (default: print a diff and exit non-zero if stale)",
+        ),
+    ] = False,
+) -> int:
+    return sync_contract(consumers, write=write)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        result = app(
+            args=list(argv) if argv is not None else None,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        typer.echo(exc.format_message(), err=True)
+        return exc.exit_code
+    except SystemExit as exc:
+        code = exc.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        print(code, file=sys.stderr)
+        return 1
+
+    return int(result or 0)
 
 
 if __name__ == "__main__":
