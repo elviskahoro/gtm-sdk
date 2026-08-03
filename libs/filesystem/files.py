@@ -5,11 +5,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from pydantic import BaseModel, ValidationError
 
-from .regex import sanitize_string
-
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-    from datetime import datetime
 
 
 class FileUtility:
@@ -31,20 +28,6 @@ class FileUtility:
             for f in input_folder_path.iterdir()
             if f.is_file() and (extension is None or f.suffix in extension)
         )
-
-    @staticmethod
-    def file_clean_timestamp_from_datetime(
-        dt: datetime,
-    ) -> str:
-        return dt.strftime("%Y_%m_%d_%H_%M_%S")
-
-    @staticmethod
-    def file_clean_string(
-        string: str,
-    ) -> str:
-        lowercase: str = string.lower()
-        no_space_on_borders: str = lowercase.strip()
-        return sanitize_string(string=no_space_on_borders)
 
 
 class SourceFileData(NamedTuple):
@@ -95,55 +78,6 @@ class SourceFileData(NamedTuple):
                 json_data=json_data,
             ),
         )
-
-    @staticmethod
-    def from_jsonl_file(
-        jsonl_path: str,
-        base_model_type: type[BaseModel] | None,
-    ) -> Iterator[SourceFileData]:
-        if base_model_type is None:
-            error_msg = "base_model_type cannot be None"
-            raise ValueError(error_msg)
-
-        cwd: str = str(Path.cwd())
-        path: Path = Path(f"{cwd}/{jsonl_path}")
-
-        # Check file extension
-        if path.suffix.lower() != ".jsonl":
-            error_msg = f"File must have .jsonl extension, got: {path.suffix}"
-            raise ValueError(error_msg)
-
-        if not path.exists():
-            error_msg: str = f"File not found at {path}"
-            raise FileNotFoundError(error_msg)
-
-        try:
-            file = path.open(encoding="utf-8")
-
-        except OSError as e:
-            error_msg: str = f"Error opening file {path}: {e}"
-            raise FileNotFoundError(error_msg) from e
-
-        with file:
-            for line_number, raw_line in enumerate(file, start=1):
-                line: str = raw_line.strip()
-                if not line:  # Skip empty lines
-                    continue
-
-                try:
-                    yield SourceFileData(
-                        path=path,
-                        base_model=base_model_type.model_validate_json(
-                            json_data=line,
-                        ),
-                    )
-
-                except ValidationError as e:
-                    error_msg: str = (
-                        f"Validation error on line {line_number} in {path}: {e}"
-                    )
-                    print(error_msg)
-                    raise
 
     @staticmethod
     def from_input_folder(
@@ -308,45 +242,6 @@ def test_file_utility_get_paths_file_instead_of_directory() -> None:
 
         finally:
             os.chdir(original_cwd)
-
-
-def test_file_clean_timestamp_from_datetime() -> None:
-    """Test FileUtility.file_clean_timestamp_from_datetime."""
-    from datetime import datetime, timezone
-
-    # Test with UTC datetime
-    dt: datetime = datetime(2023, 12, 15, 14, 30, 45, tzinfo=timezone.utc)
-    result: str = FileUtility.file_clean_timestamp_from_datetime(dt)
-    assert result == "2023_12_15_14_30_45"
-
-    # Test with different datetime
-    dt2: datetime = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    result2: str = FileUtility.file_clean_timestamp_from_datetime(dt2)
-    assert result2 == "2024_01_01_00_00_00"
-
-    # Test with single digit values
-    dt3: datetime = datetime(2024, 3, 5, 8, 7, 9, tzinfo=timezone.utc)
-    result3: str = FileUtility.file_clean_timestamp_from_datetime(dt3)
-    assert result3 == "2024_03_05_08_07_09"
-
-
-def test_file_clean_string() -> None:
-    """Test FileUtility.file_clean_string."""
-    # Test basic functionality
-    result: str = FileUtility.file_clean_string("Hello World!")
-    assert result == "hello·world"  # Based on sanitize_string behavior
-
-    # Test with mixed case and special characters
-    result2: str = FileUtility.file_clean_string("  Test File (1).txt  ")
-    assert result2 == "test·file·1txt"
-
-    # Test empty string
-    result3: str = FileUtility.file_clean_string("")
-    assert result3 == ""
-
-    # Test string that's already clean
-    result4: str = FileUtility.file_clean_string("cleanfilename")
-    assert result4 == "cleanfilename"
 
 
 def test_source_file_data_from_json_data_valid() -> None:
@@ -748,21 +643,6 @@ def test_source_file_data_with_none_path() -> None:
 
     assert source_data.path is None
     assert source_data.base_model == model
-
-
-def test_file_utility_static_methods() -> None:
-    """Test that FileUtility methods are properly static."""
-    # Test that methods can be called without instance
-    from datetime import datetime, timezone
-
-    # Test file_clean_timestamp_from_datetime
-    dt: datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    timestamp: str = FileUtility.file_clean_timestamp_from_datetime(dt)
-    assert timestamp == "2024_01_01_12_00_00"
-
-    # Test file_clean_string
-    cleaned: str = FileUtility.file_clean_string("Test String")
-    assert cleaned == "test·string"
 
 
 def test_destination_file_data_static_method() -> None:
