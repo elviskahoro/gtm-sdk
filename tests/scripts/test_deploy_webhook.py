@@ -13,32 +13,100 @@ engine and real Modal/GCP credentials.
 BD: gtm-sdk-43z (epic gtm-sdk-yol). Each test maps to one acceptance criterion.
 """
 # trunk-ignore-all(bandit/B105): test fixtures, not real credentials
-# ruff: noqa: PLR2004, S101
+# ruff: noqa: PLR2004, S101, S603
 # trunk-ignore-all(bandit/B607): bash/git invoked by name on purpose so PATH wins
 
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 import sys
 import textwrap
-from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "webhooks-handlers-redeploy.py"
-HANDLER_FILE = REPO_ROOT / "webhooks" / "export_to_attio.py"
+SOURCE_REPO_ROOT = Path(__file__).absolute().parents[2]
+SCRIPT_REL = Path("scripts/webhooks-handlers-redeploy.py")
+HANDLER_REL = Path("webhooks/export_to_attio.py")
 HANDLER_NAME = "export_to_attio"
 SOURCE_NAME = "CaldotcomBookingWebhook"
-LOCK_DIR = REPO_ROOT / "tmp" / "webhook-deploy.lock"
-BACKUP_DIR = REPO_ROOT / "tmp" / "webhook-deploy-bak"
+
+
+class DeployWorkspace(NamedTuple):
+    root: Path
+    script: Path
+    handler_file: Path
 
 
 def _make_executable(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _make_tree_writable(root: Path) -> None:
+    for path in root.rglob("*"):
+        if path.is_file():
+            path.chmod(path.stat().st_mode | stat.S_IWUSR)
+
+
+@pytest.fixture
+def deploy_workspace(tmp_path: Path) -> DeployWorkspace:
+    """Copy the deploy surface into a writable mini-repo for each test.
+
+    Bazel exposes source/data files through runfiles symlinks. The deploy
+    helper intentionally mutates ``webhooks/<handler>.py`` plus ``tmp/`` while
+    it substitutes and restores a handler, so the test must not run it against
+    the read-only runfiles tree or the developer checkout those symlinks may
+    resolve to.
+    """
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "scripts").mkdir()
+
+    shutil.copy2(SOURCE_REPO_ROOT / "pyproject.toml", root / "pyproject.toml")
+    shutil.copy2(SOURCE_REPO_ROOT / SCRIPT_REL, root / SCRIPT_REL)
+    scripts_init = SOURCE_REPO_ROOT / "scripts" / "__init__.py"
+    if scripts_init.exists():
+        shutil.copy2(scripts_init, root / "scripts" / "__init__.py")
+    shutil.copytree(SOURCE_REPO_ROOT / "scripts" / "lib", root / "scripts" / "lib")
+    shutil.copytree(
+        SOURCE_REPO_ROOT / "webhooks",
+        root / "webhooks",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    (root / "tmp").mkdir()
+    _make_tree_writable(root)
+
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git is required to stage the deploy helper test workspace")
+
+    subprocess.run([git, "init", "-q"], cwd=root, check=True)
+    subprocess.run([git, "add", "webhooks"], cwd=root, check=True)
+    subprocess.run(
+        [
+            git,
+            "-c",
+            "user.name=gtm-sdk tests",
+            "-c",
+            "user.email=tests@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "baseline webhooks",
+        ],
+        cwd=root,
+        check=True,
+    )
+
+    return DeployWorkspace(
+        root=root,
+        script=root / SCRIPT_REL,
+        handler_file=root / HANDLER_REL,
+    )
 
 
 def _write_default_stubs(bin_dir: Path) -> None:
@@ -183,58 +251,8 @@ def stub_bin(tmp_path: Path) -> Path:
     return bin_dir
 
 
-@pytest.fixture(autouse=True)
-def ensure_handler_restored() -> Iterator[None]:
-    """Snapshot the handler file and clean stale lock/.bak state around each test.
-
-    Safety net: even if the test asserts before the script's own EXIT trap
-    has fired (or if the script itself were broken), this fixture guarantees
-    the handler file ends up clean for the next test.
-
-    Skips if webhooks/ has other uncommitted changes, since the script's
-    working-tree preflight would refuse to run and the test would falsely
-    fail. In CI this never trips; in local dev it makes the failure mode
-    obvious.
-    """
-    status = subprocess.run(
-        ["git", "status", "--porcelain", "--", "webhooks/"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
-    if status.strip():
-        pytest.skip(
-            f"webhooks/ has uncommitted changes; deploy script preflight "
-            f"would abort. Commit or stash before running these tests:\n{status}",
-        )
-
-    original_bytes = HANDLER_FILE.read_bytes()
-    LOCK_DIR.parent.mkdir(parents=True, exist_ok=True)
-    # Never remove an existing lock — it may belong to a concurrent real
-    # `scripts/webhooks-handlers-redeploy.py` invocation, and that lock is the script's
-    # only serialization guard. Skip rather than racing the live deploy.
-    if LOCK_DIR.exists():
-        pytest.skip(
-            f"{LOCK_DIR} already exists; a deploy may be in progress. "
-            f"Refusing to remove it. Remove it manually if it is stale.",
-        )
-    bak = HANDLER_FILE.with_suffix(HANDLER_FILE.suffix + ".bak")
-    if bak.exists():
-        bak.unlink()
-    try:
-        yield
-    finally:
-        HANDLER_FILE.write_bytes(original_bytes)
-        # Safe to remove here: we verified LOCK_DIR did not exist at entry,
-        # so any lock present now was created by the stubbed deploy under test.
-        if LOCK_DIR.exists():
-            LOCK_DIR.rmdir()
-        if bak.exists():
-            bak.unlink()
-
-
 def _run_deploy(
+    deploy_workspace: DeployWorkspace,
     stub_bin: Path,
     *,
     env_overrides: dict[str, str] | None = None,
@@ -266,9 +284,9 @@ def _run_deploy(
     # ``sys.executable`` points at the venv pytest itself is running under,
     # so all the script's imports (``dagger``, etc.) resolve normally.
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
+        [sys.executable, str(deploy_workspace.script), *args],
         env=env,
-        cwd=REPO_ROOT,
+        cwd=deploy_workspace.root,
         capture_output=True,
         text=True,
         # The Flox path now runs two activations per source (uv sync, then
@@ -279,18 +297,23 @@ def _run_deploy(
     )
 
 
-def test_substitution_and_restore(stub_bin: Path) -> None:
+def test_substitution_and_restore(
+    deploy_workspace: DeployWorkspace,
+    stub_bin: Path,
+) -> None:
     """AC1: CI runs webhooks-handlers-redeploy.py against stubs; working tree ends clean."""
-    original = HANDLER_FILE.read_bytes()
+    original = deploy_workspace.handler_file.read_bytes()
 
-    result = _run_deploy(stub_bin)
+    result = _run_deploy(deploy_workspace, stub_bin)
 
     assert result.returncode == 0, (
         f"Script failed unexpectedly.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
-    assert HANDLER_FILE.read_bytes() == original
-    bak = HANDLER_FILE.with_suffix(HANDLER_FILE.suffix + ".bak")
+    assert deploy_workspace.handler_file.read_bytes() == original
+    bak = deploy_workspace.handler_file.with_suffix(
+        deploy_workspace.handler_file.suffix + ".bak",
+    )
     assert not bak.exists(), "stale .bak sidecar left behind"
     # The Flox preflight runs (it is gated on the selector) and survives the
     # pass-through `flox` stub, which activates nothing and so reports no
@@ -299,7 +322,10 @@ def test_substitution_and_restore(stub_bin: Path) -> None:
     assert "toolchain pinning unverified" in result.stdout
 
 
-def test_all_flag_deploys_every_source(stub_bin: Path) -> None:
+def test_all_flag_deploys_every_source(
+    deploy_workspace: DeployWorkspace,
+    stub_bin: Path,
+) -> None:
     """AC5: ``--all`` iterates every source imported by the handler.
 
     Regression target: in early drafts argparse parsed ``--all`` as an
@@ -307,14 +333,14 @@ def test_all_flag_deploys_every_source(stub_bin: Path) -> None:
     iteration must end with the placeholder restored, so the file must
     match HEAD bit-for-bit after all five sources deploy.
     """
-    original = HANDLER_FILE.read_bytes()
+    original = deploy_workspace.handler_file.read_bytes()
 
-    result = _run_deploy(stub_bin, args=(HANDLER_NAME, "--all"))
+    result = _run_deploy(deploy_workspace, stub_bin, args=(HANDLER_NAME, "--all"))
 
     assert result.returncode == 0, (
         f"--all invocation failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
-    assert HANDLER_FILE.read_bytes() == original
+    assert deploy_workspace.handler_file.read_bytes() == original
     # All five sources imported by export_to_attio.py should each have
     # produced a "=== Deploying <source> via <handler> ===" header.
     assert result.stdout.count("=== Deploying ") == 5, (
@@ -324,10 +350,12 @@ def test_all_flag_deploys_every_source(stub_bin: Path) -> None:
 
 
 def test_clay_handler_preflights_its_source_specific_secrets(
+    deploy_workspace: DeployWorkspace,
     stub_bin: Path,
 ) -> None:
     """Clay deploys discover only their URL/token keys, never ATTIO_API_KEY."""
     result = _run_deploy(
+        deploy_workspace,
         stub_bin,
         args=("export_to_clay", "--all"),
     )
@@ -339,7 +367,10 @@ def test_clay_handler_preflights_its_source_specific_secrets(
     assert "ATTIO_API_KEY" not in result.stdout
 
 
-def test_restore_on_deploy_failure(stub_bin: Path) -> None:
+def test_restore_on_deploy_failure(
+    deploy_workspace: DeployWorkspace,
+    stub_bin: Path,
+) -> None:
     """AC2: EXIT trap restores the handler when `modal deploy` fails mid-iteration.
 
     Regression target: a refactor that drops the `trap … EXIT` registration
@@ -363,14 +394,14 @@ def test_restore_on_deploy_failure(stub_bin: Path) -> None:
     )
     _make_executable(stub_bin / "modal")
 
-    original = HANDLER_FILE.read_bytes()
+    original = deploy_workspace.handler_file.read_bytes()
 
-    result = _run_deploy(stub_bin)
+    result = _run_deploy(deploy_workspace, stub_bin)
 
     assert result.returncode != 0, (
         "Script should have exited non-zero after stub modal deploy failed"
     )
-    assert HANDLER_FILE.read_bytes() == original, (
+    assert deploy_workspace.handler_file.read_bytes() == original, (
         f"Handler file NOT restored after deploy failure — EXIT trap may be "
         f"missing or BACKUP_FRESHLY_WRITTEN gate may be wrong.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
@@ -378,6 +409,7 @@ def test_restore_on_deploy_failure(stub_bin: Path) -> None:
 
 
 def test_modal_token_isolation_at_the_secret_preflight(
+    deploy_workspace: DeployWorkspace,
     stub_bin: Path,
     tmp_path: Path,
 ) -> None:
@@ -411,6 +443,7 @@ def test_modal_token_isolation_at_the_secret_preflight(
     _make_executable(stub_bin / "modal")
 
     result = _run_deploy(
+        deploy_workspace,
         stub_bin,
         env_overrides={
             "MODAL_TOKEN_ID": "parent-shell-token",
@@ -431,7 +464,10 @@ def test_modal_token_isolation_at_the_secret_preflight(
     )
 
 
-def test_deploy_backend_selector_rejects_a_bogus_value(stub_bin: Path) -> None:
+def test_deploy_backend_selector_rejects_a_bogus_value(
+    deploy_workspace: DeployWorkspace,
+    stub_bin: Path,
+) -> None:
     """`GTM_DEPLOY_VIA_FLOX=maybe` must abort, naming the variable.
 
     Before the selector went through ``env_flag``, anything other than the
@@ -439,13 +475,18 @@ def test_deploy_backend_selector_rejects_a_bogus_value(stub_bin: Path) -> None:
     operator on a Conductor sandbox got an engine-connection failure instead
     of an answer about their typo.
     """
-    result = _run_deploy(stub_bin, env_overrides={"GTM_DEPLOY_VIA_FLOX": "maybe"})
+    result = _run_deploy(
+        deploy_workspace,
+        stub_bin,
+        env_overrides={"GTM_DEPLOY_VIA_FLOX": "maybe"},
+    )
 
     assert result.returncode != 0
     assert "GTM_DEPLOY_VIA_FLOX" in result.stderr
 
 
 def test_deploy_step_env_is_the_recipe_not_the_operator_shell(
+    deploy_workspace: DeployWorkspace,
     stub_bin: Path,
     tmp_path: Path,
 ) -> None:
@@ -482,6 +523,7 @@ def test_deploy_step_env_is_the_recipe_not_the_operator_shell(
     _make_executable(stub_bin / "modal")
 
     result = _run_deploy(
+        deploy_workspace,
         stub_bin,
         env_overrides={
             "TELEMETRY_COLLECTOR_APP": "",
@@ -500,6 +542,7 @@ def test_deploy_step_env_is_the_recipe_not_the_operator_shell(
 
 
 def test_preflight_fails_when_infisical_returns_empty_stdout(
+    deploy_workspace: DeployWorkspace,
     stub_bin: Path,
 ) -> None:
     """ai-4pw: ``infisical secrets get`` exits 0 even when the key is missing.
@@ -539,7 +582,7 @@ def test_preflight_fails_when_infisical_returns_empty_stdout(
     )
     _make_executable(stub_bin / "infisical")
 
-    result = _run_deploy(stub_bin)
+    result = _run_deploy(deploy_workspace, stub_bin)
 
     assert result.returncode != 0, (
         f"Script should have failed when `infisical secrets get` returns "
