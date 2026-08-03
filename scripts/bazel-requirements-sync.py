@@ -2,11 +2,12 @@
 # ruff: noqa: N999
 from __future__ import annotations
 
-import argparse
 import difflib
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import typer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -27,6 +28,8 @@ EXPORT_COMMAND = (
     "--no-header",
     "--no-annotate",
 )
+
+app = typer.Typer()
 
 
 def render() -> str:
@@ -58,20 +61,30 @@ def check(expected: str) -> int:
     return 1
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true")
-    args = parser.parse_args(argv)
-
+@app.command()
+def sync(
+    check_mode: bool = typer.Option(  # noqa: FBT001,FBT002
+        False,  # noqa: FBT003
+        "--check",
+        help="Check mode",
+    ),
+) -> None:
     try:
         expected = render()
     except subprocess.CalledProcessError as exc:
-        return exc.returncode
+        raise SystemExit(exc.returncode) from exc
 
-    if args.check:
-        return check(expected)
+    if check_mode:
+        raise SystemExit(check(expected))
 
     OUTPUT.write_text(expected, encoding="utf-8")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        app(args=argv, standalone_mode=False)
+    except SystemExit as exc:
+        return exc.code or 0
     return 0
 
 
