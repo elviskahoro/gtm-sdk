@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import configparser
 import importlib.util
 import sys
 from pathlib import Path
@@ -81,9 +82,10 @@ def test_workspace_root_falls_back_to_repository_for_direct_uv_execution(
 
 
 def test_bazel_pytest_config_keeps_asyncio_strict_mode() -> None:
-    config = PYTEST_CONFIG_PATH.read_text(encoding="utf-8")
+    config = configparser.ConfigParser()
+    config.read(PYTEST_CONFIG_PATH, encoding="utf-8")
 
-    assert "asyncio_mode = strict" in config
+    assert config["pytest"]["asyncio_mode"] == "strict"
 
 
 def test_pytest_args_restore_project_configuration_and_bazel_paths(
@@ -98,6 +100,8 @@ def test_pytest_args_restore_project_configuration_and_bazel_paths(
     ) == [
         "-c",
         str(root / "bazel" / "pytest.ini"),
+        "--rootdir",
+        str(root),
         "--import-mode=importlib",
         "-m",
         "not integration",
@@ -118,6 +122,8 @@ def test_pytest_args_add_junit_xml_when_bazel_requests_it(
     assert module.pytest_args(["tests/bazel/test_pytest_main.py"]) == [
         "-c",
         str(root / "bazel" / "pytest.ini"),
+        "--rootdir",
+        str(root),
         "--import-mode=importlib",
         "-m",
         "not integration",
@@ -152,6 +158,8 @@ def test_main_chdirs_to_workspace_before_invoking_pytest_and_returns_exit_code(
     assert fake_pytest.calls[0] == [
         "-c",
         str(root / "bazel" / "pytest.ini"),
+        "--rootdir",
+        str(root),
         "--import-mode=importlib",
         "-m",
         "not integration",

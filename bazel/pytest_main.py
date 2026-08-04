@@ -25,6 +25,8 @@ def pytest_args(test_paths: list[str]) -> list[str]:
     args = [
         "-c",
         str(root / "bazel" / "pytest.ini"),
+        "--rootdir",
+        str(root),
         "--import-mode=importlib",
         "-m",
         "not integration",
