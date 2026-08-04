@@ -64,7 +64,16 @@ def test_workflow_initializes_cold_namespace_cache_mounts() -> None:
     assert names.index("Cache Dagger controller and Bazel data") < names.index(
         "Initialize Namespace cache mounts",
     )
+    assert names.index("Initialize Namespace cache mounts") < names.index(
+        "Install Dagger Python SDK",
+    )
     initialize = next(
         step for step in steps if step.get("name") == "Initialize Namespace cache mounts"
     )
-    assert '"$HOME/.bazel-dagger/toolchain"' in initialize["run"]
+    for cache_path in (
+        "$HOME/.dagger-sdk/bazel-controller-venv",
+        "$HOME/.dagger-sdk/bazel-uv-python",
+        "$HOME/.bazel-dagger/toolchain",
+        "$HOME/.bazel-dagger/cache",
+    ):
+        assert f'"{cache_path}"' in initialize["run"]
