@@ -51,6 +51,17 @@ jobs:
             ~/.dagger-sdk/bazel-uv-python
             ~/.bazel-dagger
 
+      # On a cold cache, Namespace mounts the configured path after the setup
+      # step above. Recreate the mount roots before either controller setup or
+      # the Bazel download writes into them.
+      - name: Initialize Namespace cache mounts
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.dagger-sdk/bazel-controller-venv" \
+            "$HOME/.dagger-sdk/bazel-uv-python" \
+            "$HOME/.bazel-dagger/toolchain" \
+            "$HOME/.bazel-dagger/cache"
+
       - name: Install Dagger Python SDK
         run: |
           set -euo pipefail

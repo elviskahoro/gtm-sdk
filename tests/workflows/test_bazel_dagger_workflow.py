@@ -55,3 +55,16 @@ def test_workflow_persists_the_controller_binary_and_bazel_caches() -> None:
     assert "bazel-controller-venv" in workflow
     assert "sha256sum --check" in workflow
     assert "bazel-8.7.0-linux-arm64" in workflow
+
+
+def test_workflow_initializes_cold_namespace_cache_mounts() -> None:
+    workflow = _workflow()
+    steps = workflow["jobs"]["bazel_dagger"]["steps"]
+    names = [step.get("name") for step in steps]
+    assert names.index("Cache Dagger controller and Bazel data") < names.index(
+        "Initialize Namespace cache mounts",
+    )
+    initialize = next(
+        step for step in steps if step.get("name") == "Initialize Namespace cache mounts"
+    )
+    assert '"$HOME/.bazel-dagger/toolchain"' in initialize["run"]
