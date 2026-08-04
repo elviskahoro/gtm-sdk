@@ -34,7 +34,10 @@ def test_impacted_target_trials_use_dagger_and_trunk() -> None:
     workflow = _workflow(WORKFLOW)
     impacted = workflow["jobs"]["bazel_impacted_dagger"]
     assert impacted["runs-on"] == "namespace-profile-test"
-    assert impacted["if"] == "github.event.pull_request.head.repo.full_name == github.repository"
+    assert (
+        impacted["if"]
+        == "github.event.pull_request.head.repo.full_name == github.repository"
+    )
     assert workflow["concurrency"] == {
         "group": "arm64-dagger-bazel-${{ github.workflow }}-${{ github.ref }}",
         "cancel-in-progress": True,
@@ -45,7 +48,6 @@ def test_impacted_target_trials_use_dagger_and_trunk() -> None:
         if step.get("name") == "Run impacted Bazel targets in Dagger"
     )
     assert "BAZEL_DAGGER_BASE_SHA" in run_step["env"]
-    assert "BAZEL_DAGGER_HEAD_SHA" in run_step["env"]
     assert "BAZEL_DAGGER_DIFF_JAR" in run_step["run"]
     assert "bazel-diff_deploy.jar" in WORKFLOW.read_text()
 
@@ -59,7 +61,7 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     pipeline = PIPELINE.read_text()
     assert 'dagger.Platform("linux/arm64")' in pipeline
     assert "BAZEL_DAGGER_BASE_SHA" in pipeline
-    assert "BAZEL_DAGGER_HEAD_SHA" in pipeline
+    assert 'head_sha="$(git rev-parse HEAD)"' in pipeline
     assert "BAZEL_DAGGER_DIFF_JAR" in pipeline
     assert 'directory("/src/.git", dag.host().directory(".git"))' in pipeline
     assert "get-impacted-targets" in pipeline

@@ -17,8 +17,9 @@ RESULT_PATH = "/src/bazel_result"
 IMPACTED_VALIDATE_CMD = """
 set -euo pipefail
 base_sha="${BAZEL_DAGGER_BASE_SHA:?missing PR base SHA}"
-head_sha="${BAZEL_DAGGER_HEAD_SHA:?missing PR head SHA}"
-test "$(git rev-parse HEAD)" = "${head_sha}"
+# GitHub checks out the PR merge commit; this is the exact revision that the
+# GitHub-hosted Trunk action tests against the PR base.
+head_sha="$(git rev-parse HEAD)"
 java="$(bazel --output_user_root=/var/cache/bazel/output-user-root info java-home)/bin/java"
 hash_root=/var/cache/bazel/impacted-targets
 mkdir -p "${hash_root}"
@@ -110,13 +111,13 @@ apt-get install --yes --no-install-recommends git unzip
             "BAZEL_DAGGER_BASE_SHA",
             os.environ["BAZEL_DAGGER_BASE_SHA"],
         )
-        .with_env_variable(
-            "BAZEL_DAGGER_HEAD_SHA",
-            os.environ["BAZEL_DAGGER_HEAD_SHA"],
-        )
     )
     return container.with_exec(
-        ["bash", "-c", f"({IMPACTED_VALIDATE_CMD}); rc=$?; echo ${{rc}} > {RESULT_PATH}"],
+        [
+            "bash",
+            "-c",
+            f"({IMPACTED_VALIDATE_CMD}); rc=$?; echo ${{rc}} > {RESULT_PATH}",
+        ],
     )
 
 
