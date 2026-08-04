@@ -28,7 +28,7 @@ def test_only_impacted_target_check_runs_for_pull_requests() -> None:
 def test_impacted_targets_use_dagger_and_trunk() -> None:
     workflow = _workflow(WORKFLOW)
     impacted = workflow["jobs"]["bazel_impacted"]
-    assert impacted["runs-on"] == "namespace-profile-test"
+    assert impacted["runs-on"] == "ubuntu-24.04-arm"
     assert (
         impacted["if"]
         == "github.event.pull_request.head.repo.full_name == github.repository"
@@ -90,20 +90,17 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "test //..." not in pipeline
 
 
-def test_workflow_initializes_namespace_cache_mounts_before_dagger() -> None:
+def test_workflow_restores_github_cache_before_dagger() -> None:
     workflow = _workflow(WORKFLOW)
     steps = workflow["jobs"]["bazel_impacted"]["steps"]
     names = [step.get("name") for step in steps]
     assert names.index("Prepare self-contained Git history") < names.index(
         "Run impacted Bazel targets in Dagger",
     )
-    assert names.index("Prepare Namespace cache paths") < names.index(
-        "Cache Dagger controller and Bazel data",
-    )
     assert names.index("Cache Dagger controller and Bazel data") < names.index(
-        "Initialize Namespace cache mounts",
+        "Prepare cached Dagger and Bazel paths",
     )
-    assert names.index("Initialize Namespace cache mounts") < names.index(
+    assert names.index("Prepare cached Dagger and Bazel paths") < names.index(
         "Install Dagger Python SDK",
     )
     source_step = next(
@@ -112,18 +109,19 @@ def test_workflow_initializes_namespace_cache_mounts_before_dagger() -> None:
         if step.get("name") == "Prepare self-contained Git history"
     )
     assert "https://github.com/${{ github.repository }}.git" in source_step["run"]
-    for step_name in (
-        "Prepare Namespace cache paths",
-        "Initialize Namespace cache mounts",
+    cache = next(
+        step
+        for step in steps
+        if step.get("name") == "Cache Dagger controller and Bazel data"
+    )
+    assert cache["uses"].startswith("actions/cache/restore@")
+    assert "runner.arch" in cache["with"]["key"]
+    for cache_path in (
+        "~/.dagger-sdk/bazel-controller-venv",
+        "~/.dagger-sdk/bazel-uv-python",
+        "~/.bazel-dagger",
     ):
-        step = next(step for step in steps if step.get("name") == step_name)
-        for cache_path in (
-            "$HOME/.dagger-sdk/bazel-controller-venv",
-            "$HOME/.dagger-sdk/bazel-uv-python",
-            "$HOME/.bazel-dagger/toolchain",
-            "$HOME/.bazel-dagger/cache",
-        ):
-            assert f'"{cache_path}"' in step["run"]
+        assert cache_path in cache["with"]["path"]
 
 
 def test_workflow_passes_same_repo_pr_metadata_and_token_to_dagger() -> None:

@@ -1,3 +1,5 @@
+# ruff: noqa: S101 -- asserts are the point of a workflow contract test.
+
 """Static invariants for the nightly Integration-test workflow.
 
 Guards the regressions from issue #223, which cost ten days of silently red
@@ -89,36 +91,27 @@ def test_no_step_reaches_for_the_dagger_cloud_engine(
         )
 
 
-def test_runs_on_a_namespace_runner(steps: list[dict[str, Any]]) -> None:
-    """The profile's container-image cache is why this job is on Namespace.
-
-    It serves registry.dagger.io/engine locally after the first run — the same
-    property `--cloud` was chasing. Dropping back to a GitHub-hosted runner would
-    silently reinstate the cold pull on every run.
-    """
+def test_runs_on_a_github_hosted_arm64_runner(steps: list[dict[str, Any]]) -> None:
     workflow = yaml.safe_load(WORKFLOW.read_text())
 
-    assert workflow["jobs"]["pytest-integration"]["runs-on"] == "namespace-profile-test"
+    assert workflow["jobs"]["pytest-integration"]["runs-on"] == "ubuntu-24.04-arm"
     checkout = _step(steps, "Checkout")
-    assert checkout["uses"].startswith("namespacelabs/nscloud-checkout-action@")
+    assert checkout["uses"].startswith("actions/checkout@")
+    cache = _step(steps, "Restore Dagger Python SDK")
+    assert cache["uses"].startswith("actions/cache/restore@")
+    assert "runner.arch" in cache["with"]["key"]
 
 
-def test_dagger_sdk_install_survives_pep_668(steps: list[dict[str, Any]]) -> None:
-    """No bare `pip`/`--system` install — the Namespace image is externally managed.
-
-    Its system Python is not writable without root, so `pip install dagger-io
-    anyio` (what this job used on ubuntu-latest) fails outright. The venv's bin
-    must reach $GITHUB_PATH or `dagger run python` resolves an interpreter with
-    no SDK.
-    """
+def test_dagger_sdk_install_validates_the_cached_venv(
+    steps: list[dict[str, Any]],
+) -> None:
     install = _step(steps, "Install Dagger Python SDK")
     run = install["run"]
 
     assert "uv venv" in run
     assert "uv pip install --python" in run
     assert "$GITHUB_PATH" in run
-    assert "pip install dagger-io" not in run
-    assert "--system" not in run
+    assert 'version("dagger-io") == "0.21.7"' in run
 
 
 def test_engine_pull_mitigation_is_present(steps: list[dict[str, Any]]) -> None:
