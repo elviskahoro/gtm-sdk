@@ -207,7 +207,7 @@ def build_container(
     )
     install_system_tools = """
 apt-get update
-apt-get install --yes --no-install-recommends build-essential git unzip
+apt-get install --yes --no-install-recommends build-essential ca-certificates curl git unzip
 """.strip()
     container = (
         dag.container(platform=dagger.Platform("linux/arm64"))
