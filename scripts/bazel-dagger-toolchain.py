@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
-BAZEL_VERSION = "7.6.0"
-BAZEL_SHA256 = "e22a8de701585193d886a29acad965f7070db5a98b44d2fc22fc44e65da9e7b5"
+BAZEL_VERSION = "9.2.0"
+BAZEL_SHA256 = "049dd21f40ad979db11c3ee68c96a42ce75f1185e69ac61ab20de1501427a410"
 BAZEL_URL = (
     f"https://releases.bazel.build/{BAZEL_VERSION}/release/"
     f"bazel-{BAZEL_VERSION}-linux-arm64"

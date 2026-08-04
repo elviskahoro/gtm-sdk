@@ -125,6 +125,11 @@ graph through the committed Flox toolchain, for example
 `flox activate -- bazel test //tests/libs/attio:TARGET --config=ci` or
 `flox activate -- bazel test //tests/libs/attio/... --config=ci`.
 
+The required `Unit tests` CI check is the ARM64 Dagger Bazel graph with
+`--test_tag_filters=-manual`; Bazel's pytest launcher also excludes tests marked
+`integration`. The optional impacted-target job registers Trunk graph metadata
+for same-repository pull requests and is not a replacement for the full suite.
+
 To reproduce the pull-request Bazel job in its Linux ARM64 Dagger container,
 run `uv run scripts/bazel-dagger-validate.py`. It compares `HEAD` with
 `origin/main` by default; use `--base <ref>` to select another comparison base.

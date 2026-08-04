@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import sys
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -66,8 +67,19 @@ def test_dagger_bazel_download_pins_are_stable() -> None:
     assert f"v{module.BAZEL_DIFF_VERSION}" in module.BAZEL_DIFF_URL
     assert module.BAZEL_DIFF_URL.endswith("bazel-diff_deploy.jar")
     assert module.BAZEL_SHA256 == (
-        "e22a8de701585193d886a29acad965f7070db5a98b44d2fc22fc44e65da9e7b5"
+        "049dd21f40ad979db11c3ee68c96a42ce75f1185e69ac61ab20de1501427a410"
     )
+
+
+def test_dagger_bazel_pin_matches_flox_manifest() -> None:
+    module = _load()
+    manifest = tomllib.loads(
+        (REPO_ROOT / ".flox" / "env" / "manifest.toml").read_text(),
+    )
+    bazel = manifest["install"]["bazel"]
+
+    assert bazel["version"] == module.BAZEL_VERSION
+    assert bazel["pkg-path"] == "flox/bazel"
 
 
 def test_corrupt_artifact_is_replaced_after_verification(

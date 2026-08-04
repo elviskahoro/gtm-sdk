@@ -6,6 +6,11 @@
       "bash": {
         "pkg-path": "bash"
       },
+      "bazel": {
+        "pkg-path": "flox/bazel",
+        "pkg-group": "bazel",
+        "version": "9.2.0"
+      },
       "bd": {
         "pkg-path": "elvis/bd",
         "version": "1.1.0",
@@ -97,6 +102,99 @@
     }
   },
   "packages": [
+    {
+      "attr_path": "bazel",
+      "broken": false,
+      "derivation": "/nix/store/i1pmbq8r3dviwydmv98qw8q0zzfdc32b-bazel-9.2.0.drv",
+      "description": "Prebuilt Bazel 9.2.0 from bazel.build",
+      "install_id": "bazel",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/floxenvs?rev=9371c41386d5490df070c80584642a0ebd3c5b97",
+      "name": "bazel-9.2.0",
+      "pname": "bazel",
+      "rev": "9371c41386d5490df070c80584642a0ebd3c5b97",
+      "rev_count": 14323,
+      "rev_date": "2026-07-14T01:01:02Z",
+      "scrape_date": "2026-08-04T19:19:16.633549Z",
+      "stabilities": [
+        "staging",
+        "unstable",
+        "stable"
+      ],
+      "unfree": false,
+      "version": "9.2.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/v3rbpv051d9kf0w9gp06pdg2f1hp2kz8-bazel-9.2.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "bazel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bazel",
+      "broken": false,
+      "derivation": "/nix/store/d9rpyh1y9rj87k5fyi018kkxgaxcc25s-bazel-9.2.0.drv",
+      "description": "Prebuilt Bazel 9.2.0 from bazel.build",
+      "install_id": "bazel",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/floxenvs?rev=9371c41386d5490df070c80584642a0ebd3c5b97",
+      "name": "bazel-9.2.0",
+      "pname": "bazel",
+      "rev": "9371c41386d5490df070c80584642a0ebd3c5b97",
+      "rev_count": 14323,
+      "rev_date": "2026-07-14T01:01:02Z",
+      "scrape_date": "2026-08-04T19:19:16.633551Z",
+      "stabilities": [
+        "staging",
+        "unstable",
+        "stable"
+      ],
+      "unfree": false,
+      "version": "9.2.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/3zmdy5lxcgqy59cf6pzz97ba8jr5n5qk-bazel-9.2.0"
+      },
+      "system": "aarch64-linux",
+      "group": "bazel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bazel",
+      "broken": false,
+      "derivation": "/nix/store/6s0r42308acpjb1g3932vzckvc9wd6d9-bazel-9.2.0.drv",
+      "description": "Prebuilt Bazel 9.2.0 from bazel.build",
+      "install_id": "bazel",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/floxenvs?rev=9371c41386d5490df070c80584642a0ebd3c5b97",
+      "name": "bazel-9.2.0",
+      "pname": "bazel",
+      "rev": "9371c41386d5490df070c80584642a0ebd3c5b97",
+      "rev_count": 14323,
+      "rev_date": "2026-07-14T01:01:02Z",
+      "scrape_date": "2026-08-04T19:19:16.633552Z",
+      "stabilities": [
+        "staging",
+        "unstable",
+        "stable"
+      ],
+      "unfree": false,
+      "version": "9.2.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/km8hfgx235w3as4d75qrlbvjyfirsh9l-bazel-9.2.0"
+      },
+      "system": "x86_64-linux",
+      "group": "bazel",
+      "priority": 5
+    },
     {
       "attr_path": "bash",
       "broken": false,
@@ -1312,6 +1410,11 @@
       "install": {
         "bash": {
           "pkg-path": "bash"
+        },
+        "bazel": {
+          "pkg-path": "flox/bazel",
+          "pkg-group": "bazel",
+          "version": "9.2.0"
         },
         "bd": {
           "pkg-path": "elvis/bd",
