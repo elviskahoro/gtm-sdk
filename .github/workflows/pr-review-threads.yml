@@ -18,23 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: true
-
-      - name: Install Dagger Python SDK
-        run: uv sync --frozen --group dev
-
-      - name: Setup Dagger
-        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
-
+      - uses: flox/install-flox-action@1128abd73431089ab9d871c893b4e72a729354e1 # v2.6.0
+      - name: Verify Flox installation
+        run: flox --version
       - name: Inspect unresolved threads
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_WITH_DAGGER: "1"
-        run: |
-          uv run scripts/pr-review-threads.py inspect \
-            --repo "${{ github.repository }}" \
-            --pr "${{ inputs.pr }}" \
-            --unresolved-only
+        run: flox activate --dir . --mode run -- scripts/pr-review-threads.py inspect --repo "${{ github.repository }}" --pr "${{ inputs.pr }}" --unresolved-only
