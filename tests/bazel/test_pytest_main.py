@@ -86,6 +86,7 @@ def test_bazel_pytest_config_keeps_asyncio_strict_mode() -> None:
     config.read(PYTEST_CONFIG_PATH, encoding="utf-8")
 
     assert config["pytest"]["asyncio_mode"] == "strict"
+    assert "--ignore-glob=*/bazel-*" in config["pytest"]["addopts"]
 
 
 def test_pytest_args_restore_project_configuration_and_bazel_paths(
