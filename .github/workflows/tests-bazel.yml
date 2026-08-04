@@ -5,13 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      force_full:
-        description: Run the full Bazel suite even for an irrelevant-only diff
-        required: false
-        type: boolean
-        default: true
+  workflow_dispatch: {}
 
 permissions:
   contents: read
