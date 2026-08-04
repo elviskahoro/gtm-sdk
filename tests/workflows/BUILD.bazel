@@ -50,6 +50,7 @@ pytest_test(
     name = "test_unit_workflow",
     srcs = ["test_unit_workflow.py"],
     data = [
+        "//:flox_manifest_sources",
         "//:github_workflow_sources",
         "//:pyproject.toml",
         "//:uv.lock",

@@ -56,6 +56,16 @@ filegroup(
     visibility = ["//tests/workflows:__pkg__"],
 )
 
+# keep
+filegroup(
+    name = "flox_manifest_sources",
+    srcs = [
+        ".flox/env/manifest.lock",
+        ".flox/env/manifest.toml",
+    ],
+    visibility = ["//tests/workflows:__pkg__"],
+)
+
 modules_mapping(
     name = "modules_map",
     include_stub_packages = True,
