@@ -60,8 +60,13 @@ SUITE_CREDENTIALS = (
 def steps() -> list[dict[str, Any]]:
     workflow = yaml.safe_load(WORKFLOW.read_text())
     jobs = workflow["jobs"]
-    assert len(jobs) == 1, "expected a single job; update these guards if that changes"
     return list(jobs["pytest-integration"]["steps"])
+
+
+@pytest.fixture
+def publish_job() -> dict[str, Any]:
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    return workflow["jobs"]["publish_dependency_image"]
 
 
 @pytest.fixture
@@ -81,7 +86,9 @@ def test_pipeline_runs_on_a_local_dagger_engine(run_step: dict[str, Any]) -> Non
     assert run_step["run"].strip() == f"dagger run python {PIPELINE_PATH}"
 
 
-def test_pipeline_uses_the_locked_full_dependency_image() -> None:
+def test_pipeline_uses_the_locked_full_dependency_image(
+    steps: list[dict[str, Any]],
+) -> None:
     source = PYTEST_INTEGRATION_DAGGER.read_text(encoding="utf-8")
     dependency_image = (
         PYTEST_INTEGRATION_DAGGER.parent / "pytest_dependency_image.py"
@@ -91,6 +98,9 @@ def test_pipeline_uses_the_locked_full_dependency_image() -> None:
     assert "dependency_base(source)" in source
     assert "curl -LsSf https://astral.sh/uv/install.sh" not in source
     assert '"uv", "sync"' not in source
+    assert "dependency_image_ref" in dependency_image
+    assert "dag.container().from_(dependency_image_ref())" in dependency_image
+    assert "dag.container().from_(toolchain_image)" in dependency_image
     assert "uv sync --all-extras --dev --compile-bytecode --locked" in dependency_image
 
     manifest = tomllib.loads(
@@ -99,9 +109,36 @@ def test_pipeline_uses_the_locked_full_dependency_image() -> None:
         ),
     )
     assert manifest["install"]["uv"]["version"] == "0.11.26"
-    assert '.with_directory("/workspace/.flox", source.directory(".flox"))' in (
-        dependency_image
+    run = _step(steps, "Run integration pytest in Dagger")
+    assert run["env"]["PYTEST_DEPENDENCY_IMAGE"] == (
+        "${{ needs.publish_dependency_image.outputs.pytest_image }}"
     )
+
+
+def test_dependency_image_is_published_as_a_prerequisite(
+    publish_job: dict[str, Any],
+) -> None:
+    assert publish_job["runs-on"] == "ubuntu-24.04-arm"
+    assert publish_job["steps"][-1]["name"] == "Publish ARM64 pytest dependency image"
+    assert "pytest_dependency_image_publish.py" in publish_job["steps"][-1]["run"]
+    assert publish_job["outputs"]["pytest_image"] == (
+        "${{ steps.publish_pytest.outputs.image_ref }}"
+    )
+
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    assert workflow["permissions"]["packages"] == "write"
+    integration = workflow["jobs"]["pytest-integration"]
+    assert integration["needs"] == "publish_dependency_image"
+
+
+def test_dependency_runtime_contract_is_defined() -> None:
+    dependency_image = (
+        PYTEST_INTEGRATION_DAGGER.parent / "pytest_dependency_image.py"
+    ).read_text(encoding="utf-8")
+    assert "id -u" in dependency_image
+    assert "test -w /opt/venv" in dependency_image
+    assert "command -v gh" in dependency_image
+    assert "command -v time" in dependency_image
 
 
 def test_integration_secrets_are_content_addressed() -> None:
@@ -220,14 +257,20 @@ def test_every_dagger_base_image_is_digest_pinned() -> None:
             ):
                 continue
             argument = node.args[0]
+            original_argument = argument
             if isinstance(argument, ast.Name):
                 argument = assignments.get(argument.id)
-            rendered = ast.unparse(argument) if argument is not None else ""
+            rendered = ast.unparse(original_argument)
             try:
                 image = ast.literal_eval(argument) if argument is not None else None
             except (ValueError, SyntaxError):
                 image = None
-            assert isinstance(image, str)
+            if not isinstance(image, str):
+                assert rendered in {"dependency_image_ref()", "toolchain_image"}, (
+                    f"{path}:{node.lineno} uses an unexpected dynamic Dagger base: "
+                    f"{rendered}"
+                )
+                continue
             assert re.search(
                 r"@sha256:[0-9a-fA-F]{64}$",
                 image,

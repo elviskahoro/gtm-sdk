@@ -1,4 +1,4 @@
-name: Publish Flox toolchain image
+name: Publish Flox CI images
 
 on: # yamllint disable-line rule:empty-values
   workflow_dispatch: {}
@@ -9,6 +9,11 @@ on: # yamllint disable-line rule:empty-values
       - flox/toolchain/.flox/env/manifest.toml
       - flox/toolchain/.flox/env/manifest.lock
       - .github/workflows/ci/flox_image_dagger.py
+      - .github/workflows/ci/pytest_dependency_image.py
+      - .github/workflows/ci/pytest_dependency_image_publish.py
+      - .github/workflows/flox-image-publish.yml
+      - pyproject.toml
+      - uv.lock
 
 permissions:
   contents: read
@@ -20,7 +25,15 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+          - architecture: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -32,15 +45,23 @@ jobs:
           version: 0.21.7
       - name: Check latest publication eligibility
         env:
+          ARCHITECTURE: ${{ matrix.architecture }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)" == "${GITHUB_SHA}" ]]; then
+          if [[ "${ARCHITECTURE}" == "arm64" ]] && [[ "$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)" == "${GITHUB_SHA}" ]]; then
             echo "FLOX_PUBLISH_LATEST=true" >> "$GITHUB_ENV"
           else
             echo "FLOX_PUBLISH_LATEST=false" >> "$GITHUB_ENV"
           fi
       - name: Publish toolchain image
+        id: publish_toolchain
         env:
-          FLOX_TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository }}/flox-toolchain:${{ github.sha }}
+          FLOX_TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository }}/flox-toolchain:${{ github.sha }}-${{ matrix.architecture }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run dagger run python .github/workflows/ci/flox_image_dagger.py
+      - name: Publish pytest dependency image
+        env:
+          FLOX_TOOLCHAIN_IMAGE: ${{ steps.publish_toolchain.outputs.image_ref }}
+          PYTEST_DEPENDENCY_IMAGE: ghcr.io/${{ github.repository }}/pytest-deps:${{ github.sha }}-${{ matrix.architecture }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run dagger run python .github/workflows/ci/pytest_dependency_image_publish.py

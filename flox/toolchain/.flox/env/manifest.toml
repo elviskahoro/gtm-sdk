@@ -13,6 +13,7 @@ git.pkg-path = "git"
 bash.pkg-path = "bash"
 coreutils.pkg-path = "coreutils"
 findutils.pkg-path = "findutils"
+gh.pkg-path = "gh"
 
 [containerize.config]
 user = "1000:1000"

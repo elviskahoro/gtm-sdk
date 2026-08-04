@@ -1,0 +1,16 @@
+---
+title: "CI images"
+description: "How Flox-based CI images are published, consumed, and validated across architectures."
+---
+
+CI's pytest dependency image is built from the published Flox toolchain image. GitHub Actions publishes both `arm64` and `amd64` variants with immutable tags in this form:
+
+```text
+ghcr.io/elviskahoro/gtm-sdk/pytest-deps:<commit-sha>-<architecture>
+```
+
+The integration workflow selects the `arm64` tag because it runs on `ubuntu-24.04-arm`. Other consumers must select the tag matching their runner architecture; tests must not use `latest`.
+
+The image contains the locked Python environment plus the Flox runtime tools used by CI (`uv`, `git`, `gh`, and `time`). The runtime contract is UID 1000, with `/opt/venv` and `/home/runner/.cache/uv` writable by that user. Publication validates that the image's `uv` version matches the version recorded in `flox/toolchain/.flox/env/manifest.lock`.
+
+Image publication is a GitHub Actions responsibility. Local setup and review workflows consume an already-published immutable image and do not build or push the pytest image.

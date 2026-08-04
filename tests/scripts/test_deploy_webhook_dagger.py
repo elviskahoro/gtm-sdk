@@ -9,11 +9,9 @@ import importlib.util
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
-
-from scripts.lib import container
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -79,7 +77,11 @@ async def test_dagger_transport_keeps_recipe_in_one_container(
     wrapper = AsyncMock()
     monkeypatch.setattr(script_module, "run_recipe_in_container_async", wrapper)
     handler = REPO_ROOT / "webhooks" / "export_to_attio.py"
-    await script_module._deploy_via_dagger(handler, deploy_env={"GH_TOKEN": "secret"})
+    await script_module._deploy_via_dagger(
+        handler,
+        repo_root=REPO_ROOT,
+        deploy_env={"GH_TOKEN": "secret"},
+    )
 
     assert wrapper.await_count == 1
     call = wrapper.await_args
@@ -98,26 +100,15 @@ def test_secret_scrub_surface_remains_explicit(script_module: ModuleType) -> Non
     assert "UV_PROJECT_ENVIRONMENT" not in keys
 
 
-def test_container_phase_cannot_reach_host_cleanup(
+def test_isolated_checkout_keeps_placeholder_out_of_host_tree(
     script_module: ModuleType,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Container re-entry must fail before lock, backup, or signal setup."""
-    monkeypatch.setenv("CONTAINER_PHASE", "1")
-    monkeypatch.setenv("FLOX_ENV", "/nix/store/flox")
-    monkeypatch.setenv(container.EXPECTED_MANIFEST_LOCK_SHA256, "a" * 64)
-    monkeypatch.setenv(container.BAKED_MANIFEST_LOCK_SHA256, "a" * 64)
-
-    host_only = {
-        name: Mock(side_effect=AssertionError(f"host cleanup reached: {name}"))
-        for name in ("_acquire_lock", "_write_backup", "_verify_clean_restore")
-    }
-    for name, replacement in host_only.items():
-        monkeypatch.setattr(script_module, name, replacement)
-    monkeypatch.setattr(script_module.atexit, "register", host_only["_acquire_lock"])
-    monkeypatch.setattr(script_module.signal, "signal", host_only["_write_backup"])
-
-    with pytest.raises(SystemExit, match="1"):
-        script_module.main()
-    for replacement in host_only.values():
-        replacement.assert_not_called()
+    """The temporary deploy checkout is distinct from the operator tree."""
+    original = (REPO_ROOT / "webhooks" / "export_to_attio.py").read_text()
+    with script_module._isolated_checkout() as checkout:
+        isolated = Path(checkout) / "webhooks" / "export_to_attio.py"
+        isolated.write_text(
+            isolated.read_text().replace("WebhookModelToReplace", "Example"),
+        )
+        assert "WebhookModelToReplace" not in isolated.read_text()
+    assert (REPO_ROOT / "webhooks" / "export_to_attio.py").read_text() == original

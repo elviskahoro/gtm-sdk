@@ -31,6 +31,17 @@ py_binary(
 )
 
 py_binary(
+    name = "pytest_dependency_image_publish",
+    srcs = ["pytest_dependency_image_publish.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":pytest_dependency_image",
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
     name = "pytest_integration_dagger",
     srcs = ["pytest_integration_dagger.py"],
     visibility = ["//:__subpackages__"],
@@ -74,6 +85,7 @@ py_library(
         "bazel_dagger.py",
         "flox_image_dagger.py",
         "pytest_dependency_image.py",
+        "pytest_dependency_image_publish.py",
         "pytest_integration_dagger.py",
         "triage_dagger.py",
         "triage_diagnose_dagger.py",
