@@ -37,7 +37,7 @@ def _controller_env(
     *,
     source_dir: Path,
     toolchain_dir: Path,
-    mode: str = "full",
+    run_impacted: bool = True,
 ) -> dict[str, str]:
     """Construct the minimal environment exposed to the Dagger controller."""
     # Keep command lookup and ordinary local Dagger configuration, but do not
@@ -54,15 +54,15 @@ def _controller_env(
             "BAZEL_DAGGER_CACHE_DIR": str(toolchain_dir.parent / "cache"),
             "BAZEL_DAGGER_DIFF_JAR": str(toolchain_dir / "bazel-diff_deploy.jar"),
             "BAZEL_DAGGER_SOURCE_DIR": str(source_dir),
-            "BAZEL_DAGGER_MODE": mode,
+            "BAZEL_RUN_IMPACTED": str(run_impacted).lower(),
             "DAGGER_NO_NAG": "1",
         },
     )
     return env
 
 
-def run(base: str, mode: str) -> int:
-    """Validate the current checkout against a selected Git base revision."""
+def run(base: str, *, run_impacted: bool = True) -> int:
+    """Validate the current checkout and optionally compare it with a Git base."""
     base_commit = _resolve_commit(base)
     head_commit = _resolve_commit("HEAD")
     toolchain_dir = Path.home() / ".bazel-dagger" / "toolchain"
@@ -96,7 +96,7 @@ def run(base: str, mode: str) -> int:
             env=_controller_env(
                 source_dir=source_dir,
                 toolchain_dir=toolchain_dir,
-                mode=mode,
+                run_impacted=run_impacted,
             ),
             check=False,
         ).returncode
@@ -111,14 +111,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Git ref to compare with HEAD",
     )
     parser.add_argument(
-        "--mode",
-        choices=("full", "impacted"),
-        default="full",
-        help="Bazel validation mode (default: full)",
+        "--skip-impacted",
+        action="store_true",
+        help="Run only the full Bazel graph",
     )
     args = parser.parse_args(argv)
     try:
-        return run(args.base, args.mode)
+        return run(args.base, run_impacted=not args.skip_impacted)
     except subprocess.CalledProcessError as exc:
         return exc.returncode
     except FileNotFoundError as exc:

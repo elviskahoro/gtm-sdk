@@ -86,7 +86,7 @@ jobs:
       # is the classic workflow-run-target-code-checkout weakness that semgrep flags.
       # The next step fetches the failing commit as a bare object instead, so the
       # diff can be read out of it without it ever becoming the working tree -- the
-      # same trusted-asset pattern tests-unit.yml uses for its CI pipeline files.
+      # same trusted-asset pattern tests-bazel.yml uses for its CI pipeline files.
       - name: Checkout the default branch
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:

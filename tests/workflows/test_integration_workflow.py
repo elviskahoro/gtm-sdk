@@ -25,6 +25,8 @@ These parse the workflow rather than substring-matching it, so commenting a step
 out fails the guard instead of silently satisfying it.
 """
 
+import ast
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +78,36 @@ def _step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 def test_pipeline_runs_on_a_local_dagger_engine(run_step: dict[str, Any]) -> None:
     assert run_step["run"].strip() == f"dagger run python {PIPELINE_PATH}"
+
+
+def test_pipeline_uses_the_locked_full_dependency_image() -> None:
+    source = PYTEST_INTEGRATION_DAGGER.read_text(encoding="utf-8")
+    dependency_image = (
+        PYTEST_INTEGRATION_DAGGER.parent / "pytest_dependency_image.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from pytest_dependency_image import" in source
+    assert "dependency_base(source)" in source
+    assert "curl -LsSf https://astral.sh/uv/install.sh" not in source
+    assert '"uv", "sync"' not in source
+    assert "uv sync --all-extras --dev --compile-bytecode --locked" in dependency_image
+
+    manifest = tomllib.loads(
+        (Path(__file__).parents[2] / ".flox" / "env" / "manifest.toml").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert manifest["install"]["uv"]["version"] == "0.11.26"
+    assert '.with_directory("/workspace/.flox", source.directory(".flox"))' in (
+        dependency_image
+    )
+
+
+def test_integration_secrets_are_content_addressed() -> None:
+    source = PYTEST_INTEGRATION_DAGGER.read_text(encoding="utf-8")
+
+    assert "sha256(value.encode()).hexdigest()" in source
+    assert "dag.set_secret(secret_name, value)" in source
 
 
 def test_no_step_reaches_for_the_dagger_cloud_engine(
@@ -164,3 +196,32 @@ def test_dagger_cloud_token_is_telemetry_only(run_step: dict[str, Any]) -> None:
     rejected it. Absence degrades to "no traces", not a failed run.
     """
     assert run_step["env"]["DAGGER_CLOUD_TOKEN"] == "${{ secrets.DAGGER_CLOUD_TOKEN }}"
+
+
+def test_every_dagger_base_image_is_digest_pinned() -> None:
+    ci_dir = PYTEST_INTEGRATION_DAGGER.parent
+
+    for path in sorted(ci_dir.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        assignments = {
+            target.id: node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "from_"
+                and node.args
+            ):
+                continue
+            argument = node.args[0]
+            if isinstance(argument, ast.Name):
+                argument = assignments.get(argument.id)
+            rendered = ast.unparse(argument) if argument is not None else ""
+            assert "@sha256:" in rendered, (
+                f"{path}:{node.lineno} uses an unpinned Dagger base: {rendered}"
+            )

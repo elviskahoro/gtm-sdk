@@ -7,11 +7,10 @@ when adding tests.
 
 ## Adding a pytest plugin
 
-The unit CI container runs with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`, so a plugin
-that is merely installed is **silently inert**. It has to be named explicitly,
-and *where* you name it is load-bearing: put the `-p` flag in `addopts`
-(`pyproject.toml`), not in `PYTEST_CMD`, and use the plugin's **entry-point
-name**, not its module name.
+CI may disable pytest plugin autoloading, so a plugin that is merely installed
+can be **silently inert**. It has to be named explicitly, and *where* you name
+it is load-bearing: put the `-p` flag in `addopts` (`pyproject.toml`), not in a
+runner command, and use the plugin's **entry-point name**, not its module name.
 
 Both traps, and why they bite, are documented at the point of use —
 `pyproject.toml`'s `[tool.pytest.ini_options]` block, directly above `addopts`.

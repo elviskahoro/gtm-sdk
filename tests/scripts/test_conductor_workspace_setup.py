@@ -126,7 +126,7 @@ def _write_flox(
     )
     if succeeds:
         flox_bin.mkdir(parents=True)
-        for tool in ("uv", "dolt", "infisical", "gh", "bd", "roborev"):
+        for tool in ("uv", "dolt", "infisical", "gh", "bd", "roborev", "bazel"):
             _write_stub(
                 flox_bin,
                 tool,

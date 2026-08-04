@@ -23,7 +23,7 @@ def flox_activate_prefix(repo_root: Path, *, executable: str = "flox") -> list[s
     module's own ``__file__`` (e.g. via a shared ``scripts.lib.env.REPO_ROOT``
     constant): the CI pytest pipeline pre-imports ``scripts.lib`` from a
     second, stable checkout at ``/opt/gtm-sdk`` (see
-    ``.github/workflows/ci/pytest_dagger.py``'s ``sitecustomize.py`` shim),
+    the CI runner's ``sitecustomize.py`` shim),
     which is a different path than the actual repo under test (``/src``).
     A module-level ``REPO_ROOT`` computed inside ``scripts/lib/`` would
     silently resolve to that stable shim location instead of the caller's

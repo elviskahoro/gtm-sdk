@@ -65,15 +65,9 @@ gtm = "cli.main:run"
 required-version = ">=0.11.8,<0.12"
 
 [tool.pytest.ini_options]
-# `-p _hypothesis_pytestplugin` lives HERE, not in PYTEST_CMD in
-# .github/workflows/ci/pytest_dagger.py, and that placement is load-bearing.
-# The unit CI container runs with PYTEST_DISABLE_PLUGIN_AUTOLOAD=1, so the
-# plugin must be named explicitly -- but on a pull request, tests-unit.yml
-# deliberately executes the BASE branch's copy of pytest_dagger.py (see its
-# "Run pytest in Dagger" step: PR-authored CI code must never run with trusted
-# Namespace/registry credentials). A `-p` flag added there is therefore ignored
-# until it reaches main, which no PR can ever go green on. addopts is read from
-# the source tree, so it applies to PR runs, main runs and local runs alike.
+# The plugin selection lives HERE, not in a runner command, and that placement is
+# load-bearing. `addopts` is read from the source tree, so it applies to Bazel,
+# pull requests, main runs and local runs alike.
 # tests/test_hypothesis_plugin.py fails loudly if the plugin stops loading.
 #
 # Use the ENTRY-POINT name `hypothesispytest`, never the module name

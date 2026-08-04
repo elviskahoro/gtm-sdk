@@ -61,7 +61,7 @@ def _mkdir(path: Path) -> Path:
 #
 #   * locally, `uv sync` installs the repo editable, and setuptools' editable
 #     shim is a sys.meta_path finder that answers regardless of cwd;
-#   * in unit CI, pytest_dagger.py installs the project NON-editable
+#   * in containerized CI, the project may be installed NON-editable
 #     (`uv pip install ... .`), so `scripts/` and `libs/` are real packages in
 #     /opt/venv site-packages. A regular package anywhere on sys.path beats a
 #     namespace portion, so path order cannot save us.
