@@ -1,5 +1,5 @@
 # ruff: noqa: ANN201, INP001, PT006, PT018, S101
-"""Tests for the conservative required Bazel CI diff classifier."""
+"""Tests for the conservative ARM64 Dagger Bazel CI diff classifier."""
 
 import importlib.util
 import sys

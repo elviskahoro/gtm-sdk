@@ -87,3 +87,34 @@ def test_workflow_initializes_cold_namespace_cache_mounts() -> None:
         "$HOME/.bazel-dagger/cache",
     ):
         assert f'"{cache_path}"' in initialize["run"]
+
+
+def test_workflow_classifies_changes_before_starting_dagger() -> None:
+    workflow = _workflow()
+    steps = workflow["jobs"]["bazel_dagger"]["steps"]
+    names = [step.get("name") for step in steps]
+    classify_index = names.index("Classify changed paths")
+    assert classify_index < names.index("Install uv")
+    classifier = steps[classify_index]
+    assert classifier["id"] == "classify"
+    assert "scripts/bazel-change-classification.py" in classifier["run"]
+    assert "git diff --name-status -z" in classifier["run"]
+    assert "workflow_dispatch" in classifier["env"]["FORCE_FULL"]
+
+    for step_name in (
+        "Install uv",
+        "Prepare Namespace cache paths",
+        "Cache Dagger controller and Bazel data",
+        "Initialize Namespace cache mounts",
+        "Install Dagger Python SDK",
+        "Cache verified ARM64 Bazel binary",
+        "Setup Dagger",
+        "Run full Bazel suite in Dagger",
+    ):
+        step = next(step for step in steps if step.get("name") == step_name)
+        assert step["if"] == "steps.classify.outputs.run_full == 'true'"
+
+    skipped = next(
+        step for step in steps if step.get("name") == "Report skipped full suite"
+    )
+    assert skipped["if"] == "steps.classify.outputs.run_full == 'false'"

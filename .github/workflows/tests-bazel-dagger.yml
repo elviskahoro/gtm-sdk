@@ -29,12 +29,51 @@ jobs:
           esac
           test "$(getconf _NPROCESSORS_ONLN)" -eq 4
 
+      - name: Classify changed paths
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          if [ "${FORCE_FULL}" = "true" ] || [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            classification_args=(--force-full)
+          else
+            classification_args=()
+          fi
+          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              diff_range="${BASE_SHA}...${HEAD_SHA}"
+            else
+              diff_range="${BASE_SHA}..${HEAD_SHA}"
+            fi
+            git diff --name-status -z "${diff_range}" \
+              | python3 scripts/bazel-change-classification.py "${classification_args[@]}" \
+              | tee /tmp/bazel-classification.txt
+          else
+            python3 scripts/bazel-change-classification.py --force-full </dev/null \
+              | tee /tmp/bazel-classification.txt
+          fi
+          if grep -q '^full:' /tmp/bazel-classification.txt; then
+            echo "run_full=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "run_full=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Report skipped full suite
+        if: steps.classify.outputs.run_full == 'false'
+        run: |
+          echo "Dagger Bazel suite skipped: $(cat /tmp/bazel-classification.txt)"
+
       - name: Install uv
+        if: steps.classify.outputs.run_full == 'true'
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: false
 
       - name: Prepare Namespace cache paths
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.dagger-sdk/bazel-controller-venv" \
@@ -43,6 +82,7 @@ jobs:
             "$HOME/.bazel-dagger/cache"
 
       - name: Cache Dagger controller and Bazel data
+        if: steps.classify.outputs.run_full == 'true'
         uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
         with:
           cache: uv
@@ -55,6 +95,7 @@ jobs:
       # step above. Recreate the mount roots before either controller setup or
       # the Bazel download writes into them.
       - name: Initialize Namespace cache mounts
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.dagger-sdk/bazel-controller-venv" \
@@ -63,6 +104,7 @@ jobs:
             "$HOME/.bazel-dagger/cache"
 
       - name: Install Dagger Python SDK
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           set -euo pipefail
           export UV_PYTHON_INSTALL_DIR="$HOME/.dagger-sdk/bazel-uv-python"
@@ -85,6 +127,7 @@ jobs:
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
       - name: Cache verified ARM64 Bazel binary
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           set -euo pipefail
           bazel_binary="$HOME/.bazel-dagger/toolchain/bazel"
@@ -98,11 +141,13 @@ jobs:
           fi
 
       - name: Setup Dagger
+        if: steps.classify.outputs.run_full == 'true'
         uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
         with:
           version: 0.21.7
 
       - name: Run full Bazel suite in Dagger
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           # Resolve home at runtime so the cached path is not coupled to a runner's
           # checkout layout.
@@ -114,7 +159,7 @@ jobs:
       # tests and Full Bazel suite. Promote only after three representative PR
       # runs plus one post-merge main run agree on coverage and result reporting.
       - name: Upload Bazel Test Results to Trunk.io
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.classify.outputs.run_full == 'true' }}
         continue-on-error: true
         uses: trunk-io/analytics-uploader@385f1ccdf345b4532dc4b6c665dd432b702b8e28 # v2.1.2
         with:

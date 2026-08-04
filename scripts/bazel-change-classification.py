@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run python
 # ruff: noqa: N999
-"""Classify a git diff for the required Bazel CI check.
+"""Classify a git diff for the ARM64 Dagger Bazel CI check.
 
 The classifier is intentionally an allowlist.  A path that is not known to be
 independent of the Bazel graph or Python runtime requires the full suite.
