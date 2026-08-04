@@ -97,9 +97,9 @@ The `tach.toml` file at the repo root is configured as strictly as tach allows f
 - **`visibility`** — who may import each module
 - **`[[interfaces]]`** — frozen public import surface for `libs.*` and `src`
 - **`[rules]`** — unused / unjustified `tach-ignore` directives are errors
-- **`exclude`** — tests, docs, api fixtures, and root `deploy.py` (Modal entrypoint must stay at repo root)
+- **`exclude`** — tests, docs, `api/` fixtures, and root `deploy.py` (Modal entrypoint must stay at repo root)
 
-When you add a real import across modules, update `depends_on` and `[[interfaces]]` (or run `uv run tach sync --add` for depends_on) in the same change.
+When you add a real import across modules, update `depends_on` and `[[interfaces]]` (or run `uv run tach sync --add` for `depends_on`) in the same change.
 
 ## Resources
 

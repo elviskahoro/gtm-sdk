@@ -40,3 +40,6 @@ rollout
 uv
 Dash0
 OTLP
+depends_on
+layers_explicit_depends_on
+tach|Tach

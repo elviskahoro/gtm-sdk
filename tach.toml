@@ -32,13 +32,7 @@ ignore_type_checking_imports = false
 include_string_imports = true
 # Layers do not imply free depends_on — every edge must be explicit.
 layers_explicit_depends_on = true
-layers = [
-  "tooling",
-  "edge",
-  "orchestration",
-  "adapters",
-  "products",
-]
+layers = ["tooling", "edge", "orchestration", "adapters", "products"]
 
 [rules]
 unused_ignore_directives = "error"
@@ -47,9 +41,7 @@ require_ignore_directive_reasons = "error"
 [external]
 # pytest is imported inside adapter helpers for optional local checks; it is a
 # dev dependency, not a runtime dep of the gtm package.
-exclude = [
-  "pytest",
-]
+exclude = ["pytest"]
 
 # ============================================================================
 # UTILITIES: Accessible from anywhere (no dependencies)
@@ -333,9 +325,7 @@ depends_on = []
 # ============================================================================
 
 [[interfaces]]
-from = [
-  "libs.apollo",
-]
+from = ["libs.apollo"]
 expose = [
   "client",
   "models",
@@ -352,9 +342,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.attio",
-]
+from = ["libs.attio"]
 expose = [
   "attributes",
   "attributes.create_attribute",
@@ -443,15 +431,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.browserbase",
-]
+from = ["libs.browserbase"]
 expose = []
 
 [[interfaces]]
-from = [
-  "libs.caldotcom",
-]
+from = ["libs.caldotcom"]
 expose = [
   "BookingCancelledPayload",
   "BookingCreatedPayload",
@@ -474,17 +458,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.clay_http",
-]
-expose = [
-  "post_row",
-]
+from = ["libs.clay_http"]
+expose = ["post_row"]
 
 [[interfaces]]
-from = [
-  "libs.dlt",
-]
+from = ["libs.dlt"]
 expose = [
   "bucket_naming",
   "bucket_naming.etl_bucket_name",
@@ -497,9 +475,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.exa",
-]
+from = ["libs.exa"]
 expose = [
   "client",
   "client.ExaAPIKeyMissingError",
@@ -518,9 +494,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.fathom",
-]
+from = ["libs.fathom"]
 expose = [
   "Webhook",
   "iter_meetings",
@@ -531,9 +505,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.filesystem",
-]
+from = ["libs.filesystem"]
 expose = [
   "files",
   "files.DestinationFileData",
@@ -542,18 +514,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.fireflies",
-]
-expose = [
-  "FirefliesRecording",
-  "from_motherduck_row",
-]
+from = ["libs.fireflies"]
+expose = ["FirefliesRecording", "from_motherduck_row"]
 
 [[interfaces]]
-from = [
-  "libs.gmail",
-]
+from = ["libs.gmail"]
 expose = [
   "url_decoder",
   "url_decoder.decode_token",
@@ -561,9 +526,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.granola",
-]
+from = ["libs.granola"]
 expose = [
   "errors",
   "errors.ConfigError",
@@ -589,41 +552,23 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.harvest",
-]
-expose = [
-  "client",
-]
+from = ["libs.harvest"]
+expose = ["client"]
 
 [[interfaces]]
-from = [
-  "libs.infisical",
-]
-expose = [
-  "errors",
-  "errors.InfisicalAuthError",
-  "errors.InfisicalFetchError",
-]
+from = ["libs.infisical"]
+expose = ["errors", "errors.InfisicalAuthError", "errors.InfisicalFetchError"]
 
 [[interfaces]]
-from = [
-  "libs.linear",
-]
-expose = [
-  "client",
-]
+from = ["libs.linear"]
+expose = ["client"]
 
 [[interfaces]]
-from = [
-  "libs.linkedin",
-]
+from = ["libs.linkedin"]
 expose = []
 
 [[interfaces]]
-from = [
-  "libs.logging",
-]
+from = ["libs.logging"]
 expose = [
   "structured",
   "structured.log",
@@ -632,26 +577,15 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.meetings",
-]
-expose = [
-  "canonical_meeting_uid",
-]
+from = ["libs.meetings"]
+expose = ["canonical_meeting_uid"]
 
 [[interfaces]]
-from = [
-  "libs.motherduck",
-]
-expose = [
-  "connect",
-  "query",
-]
+from = ["libs.motherduck"]
+expose = ["connect", "query"]
 
 [[interfaces]]
-from = [
-  "libs.octolens",
-]
+from = ["libs.octolens"]
 expose = [
   "RelevanceScore",
   "Source",
@@ -663,15 +597,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.openai",
-]
+from = ["libs.openai"]
 expose = []
 
 [[interfaces]]
-from = [
-  "libs.parallel",
-]
+from = ["libs.parallel"]
 expose = [
   "client",
   "client.extract_excerpts",
@@ -697,9 +627,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.parsers",
-]
+from = ["libs.parsers"]
 expose = [
   "constants",
   "constants.EMAIL_DOMAINS_TO_KEEP",
@@ -710,15 +638,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.perplexity",
-]
+from = ["libs.perplexity"]
 expose = []
 
 [[interfaces]]
-from = [
-  "libs.rb2b",
-]
+from = ["libs.rb2b"]
 expose = [
   "Webhook",
   "compute_event_id",
@@ -727,15 +651,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.resend",
-]
+from = ["libs.resend"]
 expose = []
 
 [[interfaces]]
-from = [
-  "libs.sanity",
-]
+from = ["libs.sanity"]
 expose = [
   "blog",
   "blog.fetch_blog_posts_raw",
@@ -757,20 +677,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.slack",
-]
-expose = [
-  "client",
-  "get_client",
-  "lookup_user_id_by_email",
-  "post_message",
-]
+from = ["libs.slack"]
+expose = ["client", "get_client", "lookup_user_id_by_email", "post_message"]
 
 [[interfaces]]
-from = [
-  "libs.telemetry",
-]
+from = ["libs.telemetry"]
 expose = [
   "annotate_span",
   "collector_target",
@@ -782,9 +693,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "libs.webhook",
-]
+from = ["libs.webhook"]
 expose = [
   "filter",
   "filter.WebhookFilter",
@@ -795,9 +704,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = [
-  "src",
-]
+from = ["src"]
 expose = [
   "accounts",
   "accounts.accounts",
