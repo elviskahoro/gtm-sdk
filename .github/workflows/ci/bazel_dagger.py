@@ -14,7 +14,10 @@ import anyio
 import dagger
 from dagger import dag
 
-BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
+BASE_IMAGE = (
+    "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
+    "@sha256:0b973c14a35cb0dc8fe63a2e8c9919fd797ac566de13090fcf0df4a6b3994b78"
+)
 RESULT_PATH = "/src/bazel_result"
 ANALYTICS_RESULT_PATH = "/src/trunk_analytics_result"
 BEP_PATH = "/src/build_events.json"
