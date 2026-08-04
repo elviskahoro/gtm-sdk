@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from scripts.lib import container
+
 if TYPE_CHECKING:
     from collections.abc import Generator
     from types import ModuleType
@@ -103,8 +105,8 @@ def test_container_phase_cannot_reach_host_cleanup(
     """Container re-entry must fail before lock, backup, or signal setup."""
     monkeypatch.setenv("CONTAINER_PHASE", "1")
     monkeypatch.setenv("FLOX_ENV", "/nix/store/flox")
-    monkeypatch.setenv(script_module.EXPECTED_MANIFEST_LOCK_SHA256, "a" * 64)
-    monkeypatch.setenv(script_module.BAKED_MANIFEST_LOCK_SHA256, "a" * 64)
+    monkeypatch.setenv(container.EXPECTED_MANIFEST_LOCK_SHA256, "a" * 64)
+    monkeypatch.setenv(container.BAKED_MANIFEST_LOCK_SHA256, "a" * 64)
 
     host_only = {
         name: Mock(side_effect=AssertionError(f"host cleanup reached: {name}"))
