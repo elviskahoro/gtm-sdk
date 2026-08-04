@@ -122,11 +122,7 @@ trunk check --all                # lint + typecheck (ruff, etc.)
 
 For local Bazel iteration, run one target or package rather than the whole
 graph, for example `bazel test //tests/libs/attio:TARGET --config=ci` or
-`bazel test //tests/libs/attio/... --config=ci`. The required CI status uses a
-conservative diff classifier: documentation and approved metadata-only changes
-report a successful skip, while source, tests, dependency/toolchain, generated,
-Bazel, script, and workflow changes run `bazel test //...`. A manual workflow
-dispatch always forces the full suite.
+`bazel test //tests/libs/attio/... --config=ci`.
 
 ## Modal deployment
 

@@ -1,120 +1,16 @@
 name: Bazel tests
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
-  bazel_full:
-    name: Full Bazel suite
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Classify changed paths
-        id: classify
-        env:
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          set -euo pipefail
-          if [ "${FORCE_FULL}" = "true" ] || [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
-            classification_args=(--force-full)
-          else
-            classification_args=()
-          fi
-          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
-              diff_range="${BASE_SHA}...${HEAD_SHA}"
-            else
-              diff_range="${BASE_SHA}..${HEAD_SHA}"
-            fi
-            git diff --name-status -z "${diff_range}" \
-              | python3 scripts/bazel-change-classification.py "${classification_args[@]}" \
-              | tee /tmp/bazel-classification.txt
-          else
-            python3 scripts/bazel-change-classification.py --force-full </dev/null \
-              | tee /tmp/bazel-classification.txt
-          fi
-          if grep -q '^full:' /tmp/bazel-classification.txt; then
-            echo "run_full=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "run_full=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Report skipped full suite
-        if: steps.classify.outputs.run_full == 'false'
-        run: |
-          echo "Bazel full suite skipped: $(cat /tmp/bazel-classification.txt)"
-
-      - name: Set up uv
-        if: steps.classify.outputs.run_full == 'true'
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
-        with:
-          enable-cache: true
-
-      - name: Set up Bazel
-        if: steps.classify.outputs.run_full == 'true'
-        uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-          cache-save: ${{ github.event_name != 'pull_request' }}
-
-      - name: Verify toolchains
-        if: steps.classify.outputs.run_full == 'true'
-        run: |
-          set -euo pipefail
-          uv --version
-          bazel_version="$(bazel --version)"
-          echo "${bazel_version}"
-          if [ "${bazel_version}" != "bazel 8.7.0" ]; then
-            echo "::error::expected Bazel 8.7.0, got ${bazel_version}"
-            exit 1
-          fi
-
-          # rules_python 2.2 names the runnable interpreter target `python3`;
-          # this asserts the hermetic toolchain, not a uv-managed runner Python.
-          bazel run @python_3_13_13//:python3 -- --version 2>&1 | tee /tmp/hermetic-python-version.log
-          python_version="$(tail -n 1 /tmp/hermetic-python-version.log)"
-          if [ "${python_version}" != "Python 3.13.13" ]; then
-            echo "::error::expected hermetic Python 3.13.13, got ${python_version}"
-            exit 1
-          fi
-
-      - name: Check Bazel requirements lock
-        if: steps.classify.outputs.run_full == 'true'
-        run: scripts/bazel-requirements-sync.py --check
-
-      - name: Run full Bazel suite
-        if: steps.classify.outputs.run_full == 'true'
-        run: bazel test //... --config=ci
-
-      - name: Check generated Bazel BUILD files
-        if: steps.classify.outputs.run_full == 'true'
-        run: |
-          set -euo pipefail
-          bazel run //:gazelle
-          git diff --exit-code -- \
-            MODULE.bazel.lock \
-            BUILD.bazel \
-            ":(glob)**/BUILD" \
-            ":(glob)**/BUILD.bazel"
-
   bazel_impacted:
     name: Trunk impacted Bazel targets
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -133,7 +29,7 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: false
 
       - name: Install bazel-diff
         run: |

@@ -14,7 +14,6 @@ exports_files(
         "attio-tracking_events-bootstrap.py",
         "attio-workspace_slug-probe.py",
         "attio-workspace_url-emit.py",
-        "bazel-change-classification.py",
         "bazel-requirements-sync.py",
         "beads-rig-sync_to.py",
         "caldotcom-bookings-backfill.py",
@@ -36,10 +35,7 @@ exports_files(
         "rb2b-event_ids-reconcile.py",
         "rb2b-visits-backfill.py",
     ],
-    visibility = [
-        "//tests/scripts:__pkg__",
-        "//tests/workflows:__pkg__",
-    ],
+    visibility = ["//tests/scripts:__pkg__"],
 )
 
 # keep
