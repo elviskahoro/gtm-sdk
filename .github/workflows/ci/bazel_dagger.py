@@ -41,6 +41,7 @@ source "${action_dir}/src/scripts/compute_impacted_targets.sh"
 export IMPACTED_TARGETS_FILE="${impacted_targets_out}"
 export BAZEL_TEST_COMMAND="test --config=ci"
 export BAZEL_KIND_FILTER='.+_library|.+_binary|.+_test'
+export BAZEL_SCOPE_FILTER=""
 export BAZEL_NEGATIVE_KIND_FILTER='generated file'
 export BAZEL_NEGATIVE_SCOPE_FILTER=//external
 export BAZEL_NEGATIVE_TAG_FILTER=manual

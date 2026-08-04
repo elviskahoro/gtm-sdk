@@ -67,6 +67,7 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "prerequisites.sh" in pipeline
     assert "compute_impacted_targets.sh" in pipeline
     assert "test_impacted_targets.sh" in pipeline
+    assert 'export BAZEL_SCOPE_FILTER=""' in pipeline
     assert "test //..." not in pipeline
 
 
