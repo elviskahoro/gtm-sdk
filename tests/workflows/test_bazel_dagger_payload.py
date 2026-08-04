@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from email.message import Message
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
@@ -17,6 +18,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "bazel_dagger.py"
 _MODULE_NAME = "_bazel_dagger_under_test"
+
+
+class _DaggerStub(ModuleType):
+    dag: object
 
 
 def _load_pipeline() -> ModuleType:
@@ -31,7 +36,7 @@ def _load_pipeline() -> ModuleType:
         # These tests cover the pipeline's stdlib-only payload helpers. Keep
         # them runnable in the unit dependency image, which need not include
         # the controller-only Dagger SDK and anyio runtime.
-        dagger_stub = ModuleType("dagger")
+        dagger_stub = _DaggerStub("dagger")
         dagger_stub.dag = object()
         with patch.dict(
             sys.modules,
@@ -96,7 +101,13 @@ def test_post_raises_for_trunk_http_error(monkeypatch: pytest.MonkeyPatch) -> No
     module = _load_pipeline()
 
     def fail(*_args: object, **_kwargs: object) -> None:
-        raise HTTPError(module.IMPACTED_TARGETS_URL, 401, "Unauthorized", None, None)
+        raise HTTPError(
+            module.IMPACTED_TARGETS_URL,
+            401,
+            "Unauthorized",
+            Message(),
+            None,
+        )
 
     monkeypatch.setattr(module, "urlopen", fail)
     with pytest.raises(RuntimeError, match="HTTP 401"):
