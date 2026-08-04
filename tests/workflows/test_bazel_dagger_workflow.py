@@ -8,6 +8,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel-dagger.yml"
+STANDARD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel.yml"
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "bazel_dagger.py"
 
 
@@ -23,6 +24,27 @@ def test_trial_runs_on_namespace_for_prs_and_main_pushes() -> None:
     assert isinstance(triggers, dict)
     assert set(triggers) == {"push", "pull_request", "workflow_dispatch"}
     assert workflow["jobs"]["bazel_dagger"]["runs-on"] == "namespace-profile-test"
+
+
+def test_impacted_target_trial_runs_in_dagger_alongside_trunk() -> None:
+    workflow = _workflow()
+    impacted = workflow["jobs"]["bazel_impacted_dagger"]
+    assert impacted["runs-on"] == "namespace-profile-test"
+    assert "pull_request" in impacted["if"]
+    assert "head.repo.full_name" in impacted["if"]
+    run_step = next(
+        step
+        for step in impacted["steps"]
+        if step.get("name") == "Run impacted Bazel targets in Dagger"
+    )
+    assert run_step["env"]["BAZEL_DAGGER_MODE"] == "impacted"
+    assert "BAZEL_DAGGER_BASE_SHA" in run_step["env"]
+    assert "BAZEL_DAGGER_HEAD_SHA" in run_step["env"]
+    assert "BAZEL_DAGGER_DIFF_JAR" in run_step["run"]
+    assert "bazel-diff_deploy.jar" in WORKFLOW.read_text()
+    standard_workflow = STANDARD_WORKFLOW.read_text()
+    assert "bazel_impacted:" in standard_workflow
+    assert "trunk-io/bazel-action@" in standard_workflow
 
 
 def test_trial_documents_its_equivalence_period() -> None:
@@ -48,6 +70,11 @@ def test_pipeline_uses_arm64_bazel_caches_and_exports_junit() -> None:
     assert "GIT_INIT_CMD" in pipeline
     assert "git add --intent-to-add" in pipeline
     assert 'directory("/src/bazel-testlogs").export(JUNIT_HOST_PATH)' in pipeline
+    assert "IMPACTED_VALIDATE_CMD" in pipeline
+    assert 'mode == "impacted"' in pipeline
+    assert 'directory("/src/.git", dag.host().directory(".git"))' in pipeline
+    assert "get-impacted-targets" in pipeline
+    assert "--target_pattern_file" in pipeline
 
 
 def test_workflow_uploads_bazel_junit_results_to_trunk() -> None:
