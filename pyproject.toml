@@ -70,8 +70,9 @@ gtm-sdk = { workspace = true }
 
 [tool.pytest.ini_options]
 # The plugin selection lives HERE, not in a runner command, and that placement is
-# load-bearing. `addopts` is read from the source tree, so it applies to Bazel,
-# pull requests, main runs and local runs alike.
+# load-bearing for the uv-driven pytest paths. Bazel uses the deliberately
+# separate `bazel/pytest.ini` so packaging metadata changes do not invalidate
+# every Bazel test target.
 # tests/test_hypothesis_plugin.py fails loudly if the plugin stops loading.
 #
 # Use the ENTRY-POINT name `hypothesispytest`, never the module name

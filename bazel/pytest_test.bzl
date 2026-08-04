@@ -3,7 +3,7 @@
 load("@rules_python//python:defs.bzl", _py_test = "py_test")
 
 _PYTEST_MAIN = "//bazel:pytest_main.py"
-_PYPROJECT_TOML = "//:pyproject.toml"
+_PYTEST_CONFIG = "//bazel:pytest.ini"
 _PYTEST_DEPS = [
     "@pypi//pytest",
     "@pypi//pytest_asyncio",
@@ -27,7 +27,7 @@ def pytest_test(
         srcs = _dedupe(srcs + [_PYTEST_MAIN]),
         main = _PYTEST_MAIN,
         args = test_paths + args,
-        data = _dedupe(data + [_PYPROJECT_TOML]),
+        data = _dedupe(data + [_PYTEST_CONFIG]),
         deps = _dedupe(deps + _PYTEST_DEPS),
         tags = tags,
         legacy_create_init = False,

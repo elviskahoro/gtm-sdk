@@ -32,6 +32,7 @@ pytest_test(
     srcs = ["test_triage_workflow.py"],
     data = [
         "//:github_workflow_sources",
+        "//:pyproject.toml",
         "//scripts:workflow_test_script_sources",
     ],  # keep
     pyi_deps = ["@pypi//types_pyyaml"],
