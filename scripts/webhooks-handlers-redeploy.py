@@ -45,8 +45,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(REPO_ROOT))
 from scripts.lib.container import (  # noqa: E402
-    BAKED_MANIFEST_LOCK_SHA256,
-    EXPECTED_MANIFEST_LOCK_SHA256,
     RUN_WITH_DAGGER,
     in_container_phase,
     run_recipe_in_container_async,
