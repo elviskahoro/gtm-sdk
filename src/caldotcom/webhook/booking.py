@@ -89,7 +89,7 @@ _CALCOM_BOOKING_STATUS_TO_ATTIO: dict[
 }
 
 
-def _caldotcom_status_to_attio(
+def caldotcom_status_to_attio(
     booking_status: str | None,
     *,
     absent: bool = False,
@@ -212,7 +212,7 @@ def _ops_for_created(
             MeetingParticipant(
                 email_address=a.email,
                 is_organizer=False,
-                status=_caldotcom_status_to_attio(
+                status=caldotcom_status_to_attio(
                     booking_status,
                     absent=bool(a.absent),
                 ),
@@ -238,7 +238,7 @@ def _ops_for_created(
             MeetingParticipant(
                 email_address=host_email,
                 is_organizer=True,
-                status=_caldotcom_status_to_attio(booking_status),
+                status=caldotcom_status_to_attio(booking_status),
             ),
         )
 

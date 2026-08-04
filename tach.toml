@@ -6,12 +6,15 @@
 
 source_roots = ["."]
 exclude = [
+  # Modal entrypoint must live at repo root (src/attio/ would shadow the
+  # attio pip package if deploy.py moved under src/). Keep it out of the
+  # module graph rather than inventing a one-file root module for it.
+  "deploy.py",
   "tests/**",
   "docs/**",
   "api/**",
   "tmp/**",
   "worktrees/**",
-  "scripts/**",
   ".github/**",
   ".venv/**",
   ".kilo/**",
@@ -19,7 +22,26 @@ exclude = [
 ]
 
 forbid_circular_dependencies = true
-ignore_type_checking_imports = true
+# Fail when depends_on lists declare imports the code does not make.
+exact = true
+# Every file under source_roots must belong to a configured module.
+root_module = "forbid"
+# Enforce TYPE_CHECKING imports too (webhook protocol stubs, etc.).
+ignore_type_checking_imports = false
+# Treat importlib-style string imports as real dependencies.
+include_string_imports = true
+# Layers do not imply free depends_on — every edge must be explicit.
+layers_explicit_depends_on = true
+layers = ["tooling", "edge", "orchestration", "adapters", "products"]
+
+[rules]
+unused_ignore_directives = "error"
+require_ignore_directive_reasons = "error"
+
+[external]
+# pytest is imported inside adapter helpers for optional local checks; it is a
+# dev dependency, not a runtime dep of the gtm package.
+exclude = ["pytest"]
 
 # ============================================================================
 # UTILITIES: Accessible from anywhere (no dependencies)
@@ -27,122 +49,96 @@ ignore_type_checking_imports = true
 
 [[modules]]
 path = "libs.telemetry"
+layer = "adapters"
 utility = true
 
 [[modules]]
 path = "libs.logging"
+layer = "adapters"
 utility = true
 
 [[modules]]
 path = "libs.filesystem"
+layer = "adapters"
 utility = true
 
 # ============================================================================
-# CORE LAYERS: CLI → SRC/WEBHOOKS → LIBS
+# CORE LAYERS: scripts → cli/webhooks → src → libs
 # ============================================================================
 
 [[modules]]
-path = "cli"
+path = "scripts"
+layer = "tooling"
+visibility = []
 depends_on = [
-  "src",
-  "libs.apollo",
+  "cli",
   "libs.attio",
-  "libs.browserbase",
   "libs.caldotcom",
   "libs.dlt",
-  "libs.exa",
   "libs.fathom",
   "libs.fireflies",
-  "libs.gmail",
-  "libs.granola",
-  "libs.harvest",
-  "libs.infisical",
   "libs.linear",
-  "libs.linkedin",
-  "libs.logging",
-  "libs.meetings",
   "libs.motherduck",
   "libs.octolens",
-  "libs.openai",
-  "libs.parallel",
-  "libs.parsers",
-  "libs.perplexity",
   "libs.rb2b",
-  "libs.resend",
+  "src",
+]
+
+[[modules]]
+path = "cli"
+layer = "edge"
+visibility = ["scripts"]
+depends_on = [
+  "libs.attio",
+  "libs.dlt",
+  "libs.gmail",
+  "libs.granola",
+  "libs.infisical",
+  "libs.parsers",
   "libs.sanity",
-  "libs.slack",
-  "libs.telemetry",
   "libs.webhook",
-  "libs.filesystem",
+  "src",
 ]
 
 [[modules]]
 path = "src"
+layer = "orchestration"
+visibility = ["scripts", "cli", "webhooks"]
 depends_on = [
   "libs.apollo",
   "libs.attio",
-  "libs.browserbase",
   "libs.caldotcom",
+  "libs.clay_http",
   "libs.dlt",
   "libs.exa",
   "libs.fathom",
   "libs.fireflies",
-  "libs.gmail",
   "libs.granola",
   "libs.harvest",
   "libs.infisical",
   "libs.linear",
-  "libs.linkedin",
-  "libs.logging",
   "libs.meetings",
   "libs.motherduck",
   "libs.octolens",
-  "libs.openai",
   "libs.parallel",
   "libs.parsers",
-  "libs.perplexity",
   "libs.rb2b",
-  "libs.resend",
   "libs.sanity",
   "libs.slack",
-  "libs.telemetry",
   "libs.webhook",
-  "libs.filesystem",
 ]
 
 [[modules]]
 path = "webhooks"
+layer = "edge"
+visibility = ["scripts"]
 depends_on = [
-  "src",
-  "libs.apollo",
   "libs.attio",
-  "libs.browserbase",
-  "libs.caldotcom",
   "libs.dlt",
-  "libs.exa",
-  "libs.fathom",
-  "libs.fireflies",
-  "libs.gmail",
-  "libs.granola",
-  "libs.harvest",
   "libs.infisical",
-  "libs.linear",
-  "libs.linkedin",
-  "libs.logging",
-  "libs.meetings",
-  "libs.motherduck",
-  "libs.octolens",
-  "libs.openai",
-  "libs.parallel",
-  "libs.parsers",
-  "libs.perplexity",
-  "libs.rb2b",
-  "libs.resend",
-  "libs.sanity",
   "libs.slack",
-  "libs.telemetry",
   "libs.webhook",
-  "libs.filesystem",
+  "src",
 ]
 
 # ============================================================================
@@ -152,107 +148,165 @@ depends_on = [
 
 [[modules]]
 path = "libs.apollo"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.attio"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.browserbase"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.caldotcom"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
+
+[[modules]]
+path = "libs.clay_http"
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.dlt"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.exa"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.fathom"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.fireflies"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.gmail"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.granola"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.harvest"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.infisical"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.linear"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.linkedin"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.meetings"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.motherduck"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.octolens"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.openai"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.parallel"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.parsers"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.perplexity"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.rb2b"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.resend"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.sanity"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.slack"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 [[modules]]
 path = "libs.webhook"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+layer = "adapters"
+visibility = ["scripts", "cli", "webhooks", "src"]
+depends_on = []
 
 # ============================================================================
 # DATA EXPORT: Standalone products with no inter-product dependencies
@@ -260,4 +314,517 @@ depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
 
 [[modules]]
 path = "data-gen"
+layer = "products"
+visibility = []
 depends_on = []
+
+# ============================================================================
+# PUBLIC INTERFACES: freeze the currently-used import surface.
+# New deep imports must be added here (or routed through an existing
+# exposed path) — this is hold-the-line interface enforcement.
+# ============================================================================
+
+[[interfaces]]
+from = ['libs\.apollo']
+expose = [
+  "client",
+  "models",
+  "models\\.OrgEnrichInput",
+  "models\\.OrgSearchInput",
+  "models\\.PersonEnrichInput",
+  "models\\.PersonSearchInput",
+  "organizations",
+  "organizations\\.enrich_organization",
+  "organizations\\.search_organizations",
+  "people",
+  "people\\.enrich_person",
+  "people\\.search_people",
+]
+
+[[interfaces]]
+from = ['libs\.attio']
+expose = [
+  "attributes",
+  "attributes\\.create_attribute",
+  "attributes\\.create_companies_attribute",
+  "attributes\\.ensure_select_options",
+  "attributes\\.list_attributes",
+  "attributes\\.list_select_options",
+  "attributes\\.list_status_options",
+  "client",
+  "client\\.get_client",
+  "companies",
+  "companies\\.add_company",
+  "companies\\.get_company_values",
+  "companies\\.search_companies",
+  "companies\\.set_company_domain_if_empty",
+  "companies\\.update_company",
+  "companies\\.upsert_company",
+  "contracts",
+  "contracts\\.ErrorEntry",
+  "contracts\\.ReliabilityEnvelope",
+  "contracts\\.WarningEntry",
+  "errors",
+  "errors\\.AttioConflictError",
+  "errors\\.AttioError",
+  "errors\\.AttioValidationError",
+  "errors\\.ConfigurationError",
+  "errors\\.ConnectivityError",
+  "errors\\.DeploymentMismatchError",
+  "errors\\.SchemaMismatchError",
+  "ext_tam",
+  "ext_tam\\.iter_company_ids_by_filter",
+  "meetings",
+  "meetings\\.find_or_create_meeting",
+  "meetings\\.iter_meetings_in_range",
+  "meetings\\.list_candidate_meetings",
+  "mentions",
+  "mentions\\.upsert_mention",
+  "models",
+  "models\\.AttributeCreateResult",
+  "models\\.CompanyInput",
+  "models\\.CompanyResult",
+  "models\\.CompanySearchResult",
+  "models\\.MeetingCandidate",
+  "models\\.MeetingExternalRef",
+  "models\\.MeetingInput",
+  "models\\.MeetingLifecycleEventInput",
+  "models\\.MeetingLinkedRecord",
+  "models\\.MeetingParticipantInput",
+  "models\\.MentionInput",
+  "models\\.NoteInput",
+  "models\\.NoteResult",
+  "models\\.PersonInput",
+  "models\\.TrackingEventInput",
+  "notes",
+  "notes\\.add_note",
+  "notes\\.find_note_by_title",
+  "notes\\.resolve_record_id_for_ref",
+  "notes\\.update_note",
+  "objects",
+  "objects\\.create_object",
+  "people",
+  "people\\.add_person",
+  "people\\.error_envelope",
+  "people\\.get_person_values",
+  "people\\.search_people",
+  "people\\.update_person",
+  "people\\.upsert_person",
+  "preflight",
+  "preflight\\.assert_attio_token_scopes",
+  "preflight\\.fetch_token_scopes",
+  "preflight\\.resolve_owner_member_id",
+  "sdk_boundary",
+  "sdk_boundary\\.build_patch_record_request",
+  "sdk_boundary\\.describe_attio_error",
+  "sdk_boundary\\.is_unknown_filter_attribute",
+  "sdk_boundary\\.model_dump_or_empty",
+  "tracking_events",
+  "tracking_events\\.find_or_create_meeting_lifecycle_event",
+  "tracking_events\\.find_or_create_tracking_event",
+  "values",
+  "values\\.format_company_domains",
+  "values\\.format_location_from_parts",
+  "values\\.looks_like_domain",
+  "values\\.normalize_linkedin_company_url",
+  "values\\.normalize_linkedin_url",
+]
+
+[[interfaces]]
+from = ['libs\.browserbase']
+expose = []
+
+[[interfaces]]
+from = ['libs\.caldotcom']
+expose = [
+  "BookingCancelledPayload",
+  "BookingCreatedPayload",
+  "BookingNoShowPayload",
+  "BookingRequestedPayload",
+  "BookingRescheduledPayload",
+  "MeetingEndedPayload",
+  "MeetingStartedPayload",
+  "PingPayload",
+  "Webhook",
+  "client",
+  "client\\.CalcomClient",
+  "models",
+  "models\\.BookingAttendee",
+  "models\\.BookingCreatedPayload",
+  "models\\.BookingHost",
+  "models\\.MutationAttendee",
+  "models\\.NoShowAttendee",
+  "models\\.Webhook",
+]
+
+[[interfaces]]
+from = ['libs\.clay_http']
+expose = ["post_row"]
+
+[[interfaces]]
+from = ['libs\.dlt']
+expose = [
+  "bucket_naming",
+  "bucket_naming\\.etl_bucket_name",
+  "bucket_naming\\.raw_bucket_name",
+  "destination_type",
+  "destination_type\\.DestinationType",
+  "filesystem_gcp",
+  "filesystem_gcp\\.CloudGoogle",
+  "filesystem_gcp\\.GCPCredentials",
+]
+
+[[interfaces]]
+from = ['libs\.exa']
+expose = [
+  "client",
+  "client\\.ExaAPIKeyMissingError",
+  "companies",
+  "companies\\.find_companies",
+  "errors",
+  "errors\\.ExaBadRequestError",
+  "errors\\.ExaError",
+  "models",
+  "models\\.SearchInput",
+  "models\\.SearchResponse",
+  "people",
+  "people\\.find_people",
+  "search",
+  "search\\.search",
+]
+
+[[interfaces]]
+from = ['libs\.fathom']
+expose = [
+  "Webhook",
+  "iter_meetings",
+  "models",
+  "models\\.ActionItem",
+  "models\\.CalendarInvitee",
+  "webhook_from_sdk_meeting",
+]
+
+[[interfaces]]
+from = ['libs\.filesystem']
+expose = [
+  "files",
+  "files\\.DestinationFileData",
+  "files\\.FileUtility",
+  "files\\.SourceFileData",
+]
+
+[[interfaces]]
+from = ['libs\.fireflies']
+expose = ["FirefliesRecording", "from_motherduck_row"]
+
+[[interfaces]]
+from = ['libs\.gmail']
+expose = [
+  "url_decoder",
+  "url_decoder\\.decode_token",
+  "url_decoder\\.extract_id_from_url",
+]
+
+[[interfaces]]
+from = ['libs\.granola']
+expose = [
+  "errors",
+  "errors\\.ConfigError",
+  "errors\\.GranolaError",
+  "local_cache",
+  "local_cache\\.extract_local_records",
+  "local_cache\\.find_latest_cache_file",
+  "local_cache\\.load_local_cache",
+  "models",
+  "models\\.ExportCliJsonPayload",
+  "models\\.ExportRunOptions",
+  "models\\.ExportRunResult",
+  "normalize",
+  "normalize\\.normalize_meeting",
+  "state",
+  "state\\.compute_meeting_hash",
+  "state\\.load_state",
+  "state\\.save_state",
+  "state\\.should_write",
+  "writer",
+  "writer\\.append_manifest",
+  "writer\\.write_meeting_export",
+]
+
+[[interfaces]]
+from = ['libs\.harvest']
+expose = ["client"]
+
+[[interfaces]]
+from = ['libs\.infisical']
+expose = ["errors", "errors.InfisicalAuthError", "errors.InfisicalFetchError"]
+
+[[interfaces]]
+from = ['libs\.linear']
+expose = ["client"]
+
+[[interfaces]]
+from = ['libs\.linkedin']
+expose = []
+
+[[interfaces]]
+from = ['libs\.logging']
+expose = [
+  "structured",
+  "structured\\.log",
+  "structured\\.set_source",
+  "structured\\.webhook_request_context",
+]
+
+[[interfaces]]
+from = ['libs\.meetings']
+expose = ["canonical_meeting_uid"]
+
+[[interfaces]]
+from = ['libs\.motherduck']
+expose = ["connect", "query"]
+
+[[interfaces]]
+from = ['libs\.octolens']
+expose = [
+  "RelevanceScore",
+  "Source",
+  "Webhook",
+  "client",
+  "client\\.OctolensClient",
+  "models",
+  "models\\.ApiMention",
+]
+
+[[interfaces]]
+from = ['libs\.openai']
+expose = []
+
+[[interfaces]]
+from = ['libs\.parallel']
+expose = [
+  "client",
+  "client\\.extract_excerpts",
+  "client\\.extract_full_content",
+  "client\\.findall_create",
+  "client\\.findall_result",
+  "client\\.findall_status",
+  "client\\.search",
+  "models",
+  "models\\.ExtractExcerptsInput",
+  "models\\.ExtractFullContentInput",
+  "models\\.ExtractResponse",
+  "models\\.FindAllCreateInput",
+  "models\\.FindAllLookupInput",
+  "models\\.FindAllResultData",
+  "models\\.FindAllRunData",
+  "models\\.MatchCondition",
+  "models\\.SearchInput",
+  "models\\.SearchResponse",
+  "types",
+  "types\\.FindAllGenerator",
+  "types\\.SearchMode",
+]
+
+[[interfaces]]
+from = ['libs\.parsers']
+expose = [
+  "constants",
+  "constants\\.EMAIL_DOMAINS_TO_KEEP",
+  "countries",
+  "countries\\.country_name_to_iso2",
+  "normalization",
+  "normalization\\.normalize_mapping_payload",
+]
+
+[[interfaces]]
+from = ['libs\.perplexity']
+expose = []
+
+[[interfaces]]
+from = ['libs\.rb2b']
+expose = [
+  "Webhook",
+  "compute_event_id",
+  "models",
+  "models\\.normalize_rb2b_timestamp",
+]
+
+[[interfaces]]
+from = ['libs\.resend']
+expose = []
+
+[[interfaces]]
+from = ['libs\.sanity']
+expose = [
+  "blog",
+  "blog\\.fetch_blog_posts_raw",
+  "client",
+  "client\\.DEFAULT_API_VERSION",
+  "client\\.DEFAULT_DATASET",
+  "client\\.DEFAULT_PROJECT_ID",
+  "client\\.SanityConfig",
+  "client\\.api_key_scope",
+  "errors",
+  "errors\\.DuplicateSlugError",
+  "errors\\.UnsafeArchiveDirError",
+  "models",
+  "models\\.BlogPost",
+  "portable_text",
+  "portable_text\\.escape_text",
+  "portable_text\\.escape_trailing_atx",
+  "portable_text\\.to_markdown",
+]
+
+[[interfaces]]
+from = ['libs\.slack']
+expose = ["client", "get_client", "lookup_user_id_by_email", "post_message"]
+
+[[interfaces]]
+from = ['libs\.telemetry']
+expose = [
+  "annotate_span",
+  "collector_target",
+  "emit_cli_event",
+  "get_otlp_logger",
+  "init_log_exporter",
+  "init_tracer",
+  "span",
+]
+
+[[interfaces]]
+from = ['libs\.webhook']
+expose = [
+  "filter",
+  "filter\\.WebhookFilter",
+  "filter\\.WebhookFilters",
+  "protocol",
+  "protocol\\.UNSUPPORTED_SLACK_CHANNEL_SECRET",
+  "protocol\\.WebhookModelTypeCheckShim",
+]
+
+[[interfaces]]
+from = ['src']
+expose = [
+  "accounts",
+  "accounts\\.accounts",
+  "accounts\\.accounts\\.MapAccountHierarchyQuery",
+  "accounts\\.batch",
+  "accounts\\.batch\\.BatchAddCompaniesQuery",
+  "accounts\\.batch\\.BatchAddPeopleQuery",
+  "accounts\\.people",
+  "accounts\\.people\\.FindPeopleQuery",
+  "accounts\\.research",
+  "accounts\\.research\\.EnrichQuery",
+  "accounts\\.research\\.ResearchQuery",
+  "apollo",
+  "apollo\\.organizations",
+  "apollo\\.organizations\\.OrgEnrichQuery",
+  "apollo\\.organizations\\.OrgSearchQuery",
+  "apollo\\.people",
+  "apollo\\.people\\.PersonEnrichQuery",
+  "apollo\\.people\\.PersonSearchQuery",
+  "app",
+  "app\\.app",
+  "attio",
+  "attio\\.companies",
+  "attio\\.companies\\.CompanyAddQuery",
+  "attio\\.companies\\.CompanyCreateAttributeQuery",
+  "attio\\.companies\\.CompanySearchQuery",
+  "attio\\.companies\\.CompanyUpdateQuery",
+  "attio\\.deployment_parity",
+  "attio\\.deployment_parity\\.ParityStatus",
+  "attio\\.deployment_parity\\.ensure_modal_parity",
+  "attio\\.enrichment",
+  "attio\\.enrichment\\.BackfillCompanyDomainsQuery",
+  "attio\\.export",
+  "attio\\.export\\.execute",
+  "attio\\.notes",
+  "attio\\.notes\\.NoteAddQuery",
+  "attio\\.notes\\.NoteUpdateQuery",
+  "attio\\.ops",
+  "attio\\.ops\\.AttioOp",
+  "attio\\.ops\\.UpsertMeeting",
+  "attio\\.ops\\.UpsertNote",
+  "attio\\.orphan_meetings",
+  "attio\\.orphan_meetings\\.classify",
+  "attio\\.orphan_meetings\\.detect_orphans",
+  "attio\\.orphan_meetings\\.write_orphan_csvs",
+  "attio\\.people",
+  "attio\\.people\\.PersonAddQuery",
+  "attio\\.people\\.PersonSearchQuery",
+  "attio\\.people\\.PersonUpdateQuery",
+  "attio\\.people\\.PersonUpsertQuery",
+  "caldotcom",
+  "caldotcom\\.webhook",
+  "caldotcom\\.webhook\\.booking",
+  "caldotcom\\.webhook\\.booking\\.Webhook",
+  "caldotcom\\.webhook\\.booking\\.caldotcom_status_to_attio",
+  "clay",
+  "clay\\.export",
+  "clay\\.export\\.execute",
+  "enrichment",
+  "enrichment\\.HarvestProfile",
+  "enrichment\\.build_enrichment_tasks",
+  "enrichment\\.harvest_profile_from_task",
+  "enrichment\\.load_enrichment_config",
+  "enrichment\\.profile_to_person_input",
+  "exa",
+  "exa\\.companies",
+  "exa\\.companies\\.FindCompaniesQuery",
+  "exa\\.people",
+  "exa\\.people\\.FindPeopleQuery",
+  "exa\\.search",
+  "exa\\.search\\.SearchQuery",
+  "fathom",
+  "fathom\\.webhook",
+  "fathom\\.webhook\\.call",
+  "fathom\\.webhook\\.call\\.Webhook",
+  "fathom\\.webhook\\.message",
+  "fathom\\.webhook\\.message\\.Webhook",
+  "fireflies",
+  "fireflies\\.DATABASE",
+  "fireflies\\.iter_assembled_rows",
+  "fireflies\\.to_attio_operations",
+  "granola",
+  "granola\\.export",
+  "granola\\.export\\.run_export",
+  "modal_app",
+  "modal_app\\.MODAL_APP",
+  "octolens",
+  "octolens\\.backfill",
+  "octolens\\.backfill\\.api_mention_to_row",
+  "octolens\\.backfill\\.build_webhook_payload",
+  "octolens\\.backfill\\.include_mention",
+  "octolens\\.webhook",
+  "octolens\\.webhook\\.Webhook",
+  "octolens\\.webhook\\.mention",
+  "octolens\\.webhook\\.mention\\.Webhook",
+  "otel_collector",
+  "otel_collector\\.build_collector_config",
+  "parallel",
+  "parallel\\.extract",
+  "parallel\\.extract\\.ExtractExcerptsQuery",
+  "parallel\\.extract\\.ExtractFullContentQuery",
+  "parallel\\.findall",
+  "parallel\\.findall\\.FindAllCreateQuery",
+  "parallel\\.findall\\.FindAllResultQuery",
+  "parallel\\.findall\\.FindAllStatusQuery",
+  "parallel\\.search",
+  "parallel\\.search\\.SearchQuery",
+  "rb2b",
+  "rb2b\\.webhook",
+  "rb2b\\.webhook\\.visit",
+  "rb2b\\.webhook\\.visit\\.Webhook",
+  "sanity",
+  "sanity\\.blog_download",
+  "sanity\\.blog_download\\.download_blog_posts",
+  "secrets_bootstrap",
+  "secrets_bootstrap\\.bootstrap_secret",
+  "secrets_bootstrap\\.hydrate",
+  "slack",
+  "slack\\.export",
+  "slack\\.export\\.execute",
+  "slack\\.thread_store",
+  "slack\\.thread_store\\.modal_dict_thread_store",
+]

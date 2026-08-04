@@ -83,7 +83,7 @@ from scripts.lib.env import infisical_run_example  # noqa: E402
 # Intentionally reuse the webhook's exact status normalization rather than
 # duplicate the mapping — keeping the backfill's filter in lockstep with live.
 from src.caldotcom.webhook.booking import (  # noqa: E402
-    _caldotcom_status_to_attio,  # pyright: ignore[reportPrivateUsage]
+    caldotcom_status_to_attio,
 )
 
 if TYPE_CHECKING:
@@ -98,7 +98,7 @@ OUT_DIR = REPO_ROOT / "out" / "caldotcom-backfill"
 # Allowed filter vocabularies, validated up front so a typo fails fast instead
 # of silently narrowing the replay to zero/partial while still exiting 0.
 # --lifecycle = the API 'status' query buckets; --status = normalized Attio RSVP
-# values (see _caldotcom_status_to_attio). Empty --lifecycle / --status all mean
+# values (see caldotcom_status_to_attio). Empty --lifecycle / --status all mean
 # "no filter".
 _LIFECYCLE_VOCAB = frozenset(
     {"upcoming", "recurring", "past", "cancelled", "unconfirmed"},
@@ -354,7 +354,7 @@ def _run(  # noqa: PLR0912,PLR0915
         # so a narrowed --status matches exactly what production would ingest —
         # e.g. a booking with an unfamiliar status string still counts as
         # "accepted" here, just as the handler treats it.
-        normalized = _caldotcom_status_to_attio(b.status)
+        normalized = caldotcom_status_to_attio(b.status)
         if allowed_statuses is not None and normalized not in allowed_statuses:
             skipped_status += 1
             continue

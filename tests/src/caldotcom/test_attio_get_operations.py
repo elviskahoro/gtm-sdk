@@ -199,7 +199,7 @@ def test_attio_creator_email_falls_back_to_organizer() -> None:
 
 def test_unknown_booking_status_does_not_drop_payload() -> None:
     """Cal.com may add new status strings; permissive ``status: str | None``
-    plus ``_caldotcom_status_to_attio`` keeps unknowns mapping to ``accepted``
+    plus ``caldotcom_status_to_attio`` keeps unknowns mapping to ``accepted``
     instead of failing the discriminator and silently dropping the event.
     """
     w = _mutated_created_webhook(status="rescheduled_pending_review")
