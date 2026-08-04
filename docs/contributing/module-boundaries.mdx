@@ -40,8 +40,8 @@ Adapters must be callable in isolation. No side effects, no Modal decorators, no
 The CLI layer parses arguments, validates input, and calls `src/` workflows. It does not contain application logic.
 </Card>
 
-<Card title="Public interfaces are frozen">
-Cross-module imports must match an `[[interfaces]]` expose entry in `tach.toml`. New deep imports fail until the interface (or call site) is updated.
+<Card title="Public interfaces are frozen for libs.* and src">
+Imports into `libs.*` and `src` must match an `[[interfaces]]` expose entry in `tach.toml`. Other modules (`cli`, `webhooks`, `scripts`, `data-gen`) are constrained by `depends_on`, layers, and visibility only. New deep imports into a frozen-interface module fail until the interface (or call site) is updated.
 </Card>
 
 ## Enforcing boundaries with tach
@@ -76,7 +76,7 @@ This is expected — `src/` depends on declared libs adapters only. If a `libs/`
 
 ### "not part of the public interface"
 
-The import path is not in that module's `[[interfaces]].expose` list. Either:
+This applies when the target is `libs.*` or `src`. The import path is not in that module's `[[interfaces]].expose` list. Either:
 
 1. Import an already-exposed symbol (prefer package-root / documented API), or
 2. Add the path to `expose` in `tach.toml` in the same change if it is intentionally public.
@@ -99,7 +99,7 @@ The `tach.toml` file at the repo root is configured as strictly as tach allows f
 - **`[rules]`** — unused / unjustified `tach-ignore` directives are errors
 - **`exclude`** — tests, docs, `api/` fixtures, and root `deploy.py` (Modal entrypoint must stay at repo root)
 
-When you add a real import across modules, update `depends_on` and `[[interfaces]]` (or run `uv run tach sync --add` for `depends_on`) in the same change.
+When you add a real import across modules, update `depends_on` for every enforced form (including `TYPE_CHECKING` and string imports; or run `uv run tach sync --add`). If the target is `libs.*` or `src`, also add the path to that module's `[[interfaces]].expose` list.
 
 ## Resources
 

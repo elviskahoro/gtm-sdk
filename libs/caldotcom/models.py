@@ -145,7 +145,7 @@ class BookingCreatedPayload(BaseModel):
         validation_alias=AliasChoices("description", "eventDescription"),
     )
     additionalNotes: str | None = None
-    # Permissive: ``_caldotcom_status_to_attio`` normalizes unknown values
+    # Permissive: ``caldotcom_status_to_attio`` normalizes unknown values
     # safely. Locking this to a Literal would reject any future Cal.com
     # status string and silently drop otherwise-valid bookings.
     status: str | None = None
