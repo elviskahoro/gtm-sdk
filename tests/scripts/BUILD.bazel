@@ -46,6 +46,28 @@ pytest_test(
 )
 
 pytest_test(
+    name = "test_bazel_dagger_toolchain",
+    srcs = ["test_bazel_dagger_toolchain.py"],
+    data = ["//scripts:bazel-dagger-toolchain.py"],  # keep
+    deps = [
+        "//scripts:bazel-dagger-toolchain",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_bazel_dagger_validate",
+    srcs = ["test_bazel_dagger_validate.py"],
+    data = ["//scripts:bazel-dagger-validate.py"],  # keep
+    deps = [
+        "//scripts:bazel-dagger-validate",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
     name = "test_bazel_requirements_sync",
     srcs = ["test_bazel_requirements_sync.py"],
     data = ["//scripts:bazel-requirements-sync.py"],  # keep

@@ -21,4 +21,6 @@ jobs:
       - name: Inspect unresolved threads
         env:
           GH_TOKEN: ${{ github.token }}
-        run: flox activate --dir . --mode run -- scripts/pr-review-threads.py inspect --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --unresolved-only
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: flox activate --dir . --mode run -- scripts/pr-review-threads.py inspect --repo "${GITHUB_REPOSITORY}" --pr "${PR_NUMBER}" --unresolved-only

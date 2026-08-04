@@ -87,26 +87,8 @@ jobs:
         run: |
           set -euo pipefail
           toolchain_dir="$HOME/.bazel-dagger/toolchain"
-          bazel_binary="${toolchain_dir}/bazel"
-          bazel_diff_jar="${toolchain_dir}/bazel-diff_deploy.jar"
-          bazel_sha="bfe9558bd8a2ecfe4841ec46c0dbccb4b469fe22d81f2f859de0de222b3e7ce3"
-          bazel_diff_sha="4b649929970167f75a188d184cd07f00c83a82b363c70f74d3c1ad1f7cdefd51"
-          if ! printf '%s  %s\n' "${bazel_sha}" "${bazel_binary}" | sha256sum --check --status 2>/dev/null; then
-            curl --fail --location --silent --show-error \
-              https://releases.bazel.build/8.7.0/release/bazel-8.7.0-linux-arm64 \
-              --output "${bazel_binary}"
-            printf '%s  %s\n' "${bazel_sha}" "${bazel_binary}" | sha256sum --check
-            chmod +x "${bazel_binary}"
-            refreshed=true
-          fi
-          if ! printf '%s  %s\n' "${bazel_diff_sha}" "${bazel_diff_jar}" | sha256sum --check --status 2>/dev/null; then
-            curl --fail --location --silent --show-error \
-              https://github.com/Tinder/bazel-diff/releases/download/v33.0.0/bazel-diff_deploy.jar \
-              --output "${bazel_diff_jar}"
-            printf '%s  %s\n' "${bazel_diff_sha}" "${bazel_diff_jar}" | sha256sum --check
-            refreshed=true
-          fi
-          echo "refreshed=${refreshed:-false}" >> "$GITHUB_OUTPUT"
+          uv run scripts/bazel-dagger-toolchain.py --directory "${toolchain_dir}"
+          echo "refreshed=true" >> "$GITHUB_OUTPUT"
 
       - name: Save repaired Dagger controller and Bazel data
         if: steps.bazel_cache.outputs.cache-matched-key == '' || steps.dagger_sdk.outputs.rebuilt == 'true' || steps.bazel_tools.outputs.refreshed == 'true'

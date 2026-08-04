@@ -156,6 +156,7 @@ infisical --version
 gh --version
 bd version
 roborev version
+bazel --version
 EOF
 }
 

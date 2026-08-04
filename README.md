@@ -121,8 +121,13 @@ trunk check --all                # lint + typecheck (ruff, etc.)
 ```
 
 For local Bazel iteration, run one target or package rather than the whole
-graph, for example `bazel test //tests/libs/attio:TARGET --config=ci` or
-`bazel test //tests/libs/attio/... --config=ci`.
+graph through the committed Flox toolchain, for example
+`flox activate -- bazel test //tests/libs/attio:TARGET --config=ci` or
+`flox activate -- bazel test //tests/libs/attio/... --config=ci`.
+
+To reproduce the pull-request Bazel job in its Linux ARM64 Dagger container,
+run `uv run scripts/bazel-dagger-validate.py`. It compares `HEAD` with
+`origin/main` by default; use `--base <ref>` to select another comparison base.
 
 ## Modal deployment
 
