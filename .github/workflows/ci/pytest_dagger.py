@@ -11,11 +11,11 @@ CI resolves `python` to a dedicated dagger-io/anyio venv via `$GITHUB_PATH`
 instead (see `.github/workflows/tests-unit.yml`), so the CI invocation stays
 a bare `dagger run python "${pipeline}"`.
 
-The pipeline builds pytest's immutable, lockfile-derived dependency image in
-the local Dagger engine and exports `junit.xml` to the host so a follow-up step
-(e.g. trunk-io/analytics-uploader) can upload it. Production keeps four
-workers on GitHub-hosted ARM64 runners while dependency checkpoint layouts are
-benchmarked, so artifact transport remains the only independent variable.
+The pipeline runs pytest from an immutable, Flox-manifest-derived dependency
+image and exports `junit.xml` to the host so a follow-up step (e.g.
+trunk-io/analytics-uploader) can upload it. Production keeps four workers
+while dependency checkpoint layouts are benchmarked on the GitHub-hosted ARM64
+runner, so artifact transport remains the only independent variable.
 
 The pipeline *fails* (non-zero exit) when pytest exits non-zero, while still
 exporting the report. A previous `... || true` swallowed pytest's exit code so
@@ -78,19 +78,17 @@ PROJECT_INSTALL_CMD = (
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
-DEPENDENCY_DOCKERFILE_PATH = ".github/workflows/ci/pytest-deps.Dockerfile"
+FLOX_MANIFEST_PATH = ".flox/env/manifest.toml"
+FLOX_MANIFEST_LOCK_PATH = ".flox/env/manifest.lock"
 DEPENDENCY_PACKER_PATH = ".github/workflows/ci/pytest_dependency_pack.py"
 
-# Keep this image and setup chain in lockstep with
-# scripts/webhooks-handlers-redeploy.py. This outer-controller smoke stage
-# proves the real deploy image can install git and resolve the frozen project
-# environment without opening a nested Dagger session or contacting Modal.
-WEBHOOK_DEPLOY_BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
-WEBHOOK_DEPLOY_GIT_INSTALL = [
-    "sh",
-    "-c",
-    "apt-get update && apt-get install -y --no-install-recommends git",
-]
+# The builder is only the Flox CLI/Nix bootstrap. The resulting image contents
+# come from the committed manifest.lock. Pinning the builder prevents a mutable
+# base tag from silently changing the containerize implementation.
+FLOX_BUILDER_IMAGE = (
+    "ghcr.io/flox/flox@sha256:"
+    "c723be35e99ceb5bd6d501e34d32eb6336670e81851f86f316d31512f5ed1a7c"
+)
 
 # Several tests and scripts shell out to git for repository-root and clean-tree
 # checks. The host `.git` metadata stays excluded from the Dagger source
@@ -132,15 +130,7 @@ SOURCE_EXCLUDES = [
 
 
 def dependency_build_context(source: dagger.Directory) -> dagger.Directory:
-    dockerfile_override = os.environ.get(
-        "PYTEST_DEPENDENCY_DOCKERFILE",
-        "",
-    ).strip()
-    if dockerfile_override:
-        dockerfile = dag.host().file(dockerfile_override)
-    else:
-        dockerfile = source.file(DEPENDENCY_DOCKERFILE_PATH)
-
+    """Return the lockfile and packer inputs for the Dagger build."""
     packer_override = os.environ.get("PYTEST_DEPENDENCY_PACKER", "").strip()
     if packer_override:
         packer = dag.host().file(packer_override)
@@ -150,10 +140,33 @@ def dependency_build_context(source: dagger.Directory) -> dagger.Directory:
 
     return (
         dag.directory()
+        .with_directory(".flox", source.directory(".flox"))
         .with_file("pyproject.toml", source.file("pyproject.toml"))
         .with_file("uv.lock", source.file("uv.lock"))
-        .with_file("pytest-deps.Dockerfile", dockerfile)
         .with_file(DEPENDENCY_PACKER_PATH, packer)
+    )
+
+
+def flox_toolchain_image(source: dagger.Directory) -> dagger.Container:
+    """Materialize the committed Flox environment as an OCI base image."""
+    flox = (
+        dag.container(platform=dagger.Platform("linux/arm64"))
+        .from_(FLOX_BUILDER_IMAGE)
+        .with_directory("/workspace/.flox", source.directory(".flox"))
+        .with_workdir("/workspace")
+        .with_exec(
+            [
+                "flox",
+                "containerize",
+                "--dir",
+                "/workspace",
+                "--file",
+                "/workspace/gtm-sdk-flox-toolchain.tar",
+            ],
+        )
+    )
+    return dag.container(platform=dagger.Platform("linux/arm64")).import_(
+        flox.file("/workspace/gtm-sdk-flox-toolchain.tar"),
     )
 
 
@@ -183,22 +196,63 @@ def dependency_check_cmd(layout: str) -> str:
 
 
 def dependency_base(source: dagger.Directory) -> dagger.Container:
-    """Build the lockfile-derived dependency image in the local Dagger engine."""
-    print("Pytest dependency image: building from the locked Dockerfile")
-    return dependency_build_context(source).docker_build(
-        dockerfile="pytest-deps.Dockerfile",
-        platform=dagger.Platform("linux/arm64"),
-        build_args=[
-            dagger.BuildArg(
-                "PYTEST_DEPENDENCY_LAYOUT",
-                dependency_layout(),
-            ),
-        ],
+    """Build the locked dependency image in the local Dagger engine."""
+    print("Pytest dependency image: building from the Flox manifest")
+    layout = dependency_layout()
+    selection = (
+        "--all-extras --dev"
+        if layout in {"full-compiled", "full-source"}
+        else "--only-group unit-ci"
+    )
+    compile_bytecode = " --compile-bytecode" if layout.endswith("compiled") else ""
+    context = dependency_build_context(source)
+    return (
+        flox_toolchain_image(source)
+        .with_user("root")
+        .with_directory("/build", context)
+        .with_workdir("/build")
+        .with_env_variable("UV_PROJECT_ENVIRONMENT", "/opt/venv")
+        .with_env_variable("UV_LINK_MODE", "copy")
+        .with_env_variable("HOME", "/home/runner")
+        .with_env_variable("UV_CACHE_DIR", "/home/runner/.cache/uv")
+        .with_env_variable("PYTHONDONTWRITEBYTECODE", "1")
+        .with_env_variable("PYTEST_DEPENDENCY_LAYOUT", layout)
+        .with_exec(
+            [
+                "bash",
+                "-c",
+                "uv sync "
+                f"{selection}{compile_bytecode} --locked --no-install-project "
+                "--python python3.13",
+            ],
+        )
+        .with_exec(
+            [
+                "bash",
+                "-c",
+                'time_bin="$(type -P time)"; '
+                'test -n "$time_bin"; '
+                'mkdir -p /usr/bin; ln -sf "$time_bin" /usr/bin/time',
+            ],
+        )
+        .with_exec(
+            [
+                "bash",
+                "-c",
+                'if [ "$PYTEST_DEPENDENCY_LAYOUT" = minimal-packed ]; then '
+                "python3 /build/"
+                f"{DEPENDENCY_PACKER_PATH} /opt/venv; fi",
+            ],
+        )
+        .with_exec(["mkdir", "-p", "/home/runner/.cache/uv"])
+        .with_exec(
+            ["chown", "-R", "1000:1000", "/opt/venv", "/home/runner"],
+        )
+        .with_user("1000:1000")
     )
 
 
 def build_containers() -> tuple[
-    dagger.Container,
     dagger.Container,
     dagger.Container,
     dagger.Container,
@@ -210,10 +264,10 @@ def build_containers() -> tuple[
     layout = dependency_layout()
 
     prepared = (
-        base.with_directory("/src", source, owner="runner")
+        base.with_directory("/src", source, owner="1000:1000")
         # Keep the small repo-local helper package under a separate import
         # root so an incomplete `/src` snapshot cannot shadow `scripts.lib`.
-        .with_directory("/opt/gtm-sdk/scripts", scripts, owner="runner")
+        .with_directory("/opt/gtm-sdk/scripts", scripts, owner="1000:1000")
         .with_workdir("/src")
         .with_env_variable("PYTHONPATH", "/src")
         .with_env_variable("PYTHONDONTWRITEBYTECODE", "1")
@@ -234,19 +288,11 @@ def build_containers() -> tuple[
     )
     checked = prepared.with_exec(["bash", "-c", dependency_check_cmd(layout)])
     installed = checked.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
-    webhook_deploy_smoke = (
-        dag.container()
-        .from_(WEBHOOK_DEPLOY_BASE_IMAGE)
-        .with_exec(WEBHOOK_DEPLOY_GIT_INSTALL)
-        .with_directory("/repo", source)
-        .with_workdir("/repo")
-        .with_exec(["uv", "sync", "--frozen"])
-    )
     nonce = os.environ.get("PYTEST_BENCHMARK_NONCE", "").strip()
     if nonce:
         installed = installed.with_env_variable("PYTEST_BENCHMARK_NONCE", nonce)
     tested = installed.with_exec(["bash", "-c", PYTEST_CMD])
-    return base, checked, installed, webhook_deploy_smoke, tested
+    return base, checked, installed, tested
 
 
 def build_container() -> dagger.Container:
@@ -257,11 +303,12 @@ def build_container() -> dagger.Container:
 async def main() -> None:
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
         pipeline_started = perf_counter()
-        base, checked, installed, webhook_deploy_smoke, ctr = build_containers()
+        base, checked, installed, ctr = build_containers()
 
         phase_started = perf_counter()
         await base.sync()
         print(f"Dagger dependency base ready: {perf_counter() - phase_started:.2f}s")
+
         checkpoint_stats = await base.with_exec(
             [
                 "bash",
@@ -285,13 +332,6 @@ async def main() -> None:
         phase_started = perf_counter()
         await installed.sync()
         print(f"Dagger local project install: {perf_counter() - phase_started:.2f}s")
-
-        phase_started = perf_counter()
-        await webhook_deploy_smoke.sync()
-        print(
-            "Webhook deploy image + frozen sync: "
-            f"{perf_counter() - phase_started:.2f}s",
-        )
 
         # Read pytest's real exit code (captured in PYTEST_CMD) first so we know
         # whether a missing report is an expected consequence of a crashed run or

@@ -11,9 +11,13 @@ uv.pkg-path = "uv"
 # Keep in lockstep with UV_PINNED_VERSION in scripts/conductor-workspace-setup.sh,
 # which installs this same version on macOS workspaces that have no Flox.
 uv.version = "0.11.26"
+python313.pkg-path = "python313"
+time.pkg-path = "time"
 dolt.pkg-path = "dolt"
 infisical.pkg-path = "infisical"
 gh.pkg-path = "gh"
+# The Dagger pytest recipe runs git init and git-based installs inside the
+# generated Linux image; keep Git in the Flox source of truth, not just hosts.
 git.pkg-path = "git"
 # gtm-sdk#445: on aarch64-darwin, resolve bd/roborev from published FloxHub
 # packages (see [build.bd]/[build.roborev] below), repackaged from upstream
@@ -33,6 +37,9 @@ bd-linux.systems = ["aarch64-linux", "x86_64-linux"]
 roborev-linux.flake = "github:kenn-io/roborev/v0.62.1"
 roborev-linux.systems = ["aarch64-linux", "x86_64-linux"]
 jq.pkg-path = "jq"
+bash.pkg-path = "bash"
+coreutils.pkg-path = "coreutils"
+findutils.pkg-path = "findutils"
 # gum.pkg-path = "gum"
 # gum.version = "^0.14.5"
 
@@ -82,6 +89,15 @@ jq.pkg-path = "jq"
 ## ------------------------------------------------------------------
 [services]
 # myservice.command = "python3 -m http.server"
+
+
+## Container image configuration ------------------------------------
+## The CI dependency image is generated from this environment. Flox adds the
+## requested user and working directory to the image without a Dockerfile or
+## an apt-managed user database.
+[containerize.config]
+user = "1000:1000"
+working-dir = "/src"
 
 
 ## Include ----------------------------------------------------------

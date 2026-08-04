@@ -3,6 +3,9 @@
   "manifest": {
     "schema-version": "1.13.0",
     "install": {
+      "bash": {
+        "pkg-path": "bash"
+      },
       "bd": {
         "pkg-path": "elvis/bd",
         "version": "1.1.0",
@@ -17,8 +20,14 @@
           "x86_64-linux"
         ]
       },
+      "coreutils": {
+        "pkg-path": "coreutils"
+      },
       "dolt": {
         "pkg-path": "dolt"
+      },
+      "findutils": {
+        "pkg-path": "findutils"
       },
       "gh": {
         "pkg-path": "gh"
@@ -31,6 +40,9 @@
       },
       "jq": {
         "pkg-path": "jq"
+      },
+      "python313": {
+        "pkg-path": "python313"
       },
       "roborev": {
         "pkg-path": "elvis/roborev",
@@ -45,6 +57,9 @@
           "aarch64-linux",
           "x86_64-linux"
         ]
+      },
+      "time": {
+        "pkg-path": "time"
       },
       "uv": {
         "pkg-path": "uv",
@@ -73,9 +88,128 @@
         "version": "0.62.1",
         "description": "roborev CLI repackaged from official upstream release binaries"
       }
+    },
+    "containerize": {
+      "config": {
+        "user": "1000:1000",
+        "working-dir": "/src"
+      }
     }
   },
   "packages": [
+    {
+      "attr_path": "bash",
+      "broken": false,
+      "derivation": "/nix/store/hf7ly39pmy6d01rb71fl4ayjpfjx0wx2-bash-interactive-5.3p9.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "bash-interactive-5.3p9",
+      "pname": "bash",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:41.141052Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.3p9",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/kr4yx0hy720ai12p131pf3sz4mf7q2dd-bash-interactive-5.3p9-dev",
+        "doc": "/nix/store/pj82x6hs9hqrnsz7dfj8mpl8rp0fxa2c-bash-interactive-5.3p9-doc",
+        "info": "/nix/store/nl9j78vlrmrkhrs9d25m02ys6zsqzd5r-bash-interactive-5.3p9-info",
+        "man": "/nix/store/iixbrgzrnngrq4m55vgw4vzg0amxyngp-bash-interactive-5.3p9-man",
+        "out": "/nix/store/s4kx452x9dms6qz41fd9yf8q53k7bkv9-bash-interactive-5.3p9"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bash",
+      "broken": false,
+      "derivation": "/nix/store/f1m18dqb9d90w0gg1r1xv6yxypqxdb9k-bash-interactive-5.3p9.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "bash-interactive-5.3p9",
+      "pname": "bash",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:52:42.174476Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.3p9",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/h5jdjac5zvaid3l7myrfsmr0w7bwjv8q-bash-interactive-5.3p9-debug",
+        "dev": "/nix/store/q3kr0vsnbwqdl10mlc9sq7m8d7m4w3xx-bash-interactive-5.3p9-dev",
+        "doc": "/nix/store/y22kfflgwa4wwk8i73bz2infjngdngqf-bash-interactive-5.3p9-doc",
+        "info": "/nix/store/h0jfa3xvf8dga0d1izx6kam1fzr01rwr-bash-interactive-5.3p9-info",
+        "man": "/nix/store/yyjlc7zffnzahwvipgp064hgg3zbnwv5-bash-interactive-5.3p9-man",
+        "out": "/nix/store/s6hkkyiyyxm12kjv79w92jrb5jkwm8h5-bash-interactive-5.3p9"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bash",
+      "broken": false,
+      "derivation": "/nix/store/8wf253v4xmm0d42gw7msj9pwi8yp6l3i-bash-interactive-5.3p9.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "bash-interactive-5.3p9",
+      "pname": "bash",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:21.233442Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.3p9",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/d3lkknd9f0r5nx5nlszb6vbzklyj7zx7-bash-interactive-5.3p9-debug",
+        "dev": "/nix/store/8mp5f2yh8p5xicpiv9s449zl94yhqw7v-bash-interactive-5.3p9-dev",
+        "doc": "/nix/store/rxm500ja8awzzlqjwlqfvjdn6wyrsk46-bash-interactive-5.3p9-doc",
+        "info": "/nix/store/iswmfij6iwiz5kixszvmajdhqgrbi3xc-bash-interactive-5.3p9-info",
+        "man": "/nix/store/gl5s34czgaqxb7y57apybw7l8pns3w2m-bash-interactive-5.3p9-man",
+        "out": "/nix/store/bbzjxfam8vv1nyikn5dsrazsw4ya5vzx-bash-interactive-5.3p9"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
     {
       "attr_path": "bd",
       "derivation": "/nix/store/hvwk5zb3wmfqkwrwj8pz2r7pz8sd2hsq-bd-1.1.0.drv",
@@ -87,7 +221,7 @@
       "rev": "edda135586315c4c8556a6d55c75ee959eada15b",
       "rev_count": 527,
       "rev_date": "2026-08-02T16:44:54Z",
-      "scrape_date": "2026-08-02T16:49:02.502484Z",
+      "scrape_date": "2026-08-04T14:47:23.353979Z",
       "stabilities": [
         "unstable"
       ],
@@ -99,6 +233,108 @@
         "out": "/nix/store/21n7025xm65w5rjbqlahwby6rvkmjx1j-bd-1.1.0"
       },
       "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/rbk64f8s69h1jk9shg9gg5dqzzjri576-coreutils-9.11.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "coreutils-9.11",
+      "pname": "coreutils",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:41.544202Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.11",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/rypjm4sgws2f5vdsgp851y5k4x6y63vc-coreutils-9.11-info",
+        "out": "/nix/store/64afbf35abi9z311mzkfykg2x8mhr362-coreutils-9.11"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/v78h5d3sjb83y113kmrrg24bb9bhark1-coreutils-9.11.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "coreutils-9.11",
+      "pname": "coreutils",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:52:42.695690Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.11",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/5195qdj0pl86xxd03ccmlmqcdln6idhm-coreutils-9.11-debug",
+        "info": "/nix/store/5mwlc94h85wdairskyhf6sj8lg23lmk6-coreutils-9.11-info",
+        "out": "/nix/store/qs65mcswqfq4g5ijabjkaprs746119kg-coreutils-9.11"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/nvmwza7ls167mw3j9fd60h009nwb5c17-coreutils-9.11.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "coreutils-9.11",
+      "pname": "coreutils",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:21.811867Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.11",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/i4pbjinhi819kdix5d3gb2vp0s9hwx3c-coreutils-9.11-debug",
+        "info": "/nix/store/vaxajdf1h760k6f50z9q6y1vzjzkm0gw-coreutils-9.11-info",
+        "out": "/nix/store/cp7wjv1pl4wapfk48svvizxd089v9h0a-coreutils-9.11"
+      },
+      "system": "x86_64-linux",
       "group": "toplevel",
       "priority": 5
     },
@@ -122,6 +358,7 @@
       "unfree": false,
       "version": "2.1.9",
       "outputs_to_install": [
+        "out",
         "out"
       ],
       "outputs": {
@@ -190,6 +427,99 @@
       "priority": 5
     },
     {
+      "attr_path": "findutils",
+      "broken": false,
+      "derivation": "/nix/store/z1cw6whlci7mf2nrjwak5xldihb4z078-findutils-4.10.0.drv",
+      "description": "GNU Find Utilities, the basic directory searching utilities of the GNU operating system",
+      "install_id": "findutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "findutils-4.10.0",
+      "pname": "findutils",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:53:42.103308Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.10.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/xb24j1bhzk42w1dyiqa3w6vzw09vgy51-findutils-4.10.0-info",
+        "locate": "/nix/store/8253ip2l3l8m9bbmd6x9b5q5c8ngwhqx-findutils-4.10.0-locate",
+        "out": "/nix/store/xn9rf7a8dpg0ff071ygv6jnd0qsprz0w-findutils-4.10.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "findutils",
+      "broken": false,
+      "derivation": "/nix/store/rm2bf36v6b3ffdjzmini18sg0yzjzx76-findutils-4.10.0.drv",
+      "description": "GNU Find Utilities, the basic directory searching utilities of the GNU operating system",
+      "install_id": "findutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "findutils-4.10.0",
+      "pname": "findutils",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:52:43.495118Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.10.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/v68jbm1qx94dhp62i313bz8p7j80x8pf-findutils-4.10.0-info",
+        "locate": "/nix/store/2s4wxaf57za9s18idxkrv6iqjl09agnc-findutils-4.10.0-locate",
+        "out": "/nix/store/29b44f6xhc2pbnj9qjxxrlcgr82cpbrj-findutils-4.10.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "findutils",
+      "broken": false,
+      "derivation": "/nix/store/lzv9x9lf0glknw6r5srs9afbsl58qhxs-findutils-4.10.0.drv",
+      "description": "GNU Find Utilities, the basic directory searching utilities of the GNU operating system",
+      "install_id": "findutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "findutils-4.10.0",
+      "pname": "findutils",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:56:22.706542Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.10.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/wxgh429bpj5qf08kg5c1974kh6avzcvv-findutils-4.10.0-info",
+        "locate": "/nix/store/p6wrdgkz9k8l9gw3zz4qlpiffz93xhbw-findutils-4.10.0-locate",
+        "out": "/nix/store/f4bixss3h2i80asiz45aj4qmplvmam4k-findutils-4.10.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
       "attr_path": "gh",
       "broken": false,
       "derivation": "/nix/store/0cv922n2aa9k3da8dfar3jf5h60ir26d-gh-2.96.0.drv",
@@ -209,6 +539,7 @@
       "unfree": false,
       "version": "2.96.0",
       "outputs_to_install": [
+        "out",
         "out"
       ],
       "outputs": {
@@ -296,6 +627,7 @@
       "unfree": false,
       "version": "2.54.0",
       "outputs_to_install": [
+        "out",
         "out"
       ],
       "outputs": {
@@ -388,6 +720,7 @@
       "unfree": false,
       "version": "0.41.90",
       "outputs_to_install": [
+        "out",
         "out"
       ],
       "outputs": {
@@ -476,6 +809,8 @@
       "version": "1.8.2",
       "outputs_to_install": [
         "bin",
+        "bin",
+        "man",
         "man"
       ],
       "outputs": {
@@ -560,6 +895,97 @@
       "priority": 5
     },
     {
+      "attr_path": "python313",
+      "broken": false,
+      "derivation": "/nix/store/h2zyvz372kpqbcr5v4gcdxw7gwkj25f7-python3-3.13.14.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "python313",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "python3-3.13.14",
+      "pname": "python313",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:54:25.209438Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.13.14",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/wi05rmjvzqahhd3xpa3vb4wjwzvb82qa-python3-3.13.14"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python313",
+      "broken": false,
+      "derivation": "/nix/store/n265s5z9havfskakw8sgwv1zxfxs0k0r-python3-3.13.14.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "python313",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "python3-3.13.14",
+      "pname": "python313",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:53:43.054654Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.13.14",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/rb3s2p9p150hjd7lk41fg2yii50q7lp7-python3-3.13.14-debug",
+        "out": "/nix/store/va0s2yvyqrzdyfs1n0jskwfrasmjipv7-python3-3.13.14"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python313",
+      "broken": false,
+      "derivation": "/nix/store/sh495rmpqcz6zy6yanf1pcx1riqvirb9-python3-3.13.14.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "python313",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "python3-3.13.14",
+      "pname": "python313",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:57:28.025840Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.13.14",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/jrl795b7kmmd96r0575rmcrlmr1m81y6-python3-3.13.14-debug",
+        "out": "/nix/store/pbdy5h9sjs92a37gq9sspg2797q4j4fa-python3-3.13.14"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
       "attr_path": "roborev",
       "derivation": "/nix/store/dsyd8a0lmw6c7qrb0csxblv2aaf5p2g2-roborev-0.62.1.drv",
       "description": "roborev CLI repackaged from official upstream release binaries",
@@ -570,7 +996,7 @@
       "rev": "edda135586315c4c8556a6d55c75ee959eada15b",
       "rev_count": 527,
       "rev_date": "2026-08-02T16:44:54Z",
-      "scrape_date": "2026-08-02T16:49:02.502503Z",
+      "scrape_date": "2026-08-04T14:47:23.353995Z",
       "stabilities": [
         "unstable"
       ],
@@ -582,6 +1008,96 @@
         "out": "/nix/store/c32f6mf51bxrqqawkf8i5f4v2zqnaxz5-roborev-0.62.1"
       },
       "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "time",
+      "broken": false,
+      "derivation": "/nix/store/f5mfxrwb3m9zivysl2s5lj8qbsgmhk97-time-1.10.drv",
+      "description": "Tool that runs programs and summarizes the system resources they use",
+      "install_id": "time",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "time-1.10",
+      "pname": "time",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T16:56:07.221110Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.10",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/1v27nx44w5f3sgcc8qgm5213mvn06szs-time-1.10-info",
+        "out": "/nix/store/isyqngas6bq2nqqpm2pwi024fivaazkk-time-1.10"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "time",
+      "broken": false,
+      "derivation": "/nix/store/wdlaw8byimca6dfl64l09gkf04w835hr-time-1.10.drv",
+      "description": "Tool that runs programs and summarizes the system resources they use",
+      "install_id": "time",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "time-1.10",
+      "pname": "time",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T17:55:45.550488Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.10",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/w8gfg8m8kvk7fsryarxpd4xmfzvr8za5-time-1.10-info",
+        "out": "/nix/store/iwqw8ipd6xi9d11aqadm6gwgkg76s06y-time-1.10"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "time",
+      "broken": false,
+      "derivation": "/nix/store/3aphc9b5s5mc9p74a3yh9l67bjrcgdgp-time-1.10.drv",
+      "description": "Tool that runs programs and summarizes the system resources they use",
+      "install_id": "time",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "name": "time-1.10",
+      "pname": "time",
+      "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+      "rev_count": 1034379,
+      "rev_date": "2026-07-14T05:44:30Z",
+      "scrape_date": "2026-07-15T18:59:44.592451Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.10",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/5lrzw14pflc3hy3av9l2h8nj2rcvf9jj-time-1.10-info",
+        "out": "/nix/store/zcxj51n49l375d6cvjqmcjkwxx72hp41-time-1.10"
+      },
+      "system": "x86_64-linux",
       "group": "toplevel",
       "priority": 5
     },
@@ -605,6 +1121,7 @@
       "unfree": false,
       "version": "0.11.26",
       "outputs_to_install": [
+        "out",
         "out"
       ],
       "outputs": {
