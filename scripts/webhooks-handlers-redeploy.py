@@ -45,6 +45,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(REPO_ROOT))
 from scripts.lib.container import (  # noqa: E402
+    BAKED_MANIFEST_LOCK_SHA256,
+    EXPECTED_MANIFEST_LOCK_SHA256,
     RUN_WITH_DAGGER,
     in_container_phase,
     run_recipe_in_container_async,
@@ -62,6 +64,7 @@ from scripts.lib.uv_resolve import (  # noqa: E402
 
 
 def _fail(msg: str) -> NoReturn:
+    """Print a user-facing preflight error and terminate the command."""
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(1)
 
@@ -277,6 +280,7 @@ def _preflight_uv_version() -> None:
 
 
 def _require_uv_path() -> str:
+    """Return the compatible uv selected during bootstrap."""
     if _uv_path is None:  # set by _preflight_uv_version() before use
         _fail("uv path requested before uv preflight completed")
     return _uv_path
@@ -1011,6 +1015,7 @@ def _fetch_infisical_value(
     *,
     env_slug: str = MODAL_TOKEN_INFISICAL_ENV,
 ) -> str:
+    """Fetch one required secret value from the configured Infisical environment."""
     proc = subprocess.run(
         [
             "infisical",
@@ -1278,7 +1283,11 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
 
 
 def main() -> int:
+    """Run the deploy recipe without allowing container re-entry to mutate the host."""
     global _handler, _handler_file  # noqa: PLW0603 — module state for cleanup
+
+    if in_container_phase():
+        _fail("webhook deploy cannot enter through the container phase")
 
     handlers = _discover_handlers()
     handler, source_or_all = _parse_args(handlers)

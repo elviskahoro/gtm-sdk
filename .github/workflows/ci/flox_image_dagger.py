@@ -9,6 +9,7 @@ would make the image stale on every code change and blur the review boundary.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import sys
@@ -18,6 +19,7 @@ import dagger
 
 
 async def main() -> None:
+    """Build and publish an image carrying the exact toolchain lock digest."""
     repo_root = Path(__file__).resolve().parents[3]
     tar_path = repo_root / "tmp" / "flox-toolchain.tar"
     tar_path.parent.mkdir(parents=True, exist_ok=True)
@@ -28,10 +30,13 @@ async def main() -> None:
     )
     image_ref = os.environ["FLOX_TOOLCHAIN_IMAGE"]
     token = os.environ["GHCR_TOKEN"]
+    lock_path = repo_root / "flox" / "toolchain" / ".flox" / "env" / "manifest.lock"
+    lock_sha256 = hashlib.sha256(lock_path.read_bytes()).hexdigest()
     registry = image_ref.split("/", maxsplit=1)[0]
     latest_ref = image_ref.rsplit(":", maxsplit=1)[0] + ":latest"
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
         image = dagger.dag.container().import_(dagger.dag.host().file(str(tar_path)))
+        image = image.with_env_variable("FLOX_TOOLCHAIN_MANIFEST_SHA256", lock_sha256)
         image = image.with_registry_auth(
             registry,
             "github-actions",

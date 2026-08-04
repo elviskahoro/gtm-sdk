@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import os
 import sys
 from typing import TYPE_CHECKING
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
 CONTAINER_PHASE = "CONTAINER_PHASE"
 RUN_WITH_DAGGER = "RUN_WITH_DAGGER"
 CONTAINER_IMAGE = "CONTAINER_IMAGE"
+EXPECTED_MANIFEST_LOCK_SHA256 = "FLOX_MANIFEST_LOCK_SHA256"
+BAKED_MANIFEST_LOCK_SHA256 = "FLOX_TOOLCHAIN_MANIFEST_SHA256"
 DEFAULT_CONTAINER_IMAGE = "ghcr.io/elviskahoro/gtm-sdk/flox-toolchain:latest"
 
 SOURCE_EXCLUDES = [
@@ -43,10 +46,19 @@ def in_container_phase() -> bool:
     if not os.environ.get("FLOX_ENV"):
         msg = "CONTAINER_PHASE requires an activated Flox environment"
         raise RuntimeError(msg)
+    expected = os.environ.get(EXPECTED_MANIFEST_LOCK_SHA256)
+    baked = os.environ.get(BAKED_MANIFEST_LOCK_SHA256)
+    if not expected or not baked:
+        msg = "container phase requires Flox manifest provenance"
+        raise RuntimeError(msg)
+    if not hmac.compare_digest(expected, baked):
+        msg = "container phase manifest.lock provenance does not match"
+        raise RuntimeError(msg)
     return True
 
 
 def _secret_name(base: str, value: str) -> str:
+    """Return a stable, content-addressed Dagger secret name."""
     digest = hashlib.sha256(value.encode()).hexdigest()[:12]
     return f"{base.lower().replace('_', '-')}-{digest}"
 
@@ -59,6 +71,7 @@ async def _run_in_container(
     command_secrets: Sequence[Mapping[str, str]],
     capture: bool,
 ) -> str | None:
+    """Execute a recipe in the published Flox image with one shared filesystem."""
     # Keep Dagger out of module import time: the default Flox path and a
     # wrapper re-entry must work in environments that deliberately lack its SDK.
     import dagger
@@ -147,10 +160,14 @@ async def run_recipe_in_container_async(
     if command_secrets is not None and len(command_secrets) != len(commands):
         msg = "command_secrets must provide exactly one mapping per command"
         raise ValueError(msg)
+    lock_path = repo_root / "flox" / "toolchain" / ".flox" / "env" / "manifest.lock"
+    lock_sha256 = hashlib.sha256(lock_path.read_bytes()).hexdigest()
+    container_env = dict(env or {})
+    container_env[EXPECTED_MANIFEST_LOCK_SHA256] = lock_sha256
     return await _run_in_container(
         repo_root=repo_root,
         commands=commands,
-        env=env or {},
+        env=container_env,
         command_secrets=command_secrets or [{} for _ in commands],
         capture=capture,
     )

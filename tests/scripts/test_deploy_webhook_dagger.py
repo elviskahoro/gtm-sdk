@@ -9,7 +9,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -60,6 +60,11 @@ def test_transport_selector_truth_table(
                 monkeypatch.setenv(name, "1")
             else:
                 monkeypatch.delenv(name, raising=False)
+        for name in ("FLOX_MANIFEST_LOCK_SHA256", "FLOX_TOOLCHAIN_MANIFEST_SHA256"):
+            if phase:
+                monkeypatch.setenv(name, "a" * 64)
+            else:
+                monkeypatch.delenv(name, raising=False)
         assert script_module._use_dagger() is use_dagger
         assert script_module._needs_flox_preflight() is needs_preflight
 
@@ -89,3 +94,28 @@ def test_secret_scrub_surface_remains_explicit(script_module: ModuleType) -> Non
     assert "MODAL_TOKEN_ID" in keys
     assert "INFISICAL_TOKEN" in keys
     assert "UV_PROJECT_ENVIRONMENT" not in keys
+
+
+def test_container_phase_cannot_reach_host_cleanup(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Container re-entry must fail before lock, backup, or signal setup."""
+    monkeypatch.setenv("CONTAINER_PHASE", "1")
+    monkeypatch.setenv("FLOX_ENV", "/nix/store/flox")
+    monkeypatch.setenv(script_module.EXPECTED_MANIFEST_LOCK_SHA256, "a" * 64)
+    monkeypatch.setenv(script_module.BAKED_MANIFEST_LOCK_SHA256, "a" * 64)
+
+    host_only = {
+        name: Mock(side_effect=AssertionError(f"host cleanup reached: {name}"))
+        for name in ("_acquire_lock", "_write_backup", "_verify_clean_restore")
+    }
+    for name, replacement in host_only.items():
+        monkeypatch.setattr(script_module, name, replacement)
+    monkeypatch.setattr(script_module.atexit, "register", host_only["_acquire_lock"])
+    monkeypatch.setattr(script_module.signal, "signal", host_only["_write_backup"])
+
+    with pytest.raises(SystemExit, match="1"):
+        script_module.main()
+    for replacement in host_only.values():
+        replacement.assert_not_called()

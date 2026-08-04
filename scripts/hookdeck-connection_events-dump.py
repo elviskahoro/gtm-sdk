@@ -396,6 +396,7 @@ def _dump_via_flox(
 
 
 def main() -> int:
+    """Parse a connection target, run the Flox dump, and safely publish its output."""
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,

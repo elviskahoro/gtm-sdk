@@ -39,6 +39,7 @@ class Toolchain:
 
 
 def _matches_checksum(path: Path, expected: str) -> bool:
+    """Return whether a cached artifact matches its pinned SHA-256 digest."""
     if not path.is_file():
         return False
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -46,6 +47,7 @@ def _matches_checksum(path: Path, expected: str) -> bool:
 
 
 def _download(url: str, destination: Path) -> None:
+    """Download one pinned artifact to a temporary or cache destination."""
     request = urlopen(url)  # noqa: S310 -- URLs and checksums are pinned above.
     with request, destination.open("wb") as output:
         shutil.copyfileobj(request, output)
@@ -59,6 +61,7 @@ def _ensure_artifact(
     checksum: str,
     executable: bool,
 ) -> Path:
+    """Verify or atomically download one controller artifact."""
     destination = directory / name
     if _matches_checksum(destination, checksum):
         return destination
@@ -100,6 +103,7 @@ def ensure_toolchain(directory: Path) -> Toolchain:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse the cache location, provision verified tools, and print their paths."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--directory",

@@ -17,10 +17,12 @@ DEFAULT_BASE = "origin/main"
 
 
 def _run(command: list[str], *, cwd: Path = REPO_ROOT) -> None:
+    """Run a fixed local preparation command and fail on non-zero status."""
     subprocess.run(command, cwd=cwd, check=True)  # noqa: S603,S607 -- fixed local argv.
 
 
 def _resolve_commit(ref: str) -> str:
+    """Resolve a Git ref to an immutable commit identifier."""
     completed = subprocess.run(  # noqa: S603 -- fixed local Git argv.
         ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],  # noqa: S607 -- Git is resolved via PATH.
         cwd=REPO_ROOT,
@@ -32,6 +34,7 @@ def _resolve_commit(ref: str) -> str:
 
 
 def _controller_env(*, source_dir: Path, toolchain_dir: Path) -> dict[str, str]:
+    """Construct the minimal environment exposed to the Dagger controller."""
     # Keep command lookup and ordinary local Dagger configuration, but do not
     # forward the host environment wholesale: it may contain unrelated
     # credentials that the local controller does not need.
@@ -53,6 +56,7 @@ def _controller_env(*, source_dir: Path, toolchain_dir: Path) -> dict[str, str]:
 
 
 def run(base: str) -> int:
+    """Validate the current checkout against a selected Git base revision."""
     base_commit = _resolve_commit(base)
     head_commit = _resolve_commit("HEAD")
     toolchain_dir = Path.home() / ".bazel-dagger" / "toolchain"
@@ -89,6 +93,7 @@ def run(base: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse the comparison base and return the controller's exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base",
