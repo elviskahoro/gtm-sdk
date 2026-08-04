@@ -29,6 +29,7 @@ def _run_step(workflow: dict[object, Any]) -> dict[str, Any]:
 def test_only_one_canonical_unit_test_job_runs_on_prs_and_main_pushes() -> None:
     workflow = _workflow(WORKFLOW)
     triggers = workflow.get("on") or workflow.get(True)
+    assert isinstance(triggers, dict)
     assert set(triggers) == {"push", "pull_request", "workflow_call"}
     assert triggers["push"] == {"branches": ["main"]}
     assert triggers["pull_request"] == {"branches": ["main"]}
@@ -139,6 +140,7 @@ def test_main_pushes_run_impacted_tests_without_pr_only_upload() -> None:
 def test_full_workflow_is_scheduled_and_manual() -> None:
     workflow = _workflow(REPO_ROOT / ".github" / "workflows" / "tests-bazel-full.yml")
     triggers = workflow.get("on") or workflow.get(True)
+    assert isinstance(triggers, dict)
     assert set(triggers) == {"schedule", "workflow_dispatch"}
     assert workflow["jobs"]["full_suite"]["with"] == {
         "run_full": True,
