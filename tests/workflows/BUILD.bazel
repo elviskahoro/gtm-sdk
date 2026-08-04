@@ -1,6 +1,16 @@
 load("//bazel:pytest_test.bzl", "pytest_test")
 
 pytest_test(
+    name = "test_bazel_change_classification",
+    srcs = ["test_bazel_change_classification.py"],
+    data = ["//scripts:bazel-change-classification.py"],
+    deps = [
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
     name = "test_integration_workflow",
     srcs = ["test_integration_workflow.py"],
     data = ["//:github_workflow_sources"],  # keep
