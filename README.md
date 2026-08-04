@@ -1,8 +1,8 @@
-# gtm
+# gtm-sdk
 
 Go-To-Market SDK + CLI for account research, enrichment, CRM sync, and outreach. Layered architecture: thin CLI → workflow orchestration → single-SDK adapters. Deployable as Modal serverless functions; consumable as an editable Python package or git submodule.
 
-- Package name: `gtm` (entrypoint script: `gtm = cli.main:run`)
+- Package names: `gtm-sdk` (library) and `gtm-cli` (entrypoint script: `gtm = cli.main:run`)
 - Python: `>=3.13,<3.14`
 - Package manager: **`uv` only** (never bare `pip`)
 - License: MIT
@@ -84,7 +84,8 @@ In the parent `pyproject.toml`:
 
 ```toml
 [tool.uv.sources]
-gtm = { path = "gtm-sdk", editable = true }
+gtm-sdk = { path = "gtm-sdk", editable = true }
+gtm-cli = { path = "gtm-sdk/cli", editable = true }
 ```
 
 Then `uv sync`. All `cli`, `src`, `libs` packages become importable.

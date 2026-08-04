@@ -31,10 +31,11 @@ git clone git@github.com:elviskahoro/gtm-sdk.git gtm-sdk
 
 ```toml pyproject.toml
 [project]
-dependencies = ["gtm"]
+dependencies = ["gtm-sdk", "gtm-cli"]
 
 [tool.uv.sources]
-gtm = { path = "gtm-sdk", editable = true }
+gtm-sdk = { path = "gtm-sdk", editable = true }
+gtm-cli = { path = "gtm-sdk/cli", editable = true }
 ```
 
 Then run `uv sync` in the parent project. The `cli`, `src`, and `libs` packages become

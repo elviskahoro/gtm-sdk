@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gtm-cli"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = ["gtm-sdk==0.1.0", "typer>=0.15"]
+
+[tool.setuptools]
+package-dir = { "cli" = "." }
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["cli*"]
+namespaces = false
+
+[project.scripts]
+gtm = "cli.main:run"
