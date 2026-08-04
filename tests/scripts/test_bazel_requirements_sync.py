@@ -29,7 +29,7 @@ EXPECTED_EXPORT_COMMAND = [
     "--no-default-groups",
     "--group",
     "dev",
-    "--no-emit-project",
+    "--no-emit-workspace",
     "--no-header",
     "--no-annotate",
 ]
