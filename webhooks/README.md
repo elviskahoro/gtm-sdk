@@ -131,8 +131,9 @@ are documented on the functions that implement them in
 test at `tests/scripts/test_deploy_webhook.py` drives the Flox executor
 end-to-end: substitute/restore, cleanup on deploy failure, the
 `MODAL_TOKEN_ID` pop at the preflight, and the environment scrub.
-`tests/scripts/test_deploy_webhook_dagger.py` holds the executor parity
-checks. The lock and the full preflight paths are not yet exercised in CI.
+`tests/scripts/test_deploy_webhook_dagger.py` pins the shared recipe, transport
+selector, container-runner delegation, and credential scrub surface. The lock
+and the full preflight paths are not yet exercised in CI.
 
 ## Registry
 

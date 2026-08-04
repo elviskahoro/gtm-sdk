@@ -131,7 +131,7 @@ pytest_test(
 
 pytest_test(
     name = "test_container_wrapper",
-    srcs = ["test_container_wrapper.py"],
+    srcs = ["lib/test_container.py"],
     deps = [
         "//scripts/lib",
         "//tests:conftest",
@@ -244,6 +244,28 @@ pytest_test(
     data = ["//scripts:hookdeck-connection_events-dump.py"],  # keep
     deps = [
         "//scripts:hookdeck-connection_events-dump",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_hookdeck_connection_events_dump_properties",
+    srcs = ["test_hookdeck_connection_events_dump_properties.py"],
+    data = ["//scripts:hookdeck-connection_events-dump.py"],  # keep
+    deps = [
+        "//scripts:hookdeck-connection_events-dump",  # keep
+        "//tests:conftest",
+        "@pypi//hypothesis",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_flox",
+    srcs = ["test_flox.py"],
+    deps = [
+        "//scripts/lib",
         "//tests:conftest",
         "@pypi//pytest",
     ],

@@ -12,7 +12,11 @@ import subprocess
 from pathlib import Path
 
 
-def flox_activate_prefix(repo_root: Path) -> list[str]:
+class FloxEnvironmentNotActivatedError(RuntimeError):
+    """Raised when activation succeeds but cannot prove its resolved environment."""
+
+
+def flox_activate_prefix(repo_root: Path, *, executable: str = "flox") -> list[str]:
     """The ``flox activate`` argv that wraps each Flox-executor step.
 
     Takes ``repo_root`` explicitly rather than resolving it from this
@@ -30,7 +34,7 @@ def flox_activate_prefix(repo_root: Path) -> list[str]:
     another shell holds a run-mode one on the same env, and the two modes
     resolve different Nix store paths.
     """
-    return ["flox", "activate", "--dir", str(repo_root), "--mode", "run", "--"]
+    return [executable, "activate", "--dir", str(repo_root), "--mode", "run", "--"]
 
 
 def in_flox_env() -> bool:
@@ -46,12 +50,23 @@ def run(
     capture: bool = False,
     clear_env: bool = False,
 ) -> str | None:
-    """Run one command in the repo's activated Flox environment."""
+    """Run one command in the repo's activated Flox environment.
+
+    Resolve Flox before a scrubbed deploy environment drops ``PATH``; Flox
+    still receives ``HOME`` so its activation state remains discoverable
+    without inheriting unrelated operator configuration.
+    """
+    flox_executable = shutil.which("flox")
+    if flox_executable is None:
+        msg = "flox is required for the primary execution path"
+        raise RuntimeError(msg)
     child_env = {} if clear_env else dict(os.environ)
+    if clear_env and (home := os.environ.get("HOME")):
+        child_env["HOME"] = home
     if env is not None:
         child_env.update(env)
     proc = subprocess.run(  # noqa: S603
-        [*flox_activate_prefix(repo_root), *argv],
+        [*flox_activate_prefix(repo_root, executable=flox_executable), *argv],
         cwd=repo_root,
         env=child_env,
         capture_output=capture,
@@ -62,12 +77,23 @@ def run(
 
 
 def preflight(repo_root: Path, tools: tuple[str, ...]) -> str:
-    """Validate Flox activation and return its resolved environment path."""
-    if shutil.which("flox") is None:
+    """Validate the environment Flox actually resolves, not the host PATH.
+
+    A host executable can differ from the tool selected inside activation, so
+    validation follows ``FLOX_ENV`` rather than producing a false preflight
+    success from the operator's shell.
+    """
+    flox_executable = shutil.which("flox")
+    if flox_executable is None:
         msg = "flox is required for the primary execution path"
         raise RuntimeError(msg)
     proc = subprocess.run(  # noqa: S603
-        [*flox_activate_prefix(repo_root), "sh", "-c", 'printf %s "$FLOX_ENV"'],
+        [
+            *flox_activate_prefix(repo_root, executable=flox_executable),
+            "sh",
+            "-c",
+            'printf %s "$FLOX_ENV"',
+        ],
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -75,8 +101,7 @@ def preflight(repo_root: Path, tools: tuple[str, ...]) -> str:
     )
     flox_env = proc.stdout.strip()
     if not flox_env:
-        msg = "flox activation did not set FLOX_ENV"
-        raise RuntimeError(msg)
+        raise FloxEnvironmentNotActivatedError
     missing = [tool for tool in tools if not (Path(flox_env) / "bin" / tool).exists()]
     if missing:
         msg = f"Flox environment {flox_env} is missing required tools: {', '.join(missing)}"

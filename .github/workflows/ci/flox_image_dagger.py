@@ -1,4 +1,9 @@
-"""Build and publish the catalog-only Flox toolchain image with Dagger."""
+"""Build the catalog-only Flox image used by isolated script execution.
+
+The image intentionally contains just the committed Flox toolchain: callers
+mount their own checkout at runtime, so publishing application source here
+would make the image stale on every code change and blur the review boundary.
+"""
 
 # ruff: noqa: INP001, ASYNC240, ASYNC221, S603, S607
 

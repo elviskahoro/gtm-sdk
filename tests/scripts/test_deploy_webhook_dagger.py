@@ -8,23 +8,28 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "webhooks-handlers-redeploy.py"
 
 
 @pytest.fixture()
-def script_module() -> ModuleType:
+def script_module() -> Generator[ModuleType]:
     spec = importlib.util.spec_from_file_location("webhooks_redeploy", SCRIPT_PATH)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module
+    yield module
+    sys.modules.pop(spec.name, None)
 
 
 def test_deploy_steps_are_the_single_recipe(script_module: ModuleType) -> None:
@@ -36,15 +41,27 @@ def test_deploy_steps_are_the_single_recipe(script_module: ModuleType) -> None:
     assert [step.with_credentials for step in steps] == [False, True]
 
 
-def test_flox_is_primary_unless_dagger_is_requested(
+def test_transport_selector_truth_table(
     script_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("RUN_WITH_DAGGER", raising=False)
-    monkeypatch.delenv("CONTAINER_PHASE", raising=False)
-    assert script_module._use_flox() is True
-    monkeypatch.setenv("RUN_WITH_DAGGER", "1")
-    assert script_module._use_flox() is False
+    for dagger, phase, use_dagger, needs_preflight in (
+        (False, False, False, True),
+        (True, False, True, False),
+        (False, True, False, False),
+        (True, True, False, False),
+    ):
+        for name, enabled in (
+            ("RUN_WITH_DAGGER", dagger),
+            ("CONTAINER_PHASE", phase),
+            ("FLOX_ENV", phase),
+        ):
+            if enabled:
+                monkeypatch.setenv(name, "1")
+            else:
+                monkeypatch.delenv(name, raising=False)
+        assert script_module._use_dagger() is use_dagger
+        assert script_module._needs_flox_preflight() is needs_preflight
 
 
 @pytest.mark.asyncio

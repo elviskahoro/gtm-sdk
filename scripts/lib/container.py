@@ -1,4 +1,8 @@
-"""Thin Dagger transport for scripts whose recipe lives in Flox."""
+"""Thin Dagger transport for recipes whose source of truth remains Flox.
+
+The wrapper is an opt-in isolation boundary, not a second toolchain: it starts
+from the published Flox image and mounts the caller's reviewed checkout.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +32,12 @@ SOURCE_EXCLUDES = [
 
 
 def in_container_phase() -> bool:
-    """Return true only for a wrapper-launched process with Flox activated."""
+    """Recognize only wrapper re-entry that reached the trusted Flox image.
+
+    ``CONTAINER_PHASE`` alone is forgeable by a host process. Requiring
+    ``FLOX_ENV`` ensures it can suppress recursive wrapping only after the
+    image entrypoint has activated its pinned environment.
+    """
     if not os.environ.get(CONTAINER_PHASE):
         return False
     if not os.environ.get("FLOX_ENV"):
@@ -50,8 +59,8 @@ async def _run_in_container(
     command_secrets: Sequence[Mapping[str, str]],
     capture: bool,
 ) -> str | None:
-    # Import lazily so the Flox-primary path and the container phase only need
-    # Python from the toolchain image, not the Dagger SDK in their environment.
+    # Keep Dagger out of module import time: the default Flox path and a
+    # wrapper re-entry must work in environments that deliberately lack its SDK.
     import dagger
 
     image = os.environ.get(CONTAINER_IMAGE, DEFAULT_CONTAINER_IMAGE).strip()
@@ -88,7 +97,11 @@ def run_in_container(
     secrets: Mapping[str, str] | None = None,
     capture: bool = False,
 ) -> str | None:
-    """Re-execute ``argv`` inside the prebuilt Flox image."""
+    """Synchronously run one command when the caller owns no event loop.
+
+    Scripts with async orchestration must use the async form instead; nesting
+    ``asyncio.run`` would otherwise fail before the container can start.
+    """
     return asyncio.run(
         run_in_container_async(
             repo_root=repo_root,
@@ -108,7 +121,7 @@ async def run_in_container_async(
     secrets: Mapping[str, str] | None = None,
     capture: bool = False,
 ) -> str | None:
-    """Async form for scripts whose recipe already runs in an event loop."""
+    """Run one command from an existing event loop without nesting one."""
     return await run_recipe_in_container_async(
         repo_root=repo_root,
         commands=[argv],
@@ -126,7 +139,14 @@ async def run_recipe_in_container_async(
     command_secrets: Sequence[Mapping[str, str]] | None = None,
     capture: bool = False,
 ) -> str | None:
-    """Run several commands in one container filesystem and Flox shell."""
+    """Run a multi-step recipe whose later commands need earlier filesystem state.
+
+    Use this rather than separate single-command calls when setup (for example
+    ``uv sync``) creates files consumed by the following command.
+    """
+    if command_secrets is not None and len(command_secrets) != len(commands):
+        msg = "command_secrets must provide exactly one mapping per command"
+        raise ValueError(msg)
     return await _run_in_container(
         repo_root=repo_root,
         commands=commands,

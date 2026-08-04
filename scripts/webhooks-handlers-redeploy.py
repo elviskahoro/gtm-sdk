@@ -51,6 +51,7 @@ from scripts.lib.container import (  # noqa: E402
 )
 from scripts.lib.env import env_flag  # noqa: E402
 from scripts.lib.flox import (  # noqa: E402
+    FloxEnvironmentNotActivatedError,
     preflight as flox_preflight,
     run as flox_run,
 )
@@ -624,10 +625,10 @@ def _preflight_flox() -> None:
     print("Preflighting Flox environment")
     try:
         flox_env = flox_preflight(REPO_ROOT, ("uv", "git"))
+    except FloxEnvironmentNotActivatedError:
+        print("  activation returned no FLOX_ENV; toolchain pinning unverified")
+        return
     except RuntimeError as exc:
-        if "did not set FLOX_ENV" in str(exc):
-            print("  activation returned no FLOX_ENV; toolchain pinning unverified")
-            return
         _fail(f"Flox activation failed: {exc}")
     except (OSError, subprocess.CalledProcessError) as exc:
         _fail(f"Flox activation failed: {exc}")
@@ -962,8 +963,13 @@ def _scrubbed_parent_env() -> dict[str, str]:
     }
 
 
-def _use_flox() -> bool:
-    """Whether the primary Flox recipe should run on the host."""
+def _use_dagger() -> bool:
+    """Whether this host process should hand the recipe to the wrapper."""
+    return env_flag(RUN_WITH_DAGGER) and not in_container_phase()
+
+
+def _needs_flox_preflight() -> bool:
+    """Whether this host process, rather than the image, needs Flox probing."""
     return not env_flag(RUN_WITH_DAGGER) and not in_container_phase()
 
 
@@ -1154,7 +1160,7 @@ def _deploy_one(handler_file: Path, source: str, *, deploy_env: dict[str, str]) 
     handler_file.write_text(original.replace(PLACEHOLDER, source))
 
     try:
-        if env_flag(RUN_WITH_DAGGER) and not in_container_phase():
+        if _use_dagger():
             asyncio.run(_deploy_via_dagger(handler_file, deploy_env=deploy_env))
         else:
             _deploy_via_flox(handler_file, deploy_env=deploy_env)
@@ -1306,7 +1312,7 @@ def main() -> int:
     _preflight_uv_version()
     _preflight_env()
     # Validate the primary Flox environment before taking the mutation lock.
-    if _use_flox():
+    if _needs_flox_preflight():
         _preflight_flox()
 
     # Acquire lock *before* the working-tree preflight so the snapshot below

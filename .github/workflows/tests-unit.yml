@@ -139,8 +139,9 @@ jobs:
           echo "::error::failed to pull ${image} after 6 attempts"
           exit 1
 
-      # Pull requests execute the controller and dependency Dockerfile from the
-      # base SHA so checked-out PR source runs only inside Dagger.
+      # Pull requests execute the controller and optional dependency packer from
+      # the base SHA. The checked-out PR source remains confined to the Flox
+      # image Dagger creates for the test run.
       - name: Run pytest in Dagger
         env:
           PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
