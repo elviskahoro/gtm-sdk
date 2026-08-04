@@ -20,7 +20,7 @@ Usage:
         --thread THREAD_ID [--thread THREAD_ID ...] [--allow-outdated]
         [--format table|json]
 
-Exit codes: 0 success, 2 usage error (argparse native), 3 auth/API/GraphQL
+Exit codes: 0 success, 2 usage error, 3 auth/API/GraphQL
 failure, 4 refusal (unsafe/unknown/outdated mutation request).
 
 Safety model:
@@ -50,14 +50,16 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
 import re  # noqa: E402
 import subprocess  # noqa: E402
 from collections.abc import Callable  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
 from typing import Any  # noqa: E402
+
+import typer  # noqa: E402
 
 from scripts.lib.container import (  # noqa: E402
     RUN_WITH_DAGGER,
@@ -544,50 +546,8 @@ def make_run_gh(gh_token: str) -> RunGh:
 # ---------------------------------------------------------------------------
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="scripts/pr-review-threads.py",
-        description=(
-            "Inspect and selectively resolve GitHub PR review threads via a "
-            "Flox-run `gh`. `inspect` is read-only; `resolve` mutates only "
-            "explicitly selected --thread IDs. Set RUN_WITH_DAGGER=1 to "
-            "opt into the shared container wrapper."
-        ),
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    inspect = sub.add_parser("inspect", help="read-only: list review threads")
-    inspect.add_argument(
-        "--repo",
-        help="OWNER/REPO; defaults to the current branch's PR",
-    )
-    inspect.add_argument(
-        "--pr",
-        type=int,
-        help="PR number; defaults to current branch's PR",
-    )
-    inspect.add_argument(
-        "--provider",
-        help="filter by comment author login, e.g. coderabbitai",
-    )
-    inspect.add_argument("--unresolved-only", action="store_true")
-    inspect.add_argument("--format", choices=["table", "json"], default="table")
-
-    resolve = sub.add_parser(
-        "resolve",
-        help="mutate: resolve explicitly selected threads",
-    )
-    resolve.add_argument("--repo", required=True)
-    resolve.add_argument("--pr", required=True, type=int)
-    resolve.add_argument("--thread", action="append", dest="threads", required=True)
-    resolve.add_argument("--allow-outdated", action="store_true")
-    resolve.add_argument("--format", choices=["table", "json"], default="table")
-
-    return parser
-
-
 def _resolve_repo_and_pr(
-    args: argparse.Namespace,
+    args: SimpleNamespace,
     run_gh: RunGh,
 ) -> tuple[str, str, int]:
     if args.repo and args.pr:
@@ -596,7 +556,7 @@ def _resolve_repo_and_pr(
     return resolve_current_pr(run_gh)
 
 
-def _cmd_inspect(args: argparse.Namespace, run_gh: RunGh) -> int:
+def _cmd_inspect(args: SimpleNamespace, run_gh: RunGh) -> int:
     owner, repo, number = _resolve_repo_and_pr(args, run_gh)
     threads = fetch_review_threads(owner, repo, number, run_gh)
     filtered = filter_threads(
@@ -608,7 +568,7 @@ def _cmd_inspect(args: argparse.Namespace, run_gh: RunGh) -> int:
     return EXIT_OK
 
 
-def _cmd_resolve(args: argparse.Namespace, run_gh: RunGh) -> int:
+def _cmd_resolve(args: SimpleNamespace, run_gh: RunGh) -> int:
     """Resolve the caller's selected threads.
 
     "All-or-nothing" applies to *validation*: an unknown ID or an outdated
@@ -656,10 +616,7 @@ def _cmd_resolve(args: argparse.Namespace, run_gh: RunGh) -> int:
     return exit_code
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
+def _run(args: SimpleNamespace) -> int:
     try:
         gh_token = _resolve_gh_token()
     except GhApiError as exc:
@@ -676,5 +633,61 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_API_ERROR
 
 
+app = typer.Typer(
+    add_completion=False,
+    help="Inspect and selectively resolve GitHub PR review threads via a Flox-run `gh`.",
+)
+
+
+def _exit_for(args: SimpleNamespace) -> None:
+    raise typer.Exit(_run(args))
+
+
+@app.command("inspect")
+def inspect(
+    repo: str | None = typer.Option(None, "--repo"),
+    pr: int | None = typer.Option(None, "--pr"),
+    provider: str | None = typer.Option(None, "--provider"),
+    unresolved_only: bool = typer.Option(False, "--unresolved-only"),  # noqa: FBT001, FBT003
+    output_format: str = typer.Option("table", "--format"),
+) -> None:
+    if output_format not in {"table", "json"}:
+        message = "must be 'table' or 'json'"
+        raise typer.BadParameter(message, param_hint="--format")
+    _exit_for(
+        SimpleNamespace(
+            command="inspect",
+            repo=repo,
+            pr=pr,
+            provider=provider,
+            unresolved_only=unresolved_only,
+            format=output_format,
+        ),
+    )
+
+
+@app.command("resolve")
+def resolve(
+    repo: str = typer.Option(..., "--repo"),
+    pr: int = typer.Option(..., "--pr"),
+    threads: list[str] = typer.Option(..., "--thread"),
+    allow_outdated: bool = typer.Option(False, "--allow-outdated"),  # noqa: FBT001, FBT003
+    output_format: str = typer.Option("table", "--format"),
+) -> None:
+    if output_format not in {"table", "json"}:
+        message = "must be 'table' or 'json'"
+        raise typer.BadParameter(message, param_hint="--format")
+    _exit_for(
+        SimpleNamespace(
+            command="resolve",
+            repo=repo,
+            pr=pr,
+            threads=threads,
+            allow_outdated=allow_outdated,
+            format=output_format,
+        ),
+    )
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    app()

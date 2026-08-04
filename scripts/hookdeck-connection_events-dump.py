@@ -34,7 +34,6 @@ from scripts.lib.uv_bootstrap import bootstrap_uv as _bootstrap_uv  # noqa: E402
 if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
-import argparse
 import hashlib
 import os
 import platform
@@ -45,6 +44,8 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
+
+import typer
 
 from scripts.lib.flox import run as flox_run
 
@@ -395,49 +396,13 @@ def _dump_via_flox(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def main() -> int:
-    """Keep Hookdeck dumps Flox-only because its CLI is not in the shared image."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    target = parser.add_mutually_exclusive_group(required=True)
-    target.add_argument(
-        "--connection-id",
-        help="Hookdeck connection ID (e.g. web_xxx).",
-    )
-    target.add_argument(
-        "--connection-name",
-        help=(
-            "Hookdeck connection display name (e.g. rb2b-visits-mock). "
-            "Resolved to an ID inside the container. Must be an exact, "
-            "unambiguous match."
-        ),
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=DEFAULT_OUTPUT_ROOT,
-        help=(
-            f"Root output directory. Events land in <output-dir>/<connection-name>/ "
-            f"(falls back to the connection ID if the name lookup fails). "
-            f"Default: {DEFAULT_OUTPUT_ROOT}"
-        ),
-    )
-    parser.add_argument(
-        "--limit-per-page",
-        type=int,
-        default=100,
-        help="Page size passed to `event list --limit` (default: 100).",
-    )
-    parser.add_argument(
-        "--max-events",
-        type=int,
-        default=None,
-        help="Stop after N events. Default: dump all.",
-    )
-    args = parser.parse_args()
-
+def _run(
+    connection_id: str | None,
+    connection_name: str | None,
+    output_dir: Path,
+    limit_per_page: int,
+    max_events: int | None,
+) -> int:
     api_key = os.environ.get("HOOKDECK_API_KEY")
     if not api_key:
         print(
@@ -452,27 +417,27 @@ def main() -> int:
     # rename the staging dir to <slug>/ on the host. Staging exists because we
     # don't know the human-readable name until after the container runs (and
     # the user may have supplied just a name, with no ID yet).
-    target_token = args.connection_id or args.connection_name or ""
-    root = args.output_dir.resolve()
+    target_token = connection_id or connection_name or ""
+    root = output_dir.resolve()
     staging_dir = root / f".staging-{_slugify(target_token)}"
-    if args.connection_id:
-        print(f"[connection]  id={args.connection_id}")
+    if connection_id:
+        print(f"[connection]  id={connection_id}")
     else:
-        print(f"[connection]  name={args.connection_name}")
-    print(f"[limit/page]  {args.limit_per_page}")
-    if args.max_events is not None:
-        print(f"[max events]  {args.max_events}")
+        print(f"[connection]  name={connection_name}")
+    print(f"[limit/page]  {limit_per_page}")
+    if max_events is not None:
+        print(f"[max events]  {max_events}")
 
     if staging_dir.exists():
         shutil.rmtree(staging_dir)
 
     _dump_via_flox(
-        connection_id=args.connection_id,
-        connection_name=args.connection_name,
+        connection_id=connection_id,
+        connection_name=connection_name,
         output_dir=staging_dir,
         api_key=api_key,
-        limit_per_page=args.limit_per_page,
-        max_events=args.max_events,
+        limit_per_page=limit_per_page,
+        max_events=max_events,
     )
 
     name_file = staging_dir / ".connection_name"
@@ -496,5 +461,32 @@ def main() -> int:
     return 0
 
 
+app = typer.Typer(add_completion=False, help=__doc__)
+
+
+@app.command()
+def main(
+    connection_id: str | None = typer.Option(
+        None,
+        "--connection-id",
+        help="Hookdeck connection ID (e.g. web_xxx).",
+    ),
+    connection_name: str | None = typer.Option(
+        None,
+        "--connection-name",
+        help="Exact Hookdeck connection display name.",
+    ),
+    output_dir: Path = typer.Option(DEFAULT_OUTPUT_ROOT, "--output-dir"),
+    limit_per_page: int = typer.Option(100, "--limit-per-page"),
+    max_events: int | None = typer.Option(None, "--max-events"),
+) -> None:
+    if (connection_id is None) == (connection_name is None):
+        message = "provide exactly one of --connection-id or --connection-name"
+        raise typer.BadParameter(message)
+    raise typer.Exit(
+        _run(connection_id, connection_name, output_dir, limit_per_page, max_events),
+    )
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    app()

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 import pytest
+from typer.testing import CliRunner
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -98,6 +99,47 @@ def test_secret_scrub_surface_remains_explicit(script_module: ModuleType) -> Non
     assert "MODAL_TOKEN_ID" in keys
     assert "INFISICAL_TOKEN" in keys
     assert "UV_PROJECT_ENVIRONMENT" not in keys
+
+
+def test_typer_cli_preserves_target_contract(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[tuple[str, str]] = []
+
+    def fake_run(handler: str, source: str) -> int:
+        captured.append((handler, source))
+        return 0
+
+    monkeypatch.setattr(script_module, "_run", fake_run)
+    runner = CliRunner()
+    assert (
+        runner.invoke(script_module.app, ["attio", "CaldotcomBookingWebhook"]).exit_code
+        == 0
+    )
+    assert captured == [("attio", "CaldotcomBookingWebhook")]
+    assert runner.invoke(script_module.app, ["attio", "--all"]).exit_code == 0
+    assert runner.invoke(script_module.app, ["attio"]).exit_code == 2
+    assert runner.invoke(script_module.app, ["attio", "source", "--all"]).exit_code == 2
+    help_result = runner.invoke(script_module.app, ["--help"])
+    assert help_result.exit_code == 0
+    assert "Preconditions:" in help_result.output
+
+
+def test_typer_cli_propagates_domain_exit_code(
+    script_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(_handler: str, _source: str) -> int:
+        return 1
+
+    monkeypatch.setattr(script_module, "_run", fake_run)
+    assert (
+        CliRunner()
+        .invoke(script_module.app, ["attio", "CaldotcomBookingWebhook"])
+        .exit_code
+        == 1
+    )
 
 
 def test_isolated_checkout_keeps_placeholder_out_of_host_tree(

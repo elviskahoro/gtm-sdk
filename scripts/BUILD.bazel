@@ -354,6 +354,7 @@ py_binary(
     deps = [
         "//scripts/lib",
         "@pypi//dagger_io",
+        "@pypi//typer",
     ],
 )
 
@@ -394,6 +395,7 @@ py_binary(
     deps = [
         "//scripts/lib",
         "@pypi//dagger_io",
+        "@pypi//typer",
     ],
 )
 
@@ -435,5 +437,6 @@ py_binary(
     deps = [
         "//scripts/lib",
         "@pypi//dagger_io",
+        "@pypi//typer",
     ],
 )
