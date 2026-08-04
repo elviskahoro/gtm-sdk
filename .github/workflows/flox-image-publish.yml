@@ -3,6 +3,8 @@ name: Publish Flox toolchain image
 on: # yamllint disable-line rule:empty-values
   workflow_dispatch: {}
   push:
+    branches:
+      - main
     paths:
       - flox/toolchain/.flox/env/manifest.toml
       - flox/toolchain/.flox/env/manifest.lock
