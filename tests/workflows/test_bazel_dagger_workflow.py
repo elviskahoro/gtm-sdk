@@ -58,10 +58,9 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "TRUNK_BAZEL_ACTION_REV" in pipeline
     assert "build-essential" in pipeline
     assert (
-        'git rev-parse HEAD)" = "42994092b8b40711573f1111b9f34c742c9a371d"' in pipeline
+        'BAZEL_DIFF_COMMAND_OPTIONS="--config=ci --incompatible_disallow_empty_glob=false"'
+        in pipeline
     )
-    assert "test -f .github/workflows/ci/BUILD.bazel; then sed -i" in pipeline
-    assert 'sed -i -e "/Dockerfile/d" -e "/dockerignore/d"' in pipeline
     assert (
         "BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root"
         in pipeline

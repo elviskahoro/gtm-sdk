@@ -92,7 +92,7 @@ java="$(bazel ${BAZEL_STARTUP_OPTIONS} info java-home)/bin/java"
 export MERGE_INSTANCE_BRANCH_HEAD_SHA="${merge_base_sha}"
 export PR_BRANCH_HEAD_SHA="${pr_branch_testing_head_sha}"
 export BAZEL_DIFF_CMD="${java} -jar /opt/bazel-diff.jar"
-export BAZEL_DIFF_COMMAND_OPTIONS=--config=ci
+export BAZEL_DIFF_COMMAND_OPTIONS="--config=ci --incompatible_disallow_empty_glob=false"
 export CACHE_DIR=/var/cache/bazel/impacted-targets
 mkdir --parents "${CACHE_DIR}"
 source "${action_dir}/src/scripts/compute_impacted_targets.sh"
