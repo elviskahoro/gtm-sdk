@@ -460,6 +460,8 @@ def test_make_run_gh_defaults_to_flox(
     prt: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("RUN_WITH_DAGGER", raising=False)
+    monkeypatch.delenv("CONTAINER_PHASE", raising=False)
     flox = MagicMock(return_value='{"data": {}}')
     monkeypatch.setattr(prt, "flox_run", flox)
     assert prt.make_run_gh("tok")(["pr", "view"]) == '{"data": {}}'
