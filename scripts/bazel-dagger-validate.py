@@ -23,7 +23,7 @@ def _run(command: list[str], *, cwd: Path = REPO_ROOT) -> None:
 
 def _resolve_commit(ref: str) -> str:
     """Resolve a Git ref to an immutable commit identifier."""
-    completed = subprocess.run(  # noqa: S603 -- fixed local Git argv.
+    completed = subprocess.run(  # noqa: S603 -- fixed local Git argv.  # nosec B603,B607
         ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],  # noqa: S607 -- Git is resolved via PATH.
         cwd=REPO_ROOT,
         check=True,

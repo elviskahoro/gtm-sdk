@@ -46,12 +46,12 @@ def test_controller_environment_uses_shared_cache_and_omits_trunk_metadata(
         mode="full",
     )
 
-    assert environment["BAZEL_DAGGER_BINARY"] == "/tmp/toolchain/bazel"
+    assert environment["BAZEL_DAGGER_BINARY"] == "/tmp/toolchain/bazel"  # nosec B108
     assert (
         environment["BAZEL_DAGGER_DIFF_JAR"] == "/tmp/toolchain/bazel-diff_deploy.jar"
-    )
-    assert environment["BAZEL_DAGGER_CACHE_DIR"] == "/tmp/cache"
-    assert environment["BAZEL_DAGGER_SOURCE_DIR"] == "/tmp/source"
+    )  # nosec B108
+    assert environment["BAZEL_DAGGER_CACHE_DIR"] == "/tmp/cache"  # nosec B108
+    assert environment["BAZEL_DAGGER_SOURCE_DIR"] == "/tmp/source"  # nosec B108
     assert environment["BAZEL_DAGGER_MODE"] == "full"
     assert environment["DAGGER_NO_NAG"] == "1"
     assert "TRUNK_API_TOKEN" not in environment
