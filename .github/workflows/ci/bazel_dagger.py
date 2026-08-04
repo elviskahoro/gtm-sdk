@@ -36,6 +36,7 @@ export PR_BRANCH_HEAD_SHA="${pr_branch_testing_head_sha}"
 export BAZEL_DIFF_CMD="${java} -jar /opt/bazel-diff.jar"
 export BAZEL_DIFF_COMMAND_OPTIONS=--config=ci
 export CACHE_DIR=/var/cache/bazel/impacted-targets
+mkdir --parents "${CACHE_DIR}"
 source "${action_dir}/src/scripts/compute_impacted_targets.sh"
 export IMPACTED_TARGETS_FILE="${impacted_targets_out}"
 export BAZEL_TEST_COMMAND="test --config=ci"
