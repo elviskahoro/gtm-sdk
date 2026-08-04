@@ -1,7 +1,9 @@
 APIs
 Attio
+CI|CI's
 [Dd]ocstrings?
 Exa
+Flox
 Grafana
 Hookdeck
 Infisical
@@ -10,6 +12,7 @@ Logfire
 Octolens
 Polars
 Pydantic
+pytest
 READMEs
 SHAs
 Typer
@@ -43,3 +46,4 @@ OTLP
 depends_on
 layers_explicit_depends_on
 tach|Tach
+toolchain
