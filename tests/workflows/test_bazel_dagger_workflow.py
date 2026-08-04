@@ -1,5 +1,5 @@
-# ruff: noqa: INP001, S101 -- workflow tests are standalone and assertion-based.
-"""Static contracts for the parallel ARM64 Dagger impacted-target trial."""
+# ruff: noqa: INP001, S101, S105 -- workflow tests are standalone and assertion-based.
+"""Static contracts for the ARM64 Dagger impacted-target Bazel workflow."""
 
 from pathlib import Path
 from typing import Any
@@ -8,8 +8,7 @@ import yaml
 
 TEST_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TEST_DIR.parents[1]
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel-dagger.yml"
-STANDARD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel.yml"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel.yml"
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "bazel_dagger.py"
 
 
@@ -19,27 +18,23 @@ def _workflow(path: Path) -> dict[object, Any]:
     return workflow
 
 
-def test_only_impacted_target_checks_run_for_pull_requests() -> None:
-    dagger_workflow = _workflow(WORKFLOW)
-    standard_workflow = _workflow(STANDARD_WORKFLOW)
-    dagger_triggers = dagger_workflow.get("on") or dagger_workflow.get(True)
-    standard_triggers = standard_workflow.get("on") or standard_workflow.get(True)
-    assert dagger_triggers == {"pull_request": {"branches": ["main"]}}
-    assert standard_triggers == {"pull_request": {"branches": ["main"]}}
-    assert set(dagger_workflow["jobs"]) == {"bazel_impacted_dagger"}
-    assert set(standard_workflow["jobs"]) == {"bazel_impacted"}
-
-
-def test_impacted_target_trials_use_dagger_and_trunk() -> None:
+def test_only_impacted_target_check_runs_for_pull_requests() -> None:
     workflow = _workflow(WORKFLOW)
-    impacted = workflow["jobs"]["bazel_impacted_dagger"]
+    triggers = workflow.get("on") or workflow.get(True)
+    assert triggers == {"pull_request": {"branches": ["main"]}}
+    assert set(workflow["jobs"]) == {"bazel_impacted"}
+
+
+def test_impacted_targets_use_dagger_and_trunk() -> None:
+    workflow = _workflow(WORKFLOW)
+    impacted = workflow["jobs"]["bazel_impacted"]
     assert impacted["runs-on"] == "namespace-profile-test"
     assert (
         impacted["if"]
         == "github.event.pull_request.head.repo.full_name == github.repository"
     )
     assert workflow["concurrency"] == {
-        "group": "arm64-dagger-bazel-${{ github.workflow }}-${{ github.ref }}",
+        "group": "bazel-tests-${{ github.workflow }}-${{ github.ref }}",
         "cancel-in-progress": True,
     }
     run_step = next(
@@ -50,11 +45,6 @@ def test_impacted_target_trials_use_dagger_and_trunk() -> None:
     assert "BAZEL_DAGGER_DIFF_JAR" in run_step["run"]
     assert "BAZEL_DAGGER_SOURCE_DIR" in run_step["run"]
     assert "bazel-diff_deploy.jar" in WORKFLOW.read_text()
-
-    standard_workflow = STANDARD_WORKFLOW.read_text()
-    assert "trunk-io/bazel-action@" in standard_workflow
-    assert 'test-targets: "true"' in standard_workflow
-    assert 'upload-targets: "true"' in standard_workflow
 
 
 def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
@@ -72,13 +62,25 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "prerequisites.sh" in pipeline
     assert "compute_impacted_targets.sh" in pipeline
     assert "test_impacted_targets.sh" in pipeline
+    assert "--nobuild_event_json_file_path_conversion" in pipeline
+    assert "--build_event_json_file=/src/build_events.json" in pipeline
+    assert "--bazel-bep-path={BEP_PATH}" in pipeline
+    assert "--use-bazel-target-for-codeowners" in pipeline
+    assert "--variant bazel" in pipeline
+    assert "--allow-empty-test-results=false" in pipeline
+    assert "IMPACTED_TARGETS_PATH" in pipeline
+    assert "CHANGED_PATHS_PATH" in pipeline
+    assert "setImpactedTargets" in pipeline
+    assert '"ALL"' in pipeline
+    assert "--notest_keep_going" not in pipeline
+    assert "--test_keep_going=false" not in pipeline
     assert 'export BAZEL_SCOPE_FILTER=""' in pipeline
     assert "test //..." not in pipeline
 
 
 def test_workflow_initializes_namespace_cache_mounts_before_dagger() -> None:
     workflow = _workflow(WORKFLOW)
-    steps = workflow["jobs"]["bazel_impacted_dagger"]["steps"]
+    steps = workflow["jobs"]["bazel_impacted"]["steps"]
     names = [step.get("name") for step in steps]
     assert names.index("Prepare self-contained Git history") < names.index(
         "Run impacted Bazel targets in Dagger",
@@ -110,3 +112,20 @@ def test_workflow_initializes_namespace_cache_mounts_before_dagger() -> None:
             "$HOME/.bazel-dagger/cache",
         ):
             assert f'"{cache_path}"' in step["run"]
+
+
+def test_workflow_passes_same_repo_pr_metadata_and_token_to_dagger() -> None:
+    workflow = _workflow(WORKFLOW)
+    steps = workflow["jobs"]["bazel_impacted"]["steps"]
+    run_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Run impacted Bazel targets in Dagger"
+    )
+    env = run_step["env"]
+    assert env["TRUNK_API_TOKEN"] == "${{ secrets.TRUNK_API_TOKEN }}"
+    assert env["TRUNK_REPOSITORY"] == "${{ github.repository }}"
+    assert env["TRUNK_PR_NUMBER"] == "${{ github.event.pull_request.number }}"
+    assert env["TRUNK_PR_HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
+    assert env["TRUNK_PR_BASE_REF"] == "${{ github.event.pull_request.base.ref }}"
+    assert env["CUSTOM"] == "true"

@@ -40,3 +40,22 @@ jobs:
         with:
           check-mode: all
           arguments: --filter=tach
+
+      # requirements_bazel.txt is gitignored and generated from uv.lock, so it
+      # cannot drift -- but `uv export` can still start failing (a lock that no
+      # longer matches pyproject.toml, a dependency uv refuses to resolve), and
+      # every consumer of that generator sits behind the Bazel job, which is
+      # `pull_request`-only, same-repo-guarded, and not a required status. That
+      # leaves pushes to main and fork PRs with no signal at all until someone
+      # opens a same-repo PR and the Bazel job dies on `test -s`.
+      #
+      # This runs the generator here instead, where the check IS required and
+      # fires in both contexts. Do NOT swap this for `--check`: on a fresh
+      # checkout the output file does not exist, so `--check` diffs against an
+      # empty string and always exits 1. Last step in the job so the generated
+      # file cannot influence the lint results above. (gs-dcbi)
+      - name: Verify Bazel requirements generator
+        run: |
+          set -euo pipefail
+          uv run scripts/bazel-requirements-sync.py
+          test -s requirements_bazel.txt
