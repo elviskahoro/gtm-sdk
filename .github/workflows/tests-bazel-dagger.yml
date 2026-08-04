@@ -111,8 +111,6 @@ jobs:
           version: 0.21.7
 
       - name: Run impacted Bazel targets in Dagger
-        env:
-          BAZEL_DAGGER_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           export BAZEL_DAGGER_BINARY="$HOME/.bazel-dagger/toolchain/bazel"
           export BAZEL_DAGGER_CACHE_DIR="$HOME/.bazel-dagger/cache"

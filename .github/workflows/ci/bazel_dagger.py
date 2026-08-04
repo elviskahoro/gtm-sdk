@@ -13,53 +13,38 @@ from dagger import dag
 
 BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
 RESULT_PATH = "/src/bazel_result"
+TRUNK_BAZEL_ACTION_REV = "3e7d4e893f2c4c3c1b16e07f3db8ff3585e4025d"
 
 IMPACTED_VALIDATE_CMD = """
 set -euo pipefail
-base_sha="${BAZEL_DAGGER_BASE_SHA:?missing PR base SHA}"
-# GitHub checks out the PR merge commit; this is the exact revision that the
-# GitHub-hosted Trunk action tests against the PR base.
-head_sha="$(git rev-parse HEAD)"
+action_dir=/opt/trunk-bazel-action
+git clone --quiet https://github.com/trunk-io/bazel-action.git "${action_dir}"
+git -C "${action_dir}" checkout --quiet "${TRUNK_BAZEL_ACTION_REV}"
+
+# Execute the same scripts and filters as trunk-io/bazel-action. Dagger owns
+# the ARM64 container and cache; the GitHub-hosted action remains responsible
+# for uploading the resulting target graph to Trunk MergeGraph.
+export DEFAULT_BRANCH=main
+export TARGET_BRANCH=main
+export PR_BRANCH=HEAD
+export WORKSPACE_PATH=/src
+export BAZEL_PATH=bazel
+source "${action_dir}/src/scripts/prerequisites.sh"
 java="$(bazel --output_user_root=/var/cache/bazel/output-user-root info java-home)/bin/java"
-hash_root=/var/cache/bazel/impacted-targets
-mkdir -p "${hash_root}"
-for sha in "${base_sha}" "${head_sha}"; do
-  git checkout -q "${sha}"
-  "${java}" -jar /opt/bazel-diff.jar generate-hashes \
-    --bazelPath bazel \
-    --workspacePath /src \
-    --bazelCommandOptions "--noshow_progress --config=ci" \
-    "${hash_root}/${sha}"
-done
-git checkout -q "${head_sha}"
-impacted_targets=/tmp/impacted-targets.txt
-"${java}" -jar /opt/bazel-diff.jar get-impacted-targets \
-  --startingHashes="${hash_root}/${base_sha}" \
-  --finalHashes="${hash_root}/${head_sha}" \
-  --workspacePath /src \
-  --output="${impacted_targets}"
-query_file=/tmp/impacted-target-query.txt
-{
-  echo "let targets = set("
-  sed -e "s/^/'/" -e "s/$/'/" "${impacted_targets}"
-  echo ") in"
-  echo "let targets = kind('.+_library|.+_binary|.+_test', \\$targets) in"
-  echo '$targets'
-  echo "- attr('tags', 'manual', \\$targets)"
-  echo "- kind('generated file', \\$targets)"
-  echo "- filter('//external', \\$targets)"
-} > "${query_file}"
-filtered_targets=/tmp/filtered-impacted-targets.txt
-bazel --output_user_root=/var/cache/bazel/output-user-root query \
-  --query_file="${query_file}" > "${filtered_targets}"
-if test ! -s "${filtered_targets}"; then
-  echo "No testable impacted Bazel targets"
-  exit 0
-fi
-bazel --output_user_root=/var/cache/bazel/output-user-root test --config=ci \
-  --target_pattern_file="${filtered_targets}" \
-  --repository_cache=/var/cache/bazel/repository \
-  --disk_cache=/var/cache/bazel/disk
+export MERGE_INSTANCE_BRANCH_HEAD_SHA="${merge_base_sha}"
+export PR_BRANCH_HEAD_SHA="${pr_branch_testing_head_sha}"
+export BAZEL_DIFF_CMD="${java} -jar /opt/bazel-diff.jar"
+export BAZEL_DIFF_COMMAND_OPTIONS=--config=ci
+export CACHE_DIR=/var/cache/bazel/impacted-targets
+source "${action_dir}/src/scripts/compute_impacted_targets.sh"
+export IMPACTED_TARGETS_FILE="${impacted_targets_out}"
+export BAZEL_TEST_COMMAND="test --config=ci"
+export BAZEL_KIND_FILTER='.+_library|.+_binary|.+_test'
+export BAZEL_NEGATIVE_KIND_FILTER='generated file'
+export BAZEL_NEGATIVE_SCOPE_FILTER=//external
+export BAZEL_NEGATIVE_TAG_FILTER=manual
+export CI=true
+source "${action_dir}/src/scripts/test_impacted_targets.sh"
 """.strip()
 
 
@@ -108,8 +93,8 @@ apt-get install --yes --no-install-recommends git unzip
         container.with_directory("/src/.git", dag.host().directory(".git"))
         .with_file("/opt/bazel-diff.jar", dag.host().file(str(diff_jar)))
         .with_env_variable(
-            "BAZEL_DAGGER_BASE_SHA",
-            os.environ["BAZEL_DAGGER_BASE_SHA"],
+            "TRUNK_BAZEL_ACTION_REV",
+            TRUNK_BAZEL_ACTION_REV,
         )
     )
     return container.with_exec(

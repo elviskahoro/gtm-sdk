@@ -47,7 +47,6 @@ def test_impacted_target_trials_use_dagger_and_trunk() -> None:
         for step in impacted["steps"]
         if step.get("name") == "Run impacted Bazel targets in Dagger"
     )
-    assert "BAZEL_DAGGER_BASE_SHA" in run_step["env"]
     assert "BAZEL_DAGGER_DIFF_JAR" in run_step["run"]
     assert "bazel-diff_deploy.jar" in WORKFLOW.read_text()
 
@@ -60,12 +59,12 @@ def test_impacted_target_trials_use_dagger_and_trunk() -> None:
 def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     pipeline = PIPELINE.read_text()
     assert 'dagger.Platform("linux/arm64")' in pipeline
-    assert "BAZEL_DAGGER_BASE_SHA" in pipeline
-    assert 'head_sha="$(git rev-parse HEAD)"' in pipeline
+    assert "TRUNK_BAZEL_ACTION_REV" in pipeline
     assert "BAZEL_DAGGER_DIFF_JAR" in pipeline
     assert 'directory("/src/.git", dag.host().directory(".git"))' in pipeline
-    assert "get-impacted-targets" in pipeline
-    assert "--target_pattern_file" in pipeline
+    assert "prerequisites.sh" in pipeline
+    assert "compute_impacted_targets.sh" in pipeline
+    assert "test_impacted_targets.sh" in pipeline
     assert "test //..." not in pipeline
 
 
