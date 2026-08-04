@@ -243,12 +243,12 @@ if [ ! -s {BEP_PATH} ]; then
 else
   {{
     curl --fail --location --silent --show-error {TRUNK_ANALYTICS_URL} \
-      | tee /tmp/trunk-analytics-cli.tar.gz \
-      | tar --extract --gzip --file - --directory /usr/local/bin
-    echo "{TRUNK_ANALYTICS_SHA256}  /tmp/trunk-analytics-cli.tar.gz" | sha256sum --check
-    chmod +x /usr/local/bin/trunk-analytics-cli
-    trunk-analytics-cli validate --bazel-bep-path={BEP_PATH}
-    trunk-analytics-cli upload --bazel-bep-path={BEP_PATH} \
+      --output /tmp/trunk-analytics-cli.tar.gz \
+    && echo "{TRUNK_ANALYTICS_SHA256}  /tmp/trunk-analytics-cli.tar.gz" | sha256sum --check \
+    && tar --extract --gzip --file /tmp/trunk-analytics-cli.tar.gz --directory /usr/local/bin \
+    && chmod +x /usr/local/bin/trunk-analytics-cli \
+    && trunk-analytics-cli validate --bazel-bep-path={BEP_PATH} \
+    && trunk-analytics-cli upload --bazel-bep-path={BEP_PATH} \
       --org-url-slug sanhedrin \
       --variant bazel \
       --use-bazel-target-for-codeowners \
