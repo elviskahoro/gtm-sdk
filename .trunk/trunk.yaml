@@ -308,16 +308,24 @@ merge:
   # on every PR, so requiring them deadlocks the queue. Same for the workflow_run-
   # triggered "Triage CI failure", which by design only runs after a failure.
   #
-  # "Full Bazel suite" (tests-bazel.yml, job bazel_full) has no `if:` guard -- it
-  # reports on both push-to-main and pull_request, so it's safe here (gs-7j1).
+  # "Full Bazel suite" was dropped: no workflow in this repo produces a check
+  # with that name (the standalone tests-bazel.yml job that once did was
+  # retired). Do not re-add it without a workflow to back it.
   #
-  # "Trunk impacted Bazel targets" (job bazel_impacted) is NOT listed: it runs
-  # `if: github.event_name == 'pull_request' && ...same-repo check`, by design --
-  # there's no target-branch diff to compute on a push, and fork PRs can't see
-  # the Trunk API token. Requiring it would reproduce the exact deadlock this
-  # section warns about (a push to main would wait forever on a status that
-  # never arrives). Revisit only if it grows a push-context equivalent.
+  # Impacted-Bazel validation runs via tests-bazel.yml's "Impacted Bazel
+  # targets (Dagger)" check (job bazel_impacted, .github/workflows/ci/bazel_dagger.py).
+  # It is NOT listed here: it runs `if: github.event.pull_request.head.repo.full_name
+  # == github.repository`, by design -- there's no target-branch diff to compute on a
+  # push, and fork PRs don't get the same trust. Requiring it would reproduce the exact
+  # deadlock this section warns about (a push to main would wait forever on a status
+  # that never arrives). Revisit only if it grows a push-context equivalent.
+  #
+  # This replaced the earlier hosted `trunk-io/bazel-action`-based job of the same
+  # name: that action's revision-switch cleanup (`git clean -dfx -f`) deletes the
+  # untracked, generated requirements_bazel.txt with no hook to regenerate it, so it
+  # could no longer produce a valid impacted-target query once requirements_bazel.txt
+  # stopped being tracked. The Dagger job patches around this (bazel_dagger.py)
+  # and is now the sole impacted-Bazel path.
   required_statuses:
     - Lint and type check with Trunk
     - Unit tests
-    - Full Bazel suite
