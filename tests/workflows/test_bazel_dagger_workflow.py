@@ -68,6 +68,12 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "--use-bazel-target-for-codeowners" in pipeline
     assert "--variant bazel" in pipeline
     assert "--allow-empty-test-results=false" in pipeline
+    assert "--output /tmp/trunk-analytics-cli.tar.gz" in pipeline
+    assert "sha256sum --check" in pipeline
+    assert "tee /tmp/trunk-analytics-cli.tar.gz" not in pipeline
+    assert pipeline.index("sha256sum --check") < pipeline.index(
+        "tar --extract --gzip --file /tmp/trunk-analytics-cli.tar.gz",
+    )
     assert "IMPACTED_TARGETS_PATH" in pipeline
     assert "CHANGED_PATHS_PATH" in pipeline
     assert "setImpactedTargets" in pipeline
