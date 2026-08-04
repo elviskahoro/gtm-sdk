@@ -13,6 +13,16 @@ filegroup(
 )
 
 py_binary(
+    name = "bazel_dagger",
+    srcs = ["bazel_dagger.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pypi//anyio",
+        "@pypi//dagger_io",
+    ],
+)
+
+py_binary(
     name = "pytest_dagger",
     srcs = ["pytest_dagger.py"],
     visibility = ["//:__subpackages__"],
@@ -67,6 +77,7 @@ py_binary(
 py_library(
     name = "ci",
     srcs = [
+        "bazel_dagger.py",
         "pytest_dagger.py",
         "pytest_dependency_key.py",
         "pytest_dependency_pack.py",
