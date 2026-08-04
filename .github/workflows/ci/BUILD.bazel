@@ -33,12 +33,6 @@ py_binary(
 )
 
 py_binary(
-    name = "pytest_dependency_key",
-    srcs = ["pytest_dependency_key.py"],
-    visibility = ["//:__subpackages__"],
-)
-
-py_binary(
     name = "pytest_dependency_pack",
     srcs = ["pytest_dependency_pack.py"],
     visibility = ["//:__subpackages__"],
@@ -79,7 +73,6 @@ py_library(
     srcs = [
         "bazel_dagger.py",
         "pytest_dagger.py",
-        "pytest_dependency_key.py",
         "pytest_dependency_pack.py",
         "pytest_integration_dagger.py",
         "triage_dagger.py",

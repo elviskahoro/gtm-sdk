@@ -11,15 +11,11 @@ CI resolves `python` to a dedicated dagger-io/anyio venv via `$GITHUB_PATH`
 instead (see `.github/workflows/tests-unit.yml`), so the CI invocation stays
 a bare `dagger run python "${pipeline}"`.
 
-The pipeline runs pytest from an immutable, lockfile-derived dependency image
-and exports `junit.xml` to the host so a follow-up step (e.g.
-trunk-io/analytics-uploader) can upload it. Production keeps four workers while
-dependency checkpoint layouts are benchmarked on the ARM64 4x8 Namespace
-runner, so artifact transport remains the only independent variable.
-
-Trusted main runs publish the image outside this pipeline. Pulling by digest
-keeps dependency selection immutable; when no image is available, Dagger builds
-the same dependency-only Dockerfile locally without publishing it.
+The pipeline builds pytest's immutable, lockfile-derived dependency image in
+the local Dagger engine and exports `junit.xml` to the host so a follow-up step
+(e.g. trunk-io/analytics-uploader) can upload it. Production keeps four
+workers on GitHub-hosted ARM64 runners while dependency checkpoint layouts are
+benchmarked, so artifact transport remains the only independent variable.
 
 The pipeline *fails* (non-zero exit) when pytest exits non-zero, while still
 exporting the report. A previous `... || true` swallowed pytest's exit code so
@@ -187,39 +183,18 @@ def dependency_check_cmd(layout: str) -> str:
 
 
 def dependency_base(source: dagger.Directory) -> dagger.Container:
-    """Return the immutable dependency image or build it locally when absent."""
-    dependency_image = os.environ.get("PYTEST_DEPENDENCY_IMAGE", "").strip()
-    if not dependency_image:
-        print("Pytest dependency image: unavailable; building cold")
-        return dependency_build_context(source).docker_build(
-            dockerfile="pytest-deps.Dockerfile",
-            platform=dagger.Platform("linux/arm64"),
-            build_args=[
-                dagger.BuildArg(
-                    "PYTEST_DEPENDENCY_LAYOUT",
-                    dependency_layout(),
-                ),
-            ],
-        )
-
-    if "@sha256:" not in dependency_image:
-        raise ValueError(
-            "PYTEST_DEPENDENCY_IMAGE must be an immutable digest reference",
-        )
-
-    print(f"Pytest dependency image: {dependency_image}")
-    registry_host = dependency_image.split("/", 1)[0]
-    container = dag.container(platform=dagger.Platform("linux/arm64"))
-    registry_token = os.environ.get("NAMESPACE_REGISTRY_TOKEN", "").strip()
-    if registry_token:
-        registry_secret = dag.set_secret("namespace-registry-token", registry_token)
-        return (
-            container.with_registry_auth(registry_host, "token", registry_secret)
-            .from_(dependency_image)
-            .without_registry_auth(registry_host)
-        )
-
-    return container.from_(dependency_image)
+    """Build the lockfile-derived dependency image in the local Dagger engine."""
+    print("Pytest dependency image: building from the locked Dockerfile")
+    return dependency_build_context(source).docker_build(
+        dockerfile="pytest-deps.Dockerfile",
+        platform=dagger.Platform("linux/arm64"),
+        build_args=[
+            dagger.BuildArg(
+                "PYTEST_DEPENDENCY_LAYOUT",
+                dependency_layout(),
+            ),
+        ],
+    )
 
 
 def build_containers() -> tuple[

@@ -35,109 +35,35 @@ permissions:
 jobs:
   pytest:
     name: Unit tests
-    runs-on: namespace-profile-test
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: namespacelabs/nscloud-checkout-action@445c25d7009680597d73eb03c4e1cd5be522ed73 # v9.0.0
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
 
-      - name: Verify Namespace runner shape
-        run: |
-          set -euo pipefail
-          echo "Expected runner shape: 4 vCPU / 8 GiB"
-          arch="$(uname -m)"
-          cpus="$(getconf _NPROCESSORS_ONLN)"
-          memory_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
-          echo "Runner architecture: ${arch}"
-          echo "Runner CPUs: ${cpus}"
-          echo "Runner memory: ${memory_kib} KiB"
-          case "${arch}" in
-            aarch64|arm64) ;;
-            *) echo "::error::runner architecture must be ARM64"; exit 1 ;;
-          esac
-          if [ "${cpus}" -ne 4 ] || [ "${memory_kib}" -lt 7000000 ] || [ "${memory_kib}" -gt 9000000 ]; then
-            echo "::error::runner does not match the required 4 vCPU / 8 GiB profile"
-            exit 1
-          fi
-
-      # Must run BEFORE the Namespace cache step: `cache: uv` planning shells
-      # out to `uv cache dir` (via spacectl), so a missing uv binary fails the
-      # whole job before any test runs (run 29462473211). Needs the checkout
-      # first — the uv version is resolved from pyproject.toml. Pinned by SHA
-      # per repo convention; the official action avoids the `curl | sh`
-      # install pattern (semgrep gha-curl-pipe-shell).
+      # Pinned by SHA per repo convention. The native GitHub cache stores uv's
+      # download artifacts; the SDK environment is cached separately below.
       - name: Install uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
-          # The Namespace cache step below owns uv's cache dir and toolchains;
-          # setup-uv's own cache layer stays disabled to avoid double ownership.
-          enable-cache: false
+          enable-cache: true
 
-      # Ensure uv's cache directory exists before the Namespace cache action
-      # links its managed path.
-      - name: Prepare host uv cache
-        run: |
-          mkdir -p "$(uv cache dir)"
-
-      # Namespace mounts these paths directly from the runner cache volume, so
-      # setup reuses the host-side Dagger controller venv and interpreter
-      # without a GitHub-hosted cache upload/download phase. Keep the paths
-      # explicit so the venv and its interpreter remain independently visible.
-      #
-      # Namespace may serve a stale cache-volume generation (#330), so the SDK
-      # setup below validates the installed versions directly. Project
-      # dependencies are immutable OCI inputs and never enter this mount.
-      - name: Cache host Dagger and uv data
-        id: namespace_cache
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+      # The SDK venv includes its uv-managed Python interpreter, so cache both
+      # together. Validation below makes a stale cache harmless after a pin bump.
+      - name: Restore Dagger Python SDK
+        id: dagger_cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          # In v1.6.0, `cache: uv` mounts only ~/.cache/uv. Keep the host SDK
-          # controller venv and its uv-managed CPython as sibling paths
-          # (~/.dagger-sdk/{controller-venv,uv-python}). uv cannot copy the interpreter
-          # into the venv (astral-sh/uv#17754), and pointing `uv venv` at the
-          # mount root itself detaches the Namespace bind (issue #303) so
-          # contents never persist.
-          cache: uv
-          path: |
-            ~/.dagger-sdk/controller-venv
-            ~/.dagger-sdk/uv-python
+          path: ~/.dagger-sdk
+          key: ${{ runner.os }}-${{ runner.arch }}-dagger-sdk-v1-restore
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-dagger-sdk-v1-
 
-      # Capture the mounted state BEFORE any step mutates it, so a stale or
-      # unwritten fork is diagnosable from logs alone (#330): bind-mount
-      # presence and the fork's cache-dir inventory + mtimes (generation age).
-      - name: Report mounted cache diagnostics
-        run: |
-          set -uo pipefail
-          uv_cache_dir="$(uv cache dir)"
-          echo "Namespace mount cache-hit output: ${{ steps.namespace_cache.outputs.cache-hit }}"
-          findmnt -R "${uv_cache_dir}" || echo "findmnt: ${uv_cache_dir} is not a mount point"
-          findmnt -R "$HOME/.dagger-sdk/controller-venv" || echo "findmnt: $HOME/.dagger-sdk/controller-venv is not a mount point"
-          findmnt -R "$HOME/.dagger-sdk/uv-python" || echo "findmnt: $HOME/.dagger-sdk/uv-python is not a mount point"
-          if [ -n "${NSC_CACHE_PATH:-}" ]; then
-            echo "Cache volume inventory (${NSC_CACHE_PATH}):"
-            ls -la "${NSC_CACHE_PATH}" || true
-          else
-            echo "Cache volume inventory: NSC_CACHE_PATH is unset"
-          fi
-
-      # `version` is pinned: without it the action installs the latest CLI at
-      # run time, so upstream Dagger releases silently change the engine
-      # version — churning the version-keyed engine state cached below and
-      # forcing cold runs with no diff in this repo. Bump it deliberately, in
-      # a commit (the engine cache pays one cold run per bump).
-      - name: Setup Dagger
-        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
-        with:
-          version: 0.21.7
-
-      # The Namespace runner image is Debian/PEP 668 externally-managed and its
-      # system Python (/usr) is not writable without root, so neither bare `pip`
-      # nor `uv pip install --system` works. Create a root-free uv venv, install
-      # the host-side deps there, and prepend the venv's bin to $GITHUB_PATH so
-      # the later `dagger run python ...` step resolves `python` to this venv
-      # (which has dagger-io/anyio).
+      # Keep the Dagger CLI and SDK pinned together. A host venv is necessary
+      # because the controller executes outside the Dagger test container.
       - name: Install Dagger Python SDK
+        id: dagger_sdk
         run: |
           set -euo pipefail
           export UV_PYTHON_INSTALL_DIR="$HOME/.dagger-sdk/uv-python"
@@ -153,218 +79,31 @@ jobs:
           assert version("anyio") == "4.13.0"
           PY
           )"; then
-            echo "Namespace host cache: Dagger SDK venv already exists (cache hit)"
+            echo "Dagger SDK cache: validated"
+            echo "rebuilt=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Namespace host cache: Dagger SDK venv is absent or stale; creating it cold (validation error: ${err})"
+            echo "Dagger SDK cache: absent or stale; creating it (${err})"
             uv python install --reinstall 3.13
             find "${dagger_venv}" -mindepth 1 -delete
             uv venv --python 3.13 "${dagger_venv}"
-            target="$(readlink -f "${dagger_venv}/bin/python" 2>/dev/null || readlink "${dagger_venv}/bin/python")"
-            case "${target}" in
-              "$HOME/.dagger-sdk"/*) ;;
-              *)
-                echo "::error::interpreter escaped ~/.dagger-sdk (${target}); refusing to cache a non-self-contained SDK venv"
-                exit 1
-                ;;
-            esac
             uv pip install --python "${dagger_venv}/bin/python" \
               "dagger-io==0.21.7" "anyio==4.13.0"
-          fi
-          uv_cache_dir="$(uv cache dir)"
-          if [ -d "${uv_cache_dir}" ] && [ "$(find "${uv_cache_dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-            echo "Namespace host cache: uv cache contains artifacts (${uv_cache_dir})"
-          else
-            echo "Namespace host cache: uv cache is empty (${uv_cache_dir})"
-          fi
-          if [ -d "${UV_PYTHON_INSTALL_DIR}" ] && [ "$(find "${UV_PYTHON_INSTALL_DIR}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-            echo "Namespace host cache: uv Python toolchain is sibling under ~/.dagger-sdk (${UV_PYTHON_INSTALL_DIR})"
-          else
-            echo "Namespace host cache: uv Python toolchain is absent (${UV_PYTHON_INSTALL_DIR})"
+            echo "rebuilt=true" >> "$GITHUB_OUTPUT"
           fi
           echo "UV_PYTHON_INSTALL_DIR=${UV_PYTHON_INSTALL_DIR}" >> "$GITHUB_ENV"
           echo "${dagger_venv}/bin" >> "$GITHUB_PATH"
 
-      - name: Resolve pytest dependency image
-        id: pytest_dependency_image
-        env:
-          TRUSTED_REGISTRY_PULL: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-          PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
-          SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          ARTIFACT_VARIANT: ${{ inputs.artifact_variant }}
-        run: |
-          set -euo pipefail
-          dockerfile=".github/workflows/ci/pytest-deps.Dockerfile"
-          dockerignore="${dockerfile}.dockerignore"
-          packer=".github/workflows/ci/pytest_dependency_pack.py"
-          key_script=".github/workflows/ci/pytest_dependency_key.py"
-          arch="$(uname -m)"
-          artifact_variant="${ARTIFACT_VARIANT:-minimal-compiled}"
-          compression="zstd:3"
-          case "${artifact_variant}" in
-            full-compiled|full-source|minimal-compiled|minimal-expanded|minimal-packed) ;;
-            *) echo "::error::unsupported artifact variant: ${artifact_variant}"; exit 2 ;;
-          esac
-
-          if [ "${TRUSTED_REGISTRY_PULL}" != "true" ]; then
-            echo "Fork pull request: dependency image disabled; using cold Dagger build"
-            echo "key=" >> "${GITHUB_OUTPUT}"
-            echo "tag=" >> "${GITHUB_OUTPUT}"
-            echo "hit=false" >> "${GITHUB_OUTPUT}"
-            echo "reference=" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          # Checkout contains the PR merge commit. Never execute a PR-owned key
-          # helper on the registry-authenticated runner host.
-          if [ "${PULL_REQUEST_RUN}" = "true" ]; then
-            trusted_key_script="${RUNNER_TEMP}/pytest_dependency_key.py"
-            if git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_key.py" > "${trusted_key_script}"; then
-              if python "${trusted_key_script}" --help | grep -q -- "--layout"; then
-                key_script="${trusted_key_script}"
-              elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
-                echo "::warning::bootstrapping checkpoint key helper from this same-repository PR"
-                rm -f "${trusted_key_script}"
-              else
-                echo "::error::trusted checkpoint key helper is unavailable for a fork pull request"
-                exit 1
-              fi
-            elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
-              echo "::warning::bootstrapping trusted CI assets from this same-repository PR"
-              rm -f "${trusted_key_script}"
-            else
-              echo "::error::trusted CI assets are unavailable for a fork pull request"
-              exit 1
-            fi
-          fi
-          image_key="$(python "${key_script}" \
-            --architecture "${arch}" \
-            --python-version 3.13 \
-            --pyproject pyproject.toml \
-            --uv-lock uv.lock \
-            --dockerfile "${dockerfile}" \
-            --dockerignore "${dockerignore}" \
-            --packer "${packer}" \
-            --layout "${artifact_variant}" \
-            --compression "${compression}")"
-          image_tag="${NSC_CONTAINER_REGISTRY}/gtm-sdk-pytest-deps:${image_key}"
-          echo "key=${image_key}" >> "${GITHUB_OUTPUT}"
-          echo "tag=${image_tag}" >> "${GITHUB_OUTPUT}"
-          echo "layout=${artifact_variant}" >> "${GITHUB_OUTPUT}"
-
-          manifest_error="$(mktemp)"
-          trap 'rm -f "${manifest_error}"' EXIT
-          if manifest="$(docker manifest inspect --verbose "${image_tag}" 2>"${manifest_error}")"; then
-            digest="$(printf '%s' "${manifest}" | MANIFEST_ARCH="${arch}" python -c '
-          import json
-          import os
-          import sys
-
-          requested = os.environ["MANIFEST_ARCH"]
-          architecture = {"aarch64": "arm64", "arm64": "arm64"}.get(
-              requested,
-              requested,
-          )
-          payload = json.load(sys.stdin)
-          manifests = payload if isinstance(payload, list) else [payload]
-          matches = [
-              manifest
-              for manifest in manifests
-              if manifest.get("Descriptor", {})
-              .get("platform", {})
-              .get("architecture")
-              == architecture
-          ]
-          if len(matches) != 1:
-              raise SystemExit(
-                  f"expected one {architecture} manifest, found {len(matches)}",
-              )
-          match = matches[0]
-          layers = match.get("OCIManifest", {}).get("layers", [])
-          compressed_bytes = sum(int(layer["size"]) for layer in layers)
-          print(
-              f"Compressed dependency image bytes: {compressed_bytes}",
-              file=sys.stderr,
-          )
-          for layer in layers:
-              print(
-                  "Compressed dependency layer: {} {} bytes".format(
-                      layer["digest"],
-                      layer["size"],
-                  ),
-                  file=sys.stderr,
-              )
-          print(match["Descriptor"]["digest"])
-          ')"
-            if [[ "${digest}" == sha256:* ]]; then
-              reference="${image_tag}@${digest}"
-              echo "Pytest dependency image: exact hit (${reference})"
-              echo "hit=true" >> "${GITHUB_OUTPUT}"
-              echo "reference=${reference}" >> "${GITHUB_OUTPUT}"
-            else
-              echo "::error::registry returned an invalid dependency image digest"
-              exit 1
-            fi
-          elif grep -Eqi 'manifest[ _]unknown|no such manifest|name[ _]unknown' "${manifest_error}"; then
-            echo "Pytest dependency image: miss (${image_key})"
-            echo "hit=false" >> "${GITHUB_OUTPUT}"
-            echo "reference=" >> "${GITHUB_OUTPUT}"
-          else
-            cat "${manifest_error}" >&2
-            echo "::error::could not inspect pytest dependency image"
-            exit 1
-          fi
-
-      - name: Build and publish pytest dependency image
-        id: build_pytest_dependency_image
-        if: >-
-          github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.pytest_dependency_image.outputs.hit != 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      - name: Save repaired Dagger Python SDK
+        if: steps.dagger_cache.outputs.cache-matched-key == '' || steps.dagger_sdk.outputs.rebuilt == 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          context: .
-          file: .github/workflows/ci/pytest-deps.Dockerfile
-          platforms: linux/arm64
-          build-args: |
-            PYTEST_DEPENDENCY_LAYOUT=${{ steps.pytest_dependency_image.outputs.layout }}
-          outputs: >-
-            type=image,name=${{ steps.pytest_dependency_image.outputs.tag }},push=true,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true
+          path: ~/.dagger-sdk
+          key: ${{ runner.os }}-${{ runner.arch }}-dagger-sdk-v1-${{ hashFiles('uv.lock', '.github/workflows/tests-unit.yml') }}-${{ github.run_id }}
 
-      - name: Select pytest dependency image
-        id: selected_pytest_dependency_image
-        env:
-          EXISTING_REFERENCE: ${{ steps.pytest_dependency_image.outputs.reference }}
-          IMAGE_TAG: ${{ steps.pytest_dependency_image.outputs.tag }}
-          PUBLISHED_DIGEST: ${{ steps.build_pytest_dependency_image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          if [ -n "${EXISTING_REFERENCE}" ]; then
-            reference="${EXISTING_REFERENCE}"
-          elif [[ "${PUBLISHED_DIGEST}" == sha256:* ]]; then
-            reference="${IMAGE_TAG}@${PUBLISHED_DIGEST}"
-            echo "Pytest dependency image: published (${reference})"
-          else
-            reference=""
-            echo "Pytest dependency image: unavailable; Dagger will build cold"
-          fi
-          echo "reference=${reference}" >> "${GITHUB_OUTPUT}"
-
-      # Namespace runners mount a short-lived workload token, but direct `nsc`
-      # calls only discover it after the official setup action exports
-      # NSC_TOKEN_FILE. Automatic host Docker auth does not propagate into the
-      # nested Dagger engine.
-      - name: Configure Namespace registry access
-        if: steps.selected_pytest_dependency_image.outputs.reference != ''
-        uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0.0.12
-
-      - name: Report Namespace cache state
-        run: |
-          echo "Namespace cache exact hit: ${{ steps.namespace_cache.outputs.cache-hit }}"
-          if [ -n "${NSC_CACHE_PATH:-}" ]; then
-            echo "Namespace cache volume: attached (${NSC_CACHE_PATH})"
-          else
-            echo "Namespace cache volume: absent"
-          fi
-          echo "Dependency image digest: ${{ steps.selected_pytest_dependency_image.outputs.reference }}"
+      - name: Setup Dagger
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: 0.21.7
 
       - name: Resolve Dagger engine version
         id: dagger_engine
@@ -372,19 +111,12 @@ jobs:
           set -uo pipefail
           version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
           if [ -z "${version}" ]; then
-            echo "::warning::could not determine Dagger engine version; skipping engine caching"
+            echo "::warning::could not determine Dagger engine version; skipping pre-pull"
           fi
           echo "version=${version}" >>"${GITHUB_OUTPUT}"
 
-      # `dagger run` needs registry.dagger.io/engine:v<cli-version>, and that
-      # registry intermittently brownouts (dagger/dagger#7548): a single blob
-      # stalls and `docker pull` retries it internally for minutes (the
-      # "Retrying in 5/10/15 seconds" per-layer loop) before failing, killing
-      # the job before any test runs (ai-4bz). Two-layer mitigation: (1) the
-      # runner profile's container-image cache serves the pull locally after
-      # the first run (replaces the old tarball cache dance); (2) on
-      # a cold miss, retry the pull with a per-attempt `timeout` so a hung blob
-      # cedes to a fresh attempt instead of wedging.
+      # Fresh GitHub-hosted VMs do not retain Docker state. Bound each pull so a
+      # registry.dagger.io brownout gives a later attempt a chance to succeed.
       - name: Ensure Dagger engine image (resilient to registry flakiness)
         if: steps.dagger_engine.outputs.version != ''
         env:
@@ -393,12 +125,12 @@ jobs:
           set -uo pipefail
           image="registry.dagger.io/engine:${ENGINE_VERSION}"
           if docker image inspect "${image}" >/dev/null 2>&1; then
-            echo "Dagger engine image cache: local hit (${image})"
+            echo "Dagger engine image: local hit (${image})"
             exit 0
           fi
           for attempt in $(seq 1 6); do
             if timeout 150 docker pull "${image}"; then
-              echo "Dagger engine image cache: registry pull succeeded on attempt ${attempt} (${image})"
+              echo "Dagger engine image: registry pull succeeded on attempt ${attempt} (${image})"
               exit 0
             fi
             echo "::warning::engine pull attempt ${attempt}/6 failed (registry.dagger.io flake); retrying in 20s"
@@ -407,19 +139,14 @@ jobs:
           echo "::error::failed to pull ${image} after 6 attempts"
           exit 1
 
-      # Use a fresh local engine for every job. The Namespace registry retains
-      # immutable dependency inputs; mutable engine state is never persisted.
       # Pull requests execute the controller and dependency Dockerfile from the
-      # base SHA so checked-out PR source only runs inside Dagger. Forks also
-      # build cold and never receive a workspace token; repository runner policy
-      # remains the outer trust boundary for workflow definitions.
+      # base SHA so checked-out PR source runs only inside Dagger.
       - name: Run pytest in Dagger
         env:
-          PYTEST_DEPENDENCY_IMAGE: ${{ steps.selected_pytest_dependency_image.outputs.reference }}
           PULL_REQUEST_RUN: ${{ github.event_name == 'pull_request' }}
           SAME_REPOSITORY_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PYTEST_DEPENDENCY_LAYOUT: ${{ steps.pytest_dependency_image.outputs.layout }}
+          PYTEST_DEPENDENCY_LAYOUT: ${{ inputs.artifact_variant }}
           PYTEST_BENCHMARK_NONCE: ${{ inputs.benchmark_nonce }}
         run: |
           set -euo pipefail
@@ -447,22 +174,8 @@ jobs:
               exit 1
             fi
           fi
-          if [ -n "${PYTEST_DEPENDENCY_IMAGE}" ]; then
-            registry_token="$(python -c 'import json, os; from pathlib import Path; token = json.loads(Path(os.environ["NSC_TOKEN_FILE"]).read_text()); print(token.get("bearer_token", ""))')"
-            if [ -z "${registry_token}" ]; then
-              echo "::error::Namespace runner workload token has no bearer token"
-              exit 1
-            fi
-            echo "::add-mask::${registry_token}"
-            export NAMESPACE_REGISTRY_TOKEN="${registry_token}"
-          fi
           DAGGER_NO_NAG=1 dagger run python "${pipeline}"
 
-      # If this step errors "Unauthorized access, your Trunk organization URL
-      # slug or token may be incorrect", it is almost always a dead/revoked
-      # TRUNK_API_TOKEN, NOT the org-slug: the analytics CLI mislabels a 404 on
-      # a bad token as an auth/slug error. Regenerate the org token at
-      # https://app.trunk.io/sanhedrin/settings and update the GHA secret. (ai-g7i)
       - name: Upload Test Results to Trunk.io
         if: ${{ !cancelled() }}
         continue-on-error: true
@@ -471,7 +184,5 @@ jobs:
           junit-paths: junit.xml
           org-slug: sanhedrin
           token: ${{ secrets.TRUNK_API_TOKEN }}
-          # Avoid resolving `latest` before looking up the cached binary.
           cli-version: 0.14.0
-          # Cache the analytics CLI to avoid downloading it on every test run.
           use-cache: true
