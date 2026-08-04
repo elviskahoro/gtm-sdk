@@ -2,6 +2,7 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 exports_files(
     [
+        "pytest.ini",
         "pytest_main.py",
         "pytest_test.bzl",
     ],
