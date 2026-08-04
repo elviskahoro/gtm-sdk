@@ -62,6 +62,7 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "prerequisites.sh" in pipeline
     assert "compute_impacted_targets.sh" in pipeline
     assert "test_impacted_targets.sh" in pipeline
+    assert "--test_tag_filters=-manual" in pipeline
     assert "--nobuild_event_json_file_path_conversion" in pipeline
     assert "--build_event_json_file=/src/build_events.json" in pipeline
     assert "--bazel-bep-path={BEP_PATH}" in pipeline

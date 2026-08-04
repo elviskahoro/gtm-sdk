@@ -8,13 +8,11 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from types import ModuleType
+from unittest.mock import patch
 from urllib.error import HTTPError
 
 import pytest
-
-if TYPE_CHECKING:
-    from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "bazel_dagger.py"
@@ -30,7 +28,16 @@ def _load_pipeline() -> ModuleType:
     sys.dont_write_bytecode = True
     sys.modules[_MODULE_NAME] = module
     try:
-        spec.loader.exec_module(module)
+        # These tests cover the pipeline's stdlib-only payload helpers. Keep
+        # them runnable in the unit dependency image, which need not include
+        # the controller-only Dagger SDK and anyio runtime.
+        dagger_stub = ModuleType("dagger")
+        dagger_stub.dag = object()
+        with patch.dict(
+            sys.modules,
+            {"anyio": ModuleType("anyio"), "dagger": dagger_stub},
+        ):
+            spec.loader.exec_module(module)
     finally:
         sys.modules.pop(_MODULE_NAME, None)
         sys.dont_write_bytecode = old_dont_write_bytecode

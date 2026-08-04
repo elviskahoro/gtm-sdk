@@ -93,7 +93,7 @@ export IMPACTED_TARGETS_FILE="${impacted_targets_out}"
 cp "${IMPACTED_TARGETS_FILE}" /src/impacted_targets.txt
 git diff --name-only "${merge_base_sha}" "${pr_branch_testing_head_sha}" \
   > /src/changed_paths.txt
-export BAZEL_TEST_COMMAND="test --config=ci --nobuild_event_json_file_path_conversion --build_event_json_file=/src/build_events.json"
+export BAZEL_TEST_COMMAND="test --config=ci --test_tag_filters=-manual --nobuild_event_json_file_path_conversion --build_event_json_file=/src/build_events.json"
 export BAZEL_KIND_FILTER='.+_library|.+_binary|.+_test'
 export BAZEL_SCOPE_FILTER=""
 export BAZEL_NEGATIVE_KIND_FILTER='generated file'
