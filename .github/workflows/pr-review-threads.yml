@@ -1,5 +1,7 @@
 name: Inspect unresolved PR review threads
 
+# trunk-ignore-begin(checkov/CKV_GHA_7): the manual PR number is the entry point
+# for this read-only inspection workflow, not a build or deployment parameter.
 on:
   workflow_dispatch:
     inputs:
@@ -7,6 +9,7 @@ on:
         description: Pull request number to inspect
         required: true
         type: number
+# trunk-ignore-end(checkov/CKV_GHA_7)
 
 permissions:
   contents: read
@@ -24,4 +27,6 @@ jobs:
       - name: Inspect unresolved threads
         env:
           GH_TOKEN: ${{ github.token }}
-        run: flox activate --dir . --mode run -- scripts/pr-review-threads.py inspect --repo "${{ github.repository }}" --pr "${{ inputs.pr }}" --unresolved-only
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr }}
+        run: flox activate --dir . --mode run -- scripts/pr-review-threads.py inspect --repo "${GITHUB_REPOSITORY}" --pr "${PR_NUMBER}" --unresolved-only

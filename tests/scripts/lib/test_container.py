@@ -1,6 +1,6 @@
 """Tests for the shared Dagger transport boundary."""
 
-# ruff: noqa: S101, SLF001
+# ruff: noqa: INP001, S101, SLF001, TC003
 
 from __future__ import annotations
 
@@ -86,8 +86,9 @@ async def test_recipe_passes_manifest_digest_to_container(
         commands=[["true"]],
     )
     assert captured["env"] == {
-        container.EXPECTED_MANIFEST_LOCK_SHA256:
-        hashlib.sha256(b"locked toolchain").hexdigest(),
+        container.EXPECTED_MANIFEST_LOCK_SHA256: hashlib.sha256(
+            b"locked toolchain",
+        ).hexdigest(),
     }
 
 

@@ -41,8 +41,9 @@ def test_controller_environment_uses_shared_cache_and_omits_trunk_metadata(
     monkeypatch.setenv("TRUNK_API_TOKEN", "secret")
     monkeypatch.setenv("TRUNK_REPOSITORY", "owner/repo")
     environment = module._controller_env(
-        source_dir=Path("/tmp/source"),
-        toolchain_dir=Path("/tmp/toolchain"),
+        source_dir=Path("/tmp/source"),  # nosec B108
+        toolchain_dir=Path("/tmp/toolchain"),  # nosec B108
+        mode="full",
     )
 
     assert environment["BAZEL_DAGGER_BINARY"] == "/tmp/toolchain/bazel"
@@ -51,6 +52,7 @@ def test_controller_environment_uses_shared_cache_and_omits_trunk_metadata(
     )
     assert environment["BAZEL_DAGGER_CACHE_DIR"] == "/tmp/cache"
     assert environment["BAZEL_DAGGER_SOURCE_DIR"] == "/tmp/source"
+    assert environment["BAZEL_DAGGER_MODE"] == "full"
     assert environment["DAGGER_NO_NAG"] == "1"
     assert "TRUNK_API_TOKEN" not in environment
     assert "TRUNK_REPOSITORY" not in environment
@@ -63,8 +65,8 @@ def test_controller_environment_does_not_forward_unrelated_secrets(
     monkeypatch.setenv("UNRELATED_SECRET", "secret")
 
     environment = module._controller_env(
-        source_dir=Path("/tmp/source"),
-        toolchain_dir=Path("/tmp/toolchain"),
+        source_dir=Path("/tmp/source"),  # nosec B108
+        toolchain_dir=Path("/tmp/toolchain"),  # nosec B108
     )
 
     assert "UNRELATED_SECRET" not in environment

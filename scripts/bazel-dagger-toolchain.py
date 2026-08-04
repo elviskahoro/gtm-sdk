@@ -27,8 +27,8 @@ BAZEL_URL = (
 BAZEL_DIFF_VERSION = "33.0.0"
 BAZEL_DIFF_SHA256 = "4b649929970167f75a188d184cd07f00c83a82b363c70f74d3c1ad1f7cdefd51"
 BAZEL_DIFF_URL = (
-    "https://github.com/Tinder/bazel-diff/releases/download/v33.0.0/"
-    "bazel-diff_deploy.jar"
+    "https://github.com/Tinder/bazel-diff/releases/download/"
+    f"v{BAZEL_DIFF_VERSION}/bazel-diff_deploy.jar"
 )
 
 
@@ -48,7 +48,7 @@ def _matches_checksum(path: Path, expected: str) -> bool:
 
 def _download(url: str, destination: Path) -> None:
     """Download one pinned artifact to a temporary or cache destination."""
-    request = urlopen(url)  # noqa: S310 -- URLs and checksums are pinned above.
+    request = urlopen(url)  # noqa: S310 -- URLs and checksums are pinned above.  # nosec B310
     with request, destination.open("wb") as output:
         shutil.copyfileobj(request, output)
 

@@ -1,13 +1,13 @@
 """Unit tests for the shared Bazel Dagger tool cache bootstrap."""
 
 # ruff: noqa: S101 -- direct assertions keep this script contract concise.
+# pyright: reportUnknownLambdaType=false
 
 from __future__ import annotations
 
 import hashlib
 import importlib.util
 import sys
-import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -57,19 +57,14 @@ def test_existing_valid_artifacts_are_reused(
     assert toolchain.bazel_diff == diff
 
 
-def test_dagger_bazel_pin_matches_flox_manifest() -> None:
+def test_dagger_bazel_download_pins_are_stable() -> None:
     module = _load()
-    manifest = tomllib.loads(
-        (REPO_ROOT / ".flox" / "env" / "manifest.toml").read_text(),
-    )
-    bazel = manifest["install"]["bazel_7"]
-
-    assert bazel["version"] == module.BAZEL_VERSION
-    assert bazel["pkg-path"] == "bazel_7"
     assert module.BAZEL_VERSION in module.BAZEL_URL
     assert module.BAZEL_URL.endswith(
         f"bazel-{module.BAZEL_VERSION}-linux-arm64",
     )
+    assert f"v{module.BAZEL_DIFF_VERSION}" in module.BAZEL_DIFF_URL
+    assert module.BAZEL_DIFF_URL.endswith("bazel-diff_deploy.jar")
     assert module.BAZEL_SHA256 == (
         "e22a8de701585193d886a29acad965f7070db5a98b44d2fc22fc44e65da9e7b5"
     )

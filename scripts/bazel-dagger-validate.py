@@ -18,7 +18,7 @@ DEFAULT_BASE = "origin/main"
 
 def _run(command: list[str], *, cwd: Path = REPO_ROOT) -> None:
     """Run a fixed local preparation command and fail on non-zero status."""
-    subprocess.run(command, cwd=cwd, check=True)  # noqa: S603,S607 -- fixed local argv.
+    subprocess.run(command, cwd=cwd, check=True)  # noqa: S603,S607 -- fixed local argv.  # nosec B607
 
 
 def _resolve_commit(ref: str) -> str:
@@ -33,7 +33,12 @@ def _resolve_commit(ref: str) -> str:
     return completed.stdout.strip()
 
 
-def _controller_env(*, source_dir: Path, toolchain_dir: Path) -> dict[str, str]:
+def _controller_env(
+    *,
+    source_dir: Path,
+    toolchain_dir: Path,
+    mode: str = "full",
+) -> dict[str, str]:
     """Construct the minimal environment exposed to the Dagger controller."""
     # Keep command lookup and ordinary local Dagger configuration, but do not
     # forward the host environment wholesale: it may contain unrelated
@@ -49,13 +54,14 @@ def _controller_env(*, source_dir: Path, toolchain_dir: Path) -> dict[str, str]:
             "BAZEL_DAGGER_CACHE_DIR": str(toolchain_dir.parent / "cache"),
             "BAZEL_DAGGER_DIFF_JAR": str(toolchain_dir / "bazel-diff_deploy.jar"),
             "BAZEL_DAGGER_SOURCE_DIR": str(source_dir),
+            "BAZEL_DAGGER_MODE": mode,
             "DAGGER_NO_NAG": "1",
         },
     )
     return env
 
 
-def run(base: str) -> int:
+def run(base: str, mode: str) -> int:
     """Validate the current checkout against a selected Git base revision."""
     base_commit = _resolve_commit(base)
     head_commit = _resolve_commit("HEAD")
@@ -84,10 +90,14 @@ def run(base: str) -> int:
             ["git", "update-ref", "refs/remotes/origin/main", base_commit],
             cwd=source_dir,
         )
-        return subprocess.run(  # noqa: S603,S607 -- fixed controller argv.
+        return subprocess.run(  # noqa: S603,S607 -- fixed controller argv.  # nosec B607
             ["uv", "run", "dagger", "run", "python", str(CONTROLLER)],  # noqa: S607 -- uv is resolved via PATH.
             cwd=REPO_ROOT,
-            env=_controller_env(source_dir=source_dir, toolchain_dir=toolchain_dir),
+            env=_controller_env(
+                source_dir=source_dir,
+                toolchain_dir=toolchain_dir,
+                mode=mode,
+            ),
             check=False,
         ).returncode
 
@@ -100,9 +110,15 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_BASE,
         help="Git ref to compare with HEAD",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("full", "impacted"),
+        default="full",
+        help="Bazel validation mode (default: full)",
+    )
     args = parser.parse_args(argv)
     try:
-        return run(args.base)
+        return run(args.base, args.mode)
     except subprocess.CalledProcessError as exc:
         return exc.returncode
     except FileNotFoundError as exc:
