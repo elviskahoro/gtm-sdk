@@ -28,3 +28,6 @@ c54beaa921ab43655c6d9ce9abda778bb65297d6
 
 # trunk lint pass (#458), squash-merged (2026-08-01)
 980329ec5f7e426b60a8593d9555e186d97d7f40
+
+# Standardize standalone scripts on Typer without breaking callers (#486), squash-merged (2026-08-03)
+498bf1eee27f0bbca558e9fb808f1127a42dae8a
