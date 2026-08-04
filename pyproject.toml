@@ -3,7 +3,7 @@ requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gtm"
+name = "gtm-sdk"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -55,14 +55,18 @@ dependencies = [
 marketplace = ["polars>=1.10.0"]
 
 [tool.setuptools.packages.find]
-include = ["cli*", "libs*", "scripts*", "src*"]
+include = ["libs*", "scripts*", "src*"]
 exclude = ["tests*"]
-
-[project.scripts]
-gtm = "cli.main:run"
 
 [tool.uv]
 required-version = ">=0.11.8,<0.12"
+
+[tool.uv.workspace]
+members = ["cli"]
+
+[tool.uv.sources]
+gtm-cli = { workspace = true }
+gtm-sdk = { workspace = true }
 
 [tool.pytest.ini_options]
 # The plugin selection lives HERE, not in a runner command, and that placement is
@@ -136,6 +140,7 @@ extend = ".trunk/configs/ruff.toml"
 dev = [
   "bandit>=1.8.6",
   "hypothesis>=6.156.0",
+  "gtm-cli",
   "pytest>=9.0.2",
   "pytest-asyncio>=0.24.0",
   "pytest-xdist>=3.0.0",

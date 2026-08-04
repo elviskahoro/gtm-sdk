@@ -7,6 +7,12 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "gtm-cli",
+    "gtm-sdk",
+]
+
 [[package]]
 name = "aenum"
 version = "3.1.17"
@@ -1009,7 +1015,53 @@ wheels = [
 ]
 
 [[package]]
-name = "gtm"
+name = "gtm-apollo"
+version = "0.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/18/56/cf9c79ccbe3f7f679a2bd676215bae8b5e69f642e990adcbfe3acf35f385/gtm_apollo-0.0.2.tar.gz", hash = "sha256:d14ff53fed0c8b682da959ad520069a618aa4a5a5d7621daec0706c41da9ac39", size = 318317, upload-time = "2026-04-10T19:46:35.272Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/6a/b89ad929c1613f6cf319ed82adeadff3aa362eb4e1174eacecdfc8937f0d/gtm_apollo-0.0.2-py3-none-any.whl", hash = "sha256:f46adf98992a4e850b14564fb378a7bc551e1b39ee679b7431edd25550ddf60c", size = 243705, upload-time = "2026-04-10T19:46:33.674Z" },
+]
+
+[[package]]
+name = "gtm-cli"
+version = "0.1.0"
+source = { editable = "cli" }
+dependencies = [
+    { name = "gtm-sdk" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gtm-sdk", editable = "." },
+    { name = "typer", specifier = ">=0.15" },
+]
+
+[[package]]
+name = "gtm-linear"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/c5/70c84697e25531dc1284d74d02aebb770c2e7f02181b8fe9b4d503eaf60c/gtm_linear-0.1.0.tar.gz", hash = "sha256:9b87e7f2bac6c5bbdfbe3e34508286180c5eb12827c2f0dd099574126c52127e", size = 238984, upload-time = "2026-08-01T01:21:33.67Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3c/d9/64fefc85f145dfa284aa94ec5f575a90ec1866c0bce3b10ccfaa1c6db6d0/gtm_linear-0.1.0-py3-none-any.whl", hash = "sha256:c5281cc4dd4043b52e6e1588fa9d1fafceafeb509bb133505ba1011682926e77", size = 29261, upload-time = "2026-08-01T01:21:32.536Z" },
+]
+
+[[package]]
+name = "gtm-sdk"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -1060,6 +1112,7 @@ marketplace = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
+    { name = "gtm-cli" },
     { name = "hypothesis" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1151,6 +1204,7 @@ provides-extras = ["marketplace"]
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.8.6" },
+    { name = "gtm-cli", editable = "cli" },
     { name = "hypothesis", specifier = ">=6.156.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
@@ -1194,37 +1248,6 @@ unit-ci = [
     { name = "slack-sdk", specifier = ">=3.27" },
     { name = "typer", specifier = ">=0.15" },
     { name = "uuid7", specifier = ">=0.1.0" },
-]
-
-[[package]]
-name = "gtm-apollo"
-version = "0.0.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "distro" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sniffio" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/18/56/cf9c79ccbe3f7f679a2bd676215bae8b5e69f642e990adcbfe3acf35f385/gtm_apollo-0.0.2.tar.gz", hash = "sha256:d14ff53fed0c8b682da959ad520069a618aa4a5a5d7621daec0706c41da9ac39", size = 318317, upload-time = "2026-04-10T19:46:35.272Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/6a/b89ad929c1613f6cf319ed82adeadff3aa362eb4e1174eacecdfc8937f0d/gtm_apollo-0.0.2-py3-none-any.whl", hash = "sha256:f46adf98992a4e850b14564fb378a7bc551e1b39ee679b7431edd25550ddf60c", size = 243705, upload-time = "2026-04-10T19:46:33.674Z" },
-]
-
-[[package]]
-name = "gtm-linear"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/c5/70c84697e25531dc1284d74d02aebb770c2e7f02181b8fe9b4d503eaf60c/gtm_linear-0.1.0.tar.gz", hash = "sha256:9b87e7f2bac6c5bbdfbe3e34508286180c5eb12827c2f0dd099574126c52127e", size = 238984, upload-time = "2026-08-01T01:21:33.67Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/d9/64fefc85f145dfa284aa94ec5f575a90ec1866c0bce3b10ccfaa1c6db6d0/gtm_linear-0.1.0-py3-none-any.whl", hash = "sha256:c5281cc4dd4043b52e6e1588fa9d1fafceafeb509bb133505ba1011682926e77", size = 29261, upload-time = "2026-08-01T01:21:32.536Z" },
 ]
 
 [[package]]
