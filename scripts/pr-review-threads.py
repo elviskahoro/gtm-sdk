@@ -648,15 +648,22 @@ def inspect(
     repo: str | None = typer.Option(None, "--repo"),
     pr: int | None = typer.Option(None, "--pr"),
     provider: str | None = typer.Option(None, "--provider"),
-    unresolved_only: bool = typer.Option(False, "--unresolved-only"),
+    unresolved_only: bool = typer.Option(False, "--unresolved-only"),  # noqa: FBT001, FBT003
     output_format: str = typer.Option("table", "--format"),
 ) -> None:
     if output_format not in {"table", "json"}:
-        raise typer.BadParameter("must be 'table' or 'json'", param_hint="--format")
-    _exit_for(SimpleNamespace(
-        command="inspect", repo=repo, pr=pr, provider=provider,
-        unresolved_only=unresolved_only, format=output_format,
-    ))
+        message = "must be 'table' or 'json'"
+        raise typer.BadParameter(message, param_hint="--format")
+    _exit_for(
+        SimpleNamespace(
+            command="inspect",
+            repo=repo,
+            pr=pr,
+            provider=provider,
+            unresolved_only=unresolved_only,
+            format=output_format,
+        ),
+    )
 
 
 @app.command("resolve")
@@ -664,15 +671,22 @@ def resolve(
     repo: str = typer.Option(..., "--repo"),
     pr: int = typer.Option(..., "--pr"),
     threads: list[str] = typer.Option(..., "--thread"),
-    allow_outdated: bool = typer.Option(False, "--allow-outdated"),
+    allow_outdated: bool = typer.Option(False, "--allow-outdated"),  # noqa: FBT001, FBT003
     output_format: str = typer.Option("table", "--format"),
 ) -> None:
     if output_format not in {"table", "json"}:
-        raise typer.BadParameter("must be 'table' or 'json'", param_hint="--format")
-    _exit_for(SimpleNamespace(
-        command="resolve", repo=repo, pr=pr, threads=threads,
-        allow_outdated=allow_outdated, format=output_format,
-    ))
+        message = "must be 'table' or 'json'"
+        raise typer.BadParameter(message, param_hint="--format")
+    _exit_for(
+        SimpleNamespace(
+            command="resolve",
+            repo=repo,
+            pr=pr,
+            threads=threads,
+            allow_outdated=allow_outdated,
+            format=output_format,
+        ),
+    )
 
 
 if __name__ == "__main__":

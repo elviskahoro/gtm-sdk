@@ -113,7 +113,10 @@ def test_typer_cli_preserves_target_contract(
 
     monkeypatch.setattr(script_module, "_run", fake_run)
     runner = CliRunner()
-    assert runner.invoke(script_module.app, ["attio", "CaldotcomBookingWebhook"]).exit_code == 0
+    assert (
+        runner.invoke(script_module.app, ["attio", "CaldotcomBookingWebhook"]).exit_code
+        == 0
+    )
     assert captured == [("attio", "CaldotcomBookingWebhook")]
     assert runner.invoke(script_module.app, ["attio", "--all"]).exit_code == 0
     assert runner.invoke(script_module.app, ["attio"]).exit_code == 2

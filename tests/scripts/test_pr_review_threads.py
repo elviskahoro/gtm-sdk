@@ -324,7 +324,12 @@ def test_typer_cli_preserves_subcommand_options_and_repeatable_threads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[SimpleNamespace] = []
-    monkeypatch.setattr(prt, "_run", lambda args: captured.append(args) or 0)
+
+    def capture_run(args: SimpleNamespace) -> int:
+        captured.append(args)
+        return 0
+
+    monkeypatch.setattr(prt, "_run", capture_run)
     result = CliRunner().invoke(
         prt.app,
         ["resolve", "--repo", "o/r", "--pr", "1", "--thread", "T1", "--thread", "T2"],

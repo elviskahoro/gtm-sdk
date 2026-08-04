@@ -481,9 +481,8 @@ def main(
     max_events: int | None = typer.Option(None, "--max-events"),
 ) -> None:
     if (connection_id is None) == (connection_name is None):
-        raise typer.BadParameter(
-            "provide exactly one of --connection-id or --connection-name",
-        )
+        message = "provide exactly one of --connection-id or --connection-name"
+        raise typer.BadParameter(message)
     raise typer.Exit(
         _run(connection_id, connection_name, output_dir, limit_per_page, max_events),
     )

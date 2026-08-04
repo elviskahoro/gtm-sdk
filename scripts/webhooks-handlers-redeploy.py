@@ -1224,11 +1224,13 @@ def _validate_deploy_target(
     all_sources: bool,  # noqa: FBT001
 ) -> tuple[str, str]:
     if all_sources and source is not None:
-        raise typer.BadParameter("specify either <source> or --all, not both")
+        message = "specify either <source> or --all, not both"
+        raise typer.BadParameter(message)
     if all_sources:
         return handler, "--all"
     if source is None:
-        raise typer.BadParameter("specify a <source> alias or pass --all")
+        message = "specify a <source> alias or pass --all"
+        raise typer.BadParameter(message)
     return handler, source
 
 
@@ -1310,13 +1312,16 @@ def _run(handler: str, source_or_all: str) -> int:
 
 @app.command(help=_CLI_HELP)
 def main(
-    handler: str = typer.Argument(..., help="Webhook handler name or configured alias."),
+    handler: str = typer.Argument(
+        ...,
+        help="Webhook handler name or configured alias.",
+    ),
     source: str | None = typer.Argument(
         None,
         help="A 'Webhook as <Alias>' source imported by the handler.",
     ),
-    all_sources: bool = typer.Option(
-        False,
+    all_sources: bool = typer.Option(  # noqa: FBT001
+        False,  # noqa: FBT003
         "--all",
         help="Deploy every imported source.",
     ),

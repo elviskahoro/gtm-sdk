@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "hookdeck-connection_events-dump.py"
+_USAGE_ERROR = 2
 
 
 @pytest.fixture()
@@ -83,11 +84,20 @@ def test_typer_cli_preserves_defaults_and_exclusive_target(
 
     monkeypatch.setattr(hd, "_run", fake_run)
     runner = CliRunner()
-    result = runner.invoke(hd.app, ["--connection-id", "web_x", "--output-dir", str(tmp_path)])
+    result = runner.invoke(
+        hd.app,
+        ["--connection-id", "web_x", "--output-dir", str(tmp_path)],
+    )
     assert result.exit_code == 0
     assert captured[0][3:] == (100, None)
-    assert runner.invoke(hd.app, []).exit_code == 2
-    assert runner.invoke(hd.app, ["--connection-id", "x", "--connection-name", "x"]).exit_code == 2
+    assert runner.invoke(hd.app, []).exit_code == _USAGE_ERROR
+    assert (
+        runner.invoke(
+            hd.app,
+            ["--connection-id", "x", "--connection-name", "x"],
+        ).exit_code
+        == _USAGE_ERROR
+    )
     help_result = runner.invoke(hd.app, ["--help"])
     assert help_result.exit_code == 0
     assert "Usage:" in help_result.output
@@ -98,10 +108,13 @@ def test_typer_cli_propagates_domain_exit_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_run(*_args: object) -> int:
-        return 2
+        return _USAGE_ERROR
 
     monkeypatch.setattr(hd, "_run", fake_run)
-    assert CliRunner().invoke(hd.app, ["--connection-id", "web_x"]).exit_code == 2
+    assert (
+        CliRunner().invoke(hd.app, ["--connection-id", "web_x"]).exit_code
+        == _USAGE_ERROR
+    )
 
 
 def test_derived_path_outside_the_root_is_refused(
