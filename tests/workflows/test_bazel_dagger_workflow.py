@@ -85,6 +85,12 @@ def test_workflow_initializes_namespace_cache_mounts_before_dagger() -> None:
     assert names.index("Initialize Namespace cache mounts") < names.index(
         "Install Dagger Python SDK",
     )
+    source_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Prepare self-contained Git history"
+    )
+    assert "https://github.com/${{ github.repository }}.git" in source_step["run"]
     for step_name in (
         "Prepare Namespace cache paths",
         "Initialize Namespace cache mounts",

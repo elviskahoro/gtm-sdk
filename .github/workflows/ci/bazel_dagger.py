@@ -90,7 +90,8 @@ apt-get install --yes --no-install-recommends git unzip
         .with_directory("/var/cache/bazel", dag.host().directory(str(cache_dir)))
     )
     container = container.with_file(
-        "/opt/bazel-diff.jar", dag.host().file(str(diff_jar))
+        "/opt/bazel-diff.jar",
+        dag.host().file(str(diff_jar)),
     ).with_env_variable(
         "TRUNK_BAZEL_ACTION_REV",
         TRUNK_BAZEL_ACTION_REV,
