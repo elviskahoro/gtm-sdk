@@ -61,6 +61,7 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     pipeline = PIPELINE.read_text()
     assert 'dagger.Platform("linux/arm64")' in pipeline
     assert "TRUNK_BAZEL_ACTION_REV" in pipeline
+    assert "build-essential" in pipeline
     assert "BAZEL_DAGGER_DIFF_JAR" in pipeline
     assert 'source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")' in pipeline
     assert 'mkdir --parents "${CACHE_DIR}"' in pipeline
