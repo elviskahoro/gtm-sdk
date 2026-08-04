@@ -9,17 +9,12 @@ on:
     tags:
       - v*
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing version tag to publish (for example, v0.1.0)
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: pypi-publish-${{ inputs.tag || github.ref_name }}
+  group: pypi-publish-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +28,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ github.ref }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -50,6 +45,6 @@ jobs:
 
       - name: Build and publish through Dagger
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv run dagger run python .github/workflows/ci/pypi_publish_dagger.py
