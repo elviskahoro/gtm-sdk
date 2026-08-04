@@ -62,6 +62,8 @@ filegroup(
     srcs = [
         ".flox/env/manifest.lock",
         ".flox/env/manifest.toml",
+        "flox/toolchain/.flox/env/manifest.lock",
+        "flox/toolchain/.flox/env/manifest.toml",
     ],
     visibility = ["//tests/workflows:__pkg__"],
 )
