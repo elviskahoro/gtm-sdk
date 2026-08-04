@@ -22,11 +22,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -457,136 +456,12 @@ def test_resolve_current_pr_uses_base_repo_from_url(prt: ModuleType) -> None:
     assert (owner, repo, number) == ("upstream-owner", "upstream-repo", 42)
 
 
-# ---------------------------------------------------------------------------
-# Mocked-Dagger transport: container chain, secret injection, no token leakage
-# ---------------------------------------------------------------------------
-
-
-def _build_dagger_mock(stdout_value: str) -> tuple[MagicMock, MagicMock]:
-    """Return ``(fake_dagger_module, final_exec_container)``.
-
-    The script's real chain is fixed and shallow (from_ -> with_exec ->
-    with_secret_variable -> with_exec), so unlike the webhook-deploy test's
-    generic chain tracker, a straight-line mock is sufficient here.
-    """
-    final_container = MagicMock(name="final_container")
-    final_container.stdout = AsyncMock(return_value=stdout_value)
-
-    secret_container = MagicMock(name="secret_container")
-    secret_container.with_exec.return_value = final_container
-
-    installed_container = MagicMock(name="installed_container")
-    installed_container.with_secret_variable.return_value = secret_container
-
-    base_container = MagicMock(name="base_container")
-    base_container.with_exec.return_value = installed_container
-
-    dag = MagicMock(name="dag")
-    dag.container.return_value.from_.return_value = base_container
-
-    def set_secret(name: str, value: str) -> MagicMock:
-        return MagicMock(_secret=(name, value))
-
-    dag.set_secret.side_effect = set_secret
-
-    connection_cm = MagicMock(name="connection_cm")
-    connection_cm.__aenter__ = AsyncMock(return_value=None)
-    connection_cm.__aexit__ = AsyncMock(return_value=None)
-
-    fake_dagger = MagicMock(name="dagger_module")
-    fake_dagger.connection.return_value = connection_cm
-    fake_dagger.Config = MagicMock(name="Config")
-    fake_dagger.dag = dag
-
-    return fake_dagger, final_container
-
-
-def test_dagger_transport_injects_token_as_secret_not_env(prt: ModuleType) -> None:
-    fake_dagger, final_container = _build_dagger_mock(stdout_value='{"data": {}}')
-
-    with patch.object(prt, "dagger", fake_dagger):
-        result = prt.asyncio.run(prt._run_gh_in_dagger(["pr", "view"], "sekret-token"))
-
-    assert result == '{"data": {}}'
-    fake_dagger.dag.container.return_value.from_.assert_called_once_with(
-        prt.DAGGER_BASE_IMAGE,
-    )
-    expected_name = prt._content_addressed_secret_name("gh-token", "sekret-token")
-    fake_dagger.dag.set_secret.assert_called_once_with(expected_name, "sekret-token")
-
-    secret_container = (
-        fake_dagger.dag.container.return_value.from_.return_value.with_exec.return_value
-    )
-    # Secret injected via with_secret_variable("GH_TOKEN", <secret>), never as
-    # a plain with_env_variable or baked into the with_exec argv.
-    name, secret_obj = secret_container.with_secret_variable.call_args[0]
-    assert name == "GH_TOKEN"
-    assert secret_obj._secret == (expected_name, "sekret-token")
-
-    final_exec_args = (
-        secret_container.with_secret_variable.return_value.with_exec.call_args[0][0]
-    )
-    assert final_exec_args == ["gh", "pr", "view"]
-    assert "sekret-token" not in json.dumps(final_exec_args)
-    final_container.stdout.assert_awaited_once()
-
-
-# ---------------------------------------------------------------------------
-# Flox transport -- parity with the Dagger transport, no engine required
-# ---------------------------------------------------------------------------
-
-
-def test_flox_transport_activates_flox_and_injects_gh_token(
+def test_make_run_gh_defaults_to_flox(
     prt: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`_run_gh_in_flox` reaches `gh` with the same argv/token shape as Dagger."""
-    fake_run = MagicMock(
-        return_value=subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout='{"data": {}}',
-            stderr="",
-        ),
-    )
-    monkeypatch.setattr(prt.subprocess, "run", fake_run)
-
-    result = prt._run_gh_in_flox(["pr", "view"], "sekret-token")
-
-    assert result == '{"data": {}}'
-    call_args, call_kwargs = fake_run.call_args
-    argv = call_args[0]
-    assert argv == [*prt.flox_activate_prefix(prt.REPO_ROOT), "gh", "pr", "view"]
-    assert call_kwargs["env"]["GH_TOKEN"] == "sekret-token"
-    assert call_kwargs["cwd"] == prt.REPO_ROOT
-    assert call_kwargs["check"] is True
-
-
-def test_make_run_gh_dispatches_on_env_flag(
-    prt: ModuleType,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    fake_dagger_maker = MagicMock(return_value="dagger-run-gh")
-    fake_flox_maker = MagicMock(return_value="flox-run-gh")
-    monkeypatch.setattr(prt, "make_dagger_run_gh", fake_dagger_maker)
-    monkeypatch.setattr(prt, "make_flox_run_gh", fake_flox_maker)
-
-    monkeypatch.delenv("GTM_PR_REVIEW_VIA_FLOX", raising=False)
-    assert prt.make_run_gh("tok") == "dagger-run-gh"
-    fake_dagger_maker.assert_called_once_with("tok")
-    fake_flox_maker.assert_not_called()
-
-    fake_dagger_maker.reset_mock()
-    monkeypatch.setenv("GTM_PR_REVIEW_VIA_FLOX", "1")
-    assert prt.make_run_gh("tok") == "flox-run-gh"
-    fake_flox_maker.assert_called_once_with("tok")
-    fake_dagger_maker.assert_not_called()
-
-
-def test_use_flox_rejects_unrecognized_value(
-    prt: ModuleType,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("GTM_PR_REVIEW_VIA_FLOX", "banana")
-    with pytest.raises(ValueError, match="GTM_PR_REVIEW_VIA_FLOX"):
-        prt._use_flox()
+    flox = MagicMock(return_value='{"data": {}}')
+    monkeypatch.setattr(prt, "flox_run", flox)
+    assert prt.make_run_gh("tok")(["pr", "view"]) == '{"data": {}}'
+    flox.assert_called_once()
+    assert flox.call_args.kwargs["env"]["GH_TOKEN"] == "tok"

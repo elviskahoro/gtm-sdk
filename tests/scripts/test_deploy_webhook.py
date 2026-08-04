@@ -4,11 +4,9 @@ Verifies the substitute -> deploy -> restore loop preserves the working tree,
 even when the deploy fails mid-iteration. Stubs modal / infisical / uv / gcloud
 so the test never makes real network calls.
 
-Sets ``GTM_DEPLOY_VIA_FLOX=1`` so the script's deploy step shells out to the
-host stubs (via a stubbed ``flox``) instead of spinning up a Dagger engine.
-The Dagger path (which runs ``modal deploy`` inside a Dagger container) is
-covered by manual smoke tests — running it in CI would require a Dagger
-engine and real Modal/GCP credentials.
+The default Flox recipe shells out to the host stubs instead of spinning up a
+Dagger engine. The Dagger wrapper is covered by focused unit tests; running it
+here would require a real engine and Modal/GCP credentials.
 
 BD: gtm-sdk-43z (epic gtm-sdk-yol). Each test maps to one acceptance criterion.
 """
@@ -184,6 +182,10 @@ def _write_default_stubs(bin_dir: Path) -> None:
                 shift 2
                 exec modal "$@"
             fi
+            if [[ "${1:-}" == "run" && "${2:-}" == "--no-sync" && "${3:-}" == "modal" ]]; then
+                shift 3
+                exec modal "$@"
+            fi
             # `uv run python -c "<snippet>"` is used by _preflight_infisical_keys
             # (to print required_api_keys()) and by _preflight_gcs_buckets (to
             # print Webhook.<prefix>_get_bucket_name()). Detect which by
@@ -265,14 +267,6 @@ def _run_deploy(
     # script header. Tests pin to "dev" since they stub the modal binary
     # and never reach Infisical.
     env.setdefault("INFISICAL_ENV", "dev")
-    # Force the Flox deploy path so the existing infisical/modal/uv/flox
-    # stubs handle the deploy step. The Dagger path is exercised by manual
-    # smoke tests; bringing a Dagger engine into CI would also drag in real
-    # Modal credentials, which defeats the purpose of these stubs.
-    # Hard-set, not setdefault: a developer with GTM_DEPLOY_VIA_FLOX=0
-    # exported would otherwise silently run this whole suite against the
-    # Dagger path, which the stubs cannot serve.
-    env["GTM_DEPLOY_VIA_FLOX"] = "1"
     if env_overrides:
         env.update(env_overrides)
     # Invoke the script with the test's own interpreter rather than
@@ -461,27 +455,6 @@ def test_modal_token_isolation_at_the_secret_preflight(
         f"webhooks-handlers-redeploy.py is missing or ineffective. "
         f"Got: {recorded}"
     )
-
-
-def test_deploy_backend_selector_rejects_a_bogus_value(
-    deploy_workspace: DeployWorkspace,
-    stub_bin: Path,
-) -> None:
-    """`GTM_DEPLOY_VIA_FLOX=maybe` must abort, naming the variable.
-
-    Before the selector went through ``env_flag``, anything other than the
-    literal ``"1"`` — including ``true`` — silently selected Dagger, so an
-    operator on a Conductor sandbox got an engine-connection failure instead
-    of an answer about their typo.
-    """
-    result = _run_deploy(
-        deploy_workspace,
-        stub_bin,
-        env_overrides={"GTM_DEPLOY_VIA_FLOX": "maybe"},
-    )
-
-    assert result.returncode != 0
-    assert "GTM_DEPLOY_VIA_FLOX" in result.stderr
 
 
 def test_deploy_step_env_is_the_recipe_not_the_operator_shell(

@@ -1,0 +1,20 @@
+name: Inspect unresolved PR review threads
+
+on: # yamllint disable-line rule:empty-values
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: flox/install-flox-action@11bd71901bbe5b1630ceea73d27597364c9af683 # v2
+      - name: Inspect unresolved threads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/pr-review-threads.py inspect --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --unresolved-only

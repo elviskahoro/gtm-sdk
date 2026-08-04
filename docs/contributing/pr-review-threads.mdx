@@ -30,4 +30,4 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 ## Implementation notes
 
-Pagination is fully recursive across `reviewThreads`, `reviews`, top-level pull request comments, and each thread's own nested `comments` connection. The base container image is pinned (`ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim`), matching `scripts/webhooks-handlers-redeploy.py`'s `DAGGER_BASE_IMAGE`, for dependency-version consistency across the repo's Dagger pipelines.
+Pagination is fully recursive across `reviewThreads`, `reviews`, top-level pull request comments, and each thread's own nested `comments` connection. By default `gh` runs in the repo's activated project environment; `RUN_WITH_DAGGER=1` opts into the shared prebuilt execution image.

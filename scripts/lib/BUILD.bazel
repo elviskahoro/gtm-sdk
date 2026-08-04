@@ -12,10 +12,12 @@ py_library(
     name = "lib",
     srcs = [
         "__init__.py",
+        "container.py",
         "env.py",
         "flox.py",
         "uv_bootstrap.py",
         "uv_resolve.py",
     ],
     visibility = ["//:__subpackages__"],
+    deps = ["@pypi//dagger_io"],
 )

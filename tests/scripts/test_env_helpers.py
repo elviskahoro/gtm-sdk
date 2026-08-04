@@ -141,8 +141,8 @@ def test_env_flag_rejects_an_unrecognised_value(
 ) -> None:
     """A typo must raise, not silently resolve to the default.
 
-    The whole point: `GTM_DEPLOY_VIA_FLOX=true` compared against the literal
-    `"1"` used to select the *other* deploy backend without a word.
+    Execution selectors must reject typos rather than silently choosing a
+    different transport.
     """
     monkeypatch.setenv("GTM_TEST_FLAG", "yes-please")
     with pytest.raises(ValueError, match="GTM_TEST_FLAG") as excinfo:

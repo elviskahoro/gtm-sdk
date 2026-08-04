@@ -1,0 +1,26 @@
+name: Publish Flox toolchain image
+
+on: # yamllint disable-line rule:empty-values
+  workflow_dispatch: {}
+  push:
+    paths:
+      - flox/toolchain/.flox/env/manifest.toml
+      - flox/toolchain/.flox/env/manifest.lock
+      - .github/workflows/ci/flox_image_dagger.py
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: flox/install-flox-action@11bd71901bbe5b1630ceea73d27597364c9af683 # v2
+      - name: Publish toolchain image
+        env:
+          FLOX_TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository }}/flox-toolchain:${{ github.sha }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run dagger run python .github/workflows/ci/flox_image_dagger.py

@@ -130,6 +130,16 @@ pytest_test(
 )
 
 pytest_test(
+    name = "test_container_wrapper",
+    srcs = ["test_container_wrapper.py"],
+    deps = [
+        "//scripts/lib",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
     name = "test_deploy_webhook",
     srcs = ["test_deploy_webhook.py"],
     data = [
@@ -154,25 +164,6 @@ pytest_test(
         "//scripts:webhooks-handlers-redeploy",  # keep
         "//src:secrets_bootstrap",
         "//tests:conftest",
-        "@pypi//pytest",
-    ],
-)
-
-pytest_test(
-    name = "test_deploy_webhook_dagger_real",
-    srcs = ["test_deploy_webhook_dagger_real.py"],
-    data = [
-        "//:webhook_export_to_attio_source",
-        "//scripts:webhooks-handlers-redeploy.py",
-    ],  # keep
-    tags = [
-        "integration",
-        "manual",
-    ],  # keep
-    deps = [
-        "//scripts:webhooks-handlers-redeploy",  # keep
-        "//tests:conftest",
-        "@pypi//dagger_io",
         "@pypi//pytest",
     ],
 )

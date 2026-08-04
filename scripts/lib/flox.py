@@ -1,20 +1,15 @@
-"""Shared Flox invocation helper for this repo's Dagger-fallback scripts.
+"""Shared Flox invocation helpers for repo scripts.
 
-Dagger cannot run inside Conductor cloud sandboxes (issue #284 -- see
-AGENTS.md's "Dagger-fallback pattern (Flox)" section for the root cause).
-Every script that offers a Flox fallback for that reason
-(``scripts/webhooks-handlers-redeploy.py``, ``scripts/pr-review-threads.py``,
-``scripts/hookdeck-connection_events-dump.py``) wraps its host-side command
-with :func:`flox_activate_prefix` so all three activate the repo's pinned
-Flox environment (``.flox/env/manifest.toml``) identically.
+Flox is the primary execution environment. Dagger, when requested, only
+re-executes the same script inside a prebuilt image made from this environment.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+import os
+import shutil
+import subprocess
+from pathlib import Path
 
 
 def flox_activate_prefix(repo_root: Path) -> list[str]:
@@ -36,3 +31,54 @@ def flox_activate_prefix(repo_root: Path) -> list[str]:
     resolve different Nix store paths.
     """
     return ["flox", "activate", "--dir", str(repo_root), "--mode", "run", "--"]
+
+
+def in_flox_env() -> bool:
+    """Return whether the current process was launched by an activated Flox env."""
+    return bool(os.environ.get("FLOX_ENV"))
+
+
+def run(
+    argv: list[str],
+    *,
+    repo_root: Path,
+    env: dict[str, str] | None = None,
+    capture: bool = False,
+    clear_env: bool = False,
+) -> str | None:
+    """Run one command in the repo's activated Flox environment."""
+    child_env = {} if clear_env else dict(os.environ)
+    if env is not None:
+        child_env.update(env)
+    proc = subprocess.run(  # noqa: S603
+        [*flox_activate_prefix(repo_root), *argv],
+        cwd=repo_root,
+        env=child_env,
+        capture_output=capture,
+        text=True,
+        check=True,
+    )
+    return proc.stdout if capture else None
+
+
+def preflight(repo_root: Path, tools: tuple[str, ...]) -> str:
+    """Validate Flox activation and return its resolved environment path."""
+    if shutil.which("flox") is None:
+        msg = "flox is required for the primary execution path"
+        raise RuntimeError(msg)
+    proc = subprocess.run(  # noqa: S603
+        [*flox_activate_prefix(repo_root), "sh", "-c", 'printf %s "$FLOX_ENV"'],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    flox_env = proc.stdout.strip()
+    if not flox_env:
+        msg = "flox activation did not set FLOX_ENV"
+        raise RuntimeError(msg)
+    missing = [tool for tool in tools if not (Path(flox_env) / "bin" / tool).exists()]
+    if missing:
+        msg = f"Flox environment {flox_env} is missing required tools: {', '.join(missing)}"
+        raise RuntimeError(msg)
+    return flox_env

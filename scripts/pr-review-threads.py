@@ -8,17 +8,10 @@ Replaces the ad hoc manual workflow of resolving a PR, paginating
 unresolved CodeRabbit threads to resolve. Read-only `inspect` is the default;
 `resolve` mutates only caller-selected thread IDs and never guesses.
 
-By default this script runs `gh` inside a Dagger container. Set
-`GTM_PR_REVIEW_VIA_FLOX=1` to instead run `gh` via a Flox-activated host
-shell (`scripts/lib/flox.py::flox_activate_prefix()`) -- the fallback for
-Conductor cloud sandboxes, where Dagger's container engine cannot start at
-all (issue #284; do not reinvestigate). `gh` is already pinned in
-`.flox/env/manifest.toml`, so no manifest change was needed for this script.
-GH_TOKEN is passed to the Flox-run `gh` only via an explicit subprocess env
-dict, never inherited raw from this process's own environment. See
-AGENTS.md's "Dagger-fallback pattern (Flox)" section for the pattern shared
-with `scripts/webhooks-handlers-redeploy.py` and
-`scripts/hookdeck-connection_events-dump.py`.
+By default this script runs `gh` in the repo's activated Flox environment.
+Set `RUN_WITH_DAGGER=1` to opt into the shared Dagger wrapper, which uses the
+same prebuilt Flox toolchain image. GH_TOKEN is passed only as an explicit
+environment value or Dagger secret.
 
 Usage:
     scripts/pr-review-threads.py inspect [--repo OWNER/REPO] [--pr NUMBER]
@@ -58,8 +51,6 @@ if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse  # noqa: E402
-import asyncio  # noqa: E402
-import hashlib  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
 import re  # noqa: E402
@@ -68,19 +59,18 @@ from collections.abc import Callable  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
 from typing import Any  # noqa: E402
 
-import dagger  # noqa: E402
-
+from scripts.lib.container import (  # noqa: E402
+    RUN_WITH_DAGGER,
+    in_container_phase,
+    run_in_container,
+)
 from scripts.lib.env import env_flag  # noqa: E402
-from scripts.lib.flox import flox_activate_prefix  # noqa: E402
+from scripts.lib.flox import run as flox_run  # noqa: E402
 
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_API_ERROR = 3
 EXIT_REFUSAL = 4
-
-# Pinned to match scripts/webhooks-handlers-redeploy.py's DAGGER_BASE_IMAGE
-# for toolchain consistency across the repo's Dagger pipelines.
-DAGGER_BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
 
 CODERABBIT_LOGIN = "coderabbitai[bot]"
 _PROVIDER_ALIASES: dict[str, str] = {"coderabbitai": CODERABBIT_LOGIN}
@@ -506,45 +496,6 @@ def render_threads(threads: list[Thread], fmt: str) -> str:
     return "\n".join(lines) if lines else "(no matching threads)"
 
 
-# ---------------------------------------------------------------------------
-# Dagger transport -- the only impure boundary besides `resolve_current_pr`.
-# ---------------------------------------------------------------------------
-
-
-def _content_addressed_secret_name(base: str, value: str) -> str:
-    """Derive a Dagger secret name that changes when `value` changes.
-
-    `dagger.dag.set_secret(name, value)` caches downstream `with_exec` steps
-    keyed on the secret's name, not its plaintext -- reusing a fixed name
-    across a rotated token would silently replay a stale cached `gh` call
-    (including a stale mutation result) against the OLD credentials.
-    Mirrors `scripts/webhooks-handlers-redeploy.py`'s helper of the same name.
-    """
-    digest = hashlib.sha256(value.encode()).hexdigest()[:12]
-    return f"{base}-{digest}"
-
-
-async def _run_gh_in_dagger(args: list[str], gh_token: str) -> str:
-    async with dagger.connection(dagger.Config(log_output=sys.stderr)):
-        token_secret = dagger.dag.set_secret(
-            _content_addressed_secret_name("gh-token", gh_token),
-            gh_token,
-        )
-        container = (
-            dagger.dag.container()
-            .from_(DAGGER_BASE_IMAGE)
-            .with_exec(
-                [
-                    "sh",
-                    "-c",
-                    "apt-get update && apt-get install -y --no-install-recommends gh",
-                ],
-            )
-            .with_secret_variable("GH_TOKEN", token_secret)
-        )
-        return await container.with_exec(["gh", *args]).stdout()
-
-
 def _resolve_gh_token() -> str:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
@@ -561,74 +512,31 @@ def _resolve_gh_token() -> str:
     return proc.stdout.strip()
 
 
-def make_dagger_run_gh(gh_token: str) -> RunGh:
-    """Return a `RunGh` that always executes `gh` inside a Dagger container.
-
-    Every call opens its own Dagger session -- acceptable for this CLI's
-    invocation volume (one process, a handful of paginated calls), and it
-    keeps the transport boundary a single, simple function to fake in tests.
-    """
-
-    def _run(args: list[str]) -> str:
-        return asyncio.run(_run_gh_in_dagger(args, gh_token))
-
-    return _run
-
-
-# ---------------------------------------------------------------------------
-# Flox transport -- the fallback for sandboxes with no Dagger engine.
-# ---------------------------------------------------------------------------
-
-
-def _run_gh_in_flox(args: list[str], gh_token: str) -> str:
-    """Run `gh` via a Flox-activated host shell instead of a Dagger container.
-
-    Unlike the Dagger path there is no `with_exec` cache to defeat, so
-    `GH_TOKEN` doesn't need `_content_addressed_secret_name`'s hashing trick
-    -- it's just passed through an explicit subprocess env dict (never the
-    inherited raw environment) so a caller who happens to already export
-    GH_TOKEN for something else can't accidentally supply the wrong token.
-    """
-    env = {**os.environ, "GH_TOKEN": gh_token}
-    proc = subprocess.run(  # noqa: S603 — argv list, shell disabled
-        [*flox_activate_prefix(REPO_ROOT), "gh", *args],
-        cwd=REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return proc.stdout
-
-
-def make_flox_run_gh(gh_token: str) -> RunGh:
-    """Return a `RunGh` that executes `gh` via `flox activate` on the host.
-
-    Parallel to `make_dagger_run_gh` -- selected instead of it when
-    `GTM_PR_REVIEW_VIA_FLOX` is set (see `_use_flox`).
-    """
-
-    def _run(args: list[str]) -> str:
-        return _run_gh_in_flox(args, gh_token)
-
-    return _run
-
-
-def _use_flox() -> bool:
-    """Whether `GTM_PR_REVIEW_VIA_FLOX` selects the Flox transport.
-
-    Routed through `env_flag` so `GTM_PR_REVIEW_VIA_FLOX=true` fails loudly
-    instead of silently selecting Dagger, matching
-    `scripts/webhooks-handlers-redeploy.py`'s `_use_flox`.
-    """
-    return env_flag("GTM_PR_REVIEW_VIA_FLOX")
-
-
 def make_run_gh(gh_token: str) -> RunGh:
-    """Select the Flox or Dagger transport based on `GTM_PR_REVIEW_VIA_FLOX`."""
-    if _use_flox():
-        return make_flox_run_gh(gh_token)
-    return make_dagger_run_gh(gh_token)
+    """Run ``gh`` in Flox, or re-exec this script through the container wrapper."""
+
+    def _run(args: list[str]) -> str:
+        if env_flag(RUN_WITH_DAGGER) and not in_container_phase():
+            return (
+                run_in_container(
+                    repo_root=REPO_ROOT,
+                    argv=["gh", *args],
+                    secrets={"GH_TOKEN": gh_token},
+                    capture=True,
+                )
+                or ""
+            )
+        return (
+            flox_run(
+                ["gh", *args],
+                repo_root=REPO_ROOT,
+                env={"GH_TOKEN": gh_token},
+                capture=True,
+            )
+            or ""
+        )
+
+    return _run
 
 
 # ---------------------------------------------------------------------------
@@ -641,11 +549,9 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="scripts/pr-review-threads.py",
         description=(
             "Inspect and selectively resolve GitHub PR review threads via a "
-            "Dagger-run `gh`. `inspect` is read-only; `resolve` mutates only "
-            "explicitly selected --thread IDs. Runs `gh` via Dagger by "
-            "default; set GTM_PR_REVIEW_VIA_FLOX=1 to run via Flox instead "
-            "(Conductor cloud sandboxes cannot run Dagger -- see module "
-            "docstring)."
+            "Flox-run `gh`. `inspect` is read-only; `resolve` mutates only "
+            "explicitly selected --thread IDs. Set RUN_WITH_DAGGER=1 to "
+            "opt into the shared container wrapper."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)

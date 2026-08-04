@@ -104,9 +104,9 @@ working-dir = "/src"
 ## ... environments to create a composed environment
 ## ------------------------------------------------------------------
 [include]
-# environments = [
-#     { dir = "../common" }
-# ]
+environments = [
+    { dir = "flox/toolchain" }
+]
 
 
 ## Build and publish your own packages ------------------------------
