@@ -1,21 +1,27 @@
 ---
 title: "Module boundaries"
-description: "Enforce architectural rules with tach: no cross-lib imports, no orchestration in libs/, CLI has no business logic. Run via trunk (`trunk check --filter=tach`) locally and in CI."
+description: "Enforce architectural rules with tach: layered modules, exact depends_on, frozen public interfaces, and visibility. Run via trunk (`trunk check --filter=tach`) locally and in CI."
 ---
 
 The gtm-sdk enforces module boundaries using **tach**, a Rust-based static checker that prevents layering violations and maintains a clean architecture.
 
 ## Architecture layers
 
-The codebase is organized into three main layers:
+Tach layers (high → low):
+
+- **tooling** — `scripts/`
+- **edge** — `cli/`, `webhooks/`
+- **orchestration** — `src/`
+- **adapters** — `libs/*` (utilities marked `utility = true`)
+- **products** — `data-gen/`
+
+Code placement rules:
 
 - **cli/** — User-facing commands. Parses flags, runs preflight checks, calls orchestration, renders output. **No business logic.**
 - **src/** — Orchestration. Multi-step workflows, side effects, Modal decorators. Depends on adapters.
 - **libs/** — Adapters wrapping external SDKs/APIs. Each `libs/<service>/` is self-contained and idiomatic to one external service.
-
-Additionally:
-
 - **webhooks/** — Standalone Modal apps for event handling. Depend on libs and src.
+- **scripts/** — Operator/maintainer tooling. May depend on cli/src/libs.
 - **data-gen/** — Independent data products.
 
 ## Boundary rules
@@ -34,6 +40,10 @@ Adapters must be callable in isolation. No side effects, no Modal decorators, no
 The CLI layer parses arguments, validates input, and calls `src/` workflows. It does not contain application logic.
 </Card>
 
+<Card title="Public interfaces are frozen">
+Cross-module imports must match an `[[interfaces]]` expose entry in `tach.toml`. New deep imports fail until the interface (or call site) is updated.
+</Card>
+
 ## Enforcing boundaries with tach
 
 tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alongside every other linter/formatter in this repo — not as a bare binary.
@@ -44,7 +54,7 @@ tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alo
    uv run tach show                  # Visualize the dependency graph
    ```
 
-2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs the normal hold-the-line checks, followed by an explicit full-graph `trunk check --filter=tach --all` step. This ensures module boundaries are checked even when a change does not touch a Python file. Violations block merges. The check runs with `exact = true` and `root_module = "forbid"`, so unused `depends_on` entries and undeclared packages both fail CI.
+2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs the normal hold-the-line checks, followed by an explicit full-graph `trunk check --filter=tach --all` step. This ensures module boundaries are checked even when a change does not touch a Python file. Violations block merges.
 
 ## Common violations and fixes
 
@@ -58,29 +68,38 @@ If two adapters genuinely share code (beyond the utilities exceptions above):
 
 ### "`src` cannot depend on `libs.<x>`"
 
-This is expected — `src/` depends on all libs adapters. If a `libs/` module imports from `src/`, invert the dependency:
+This is expected — `src/` depends on declared libs adapters only. If a `libs/` module imports from `src/`, invert the dependency:
 
 - Remove the import from `libs/`
 - Pass the needed value (e.g., an app name) as a parameter or environment variable
 - Move the Modal-aware logic into `src/`
 
+### "not part of the public interface"
+
+The import path is not in that module's `[[interfaces]].expose` list. Either:
+
+1. Import an already-exposed symbol (prefer package-root / documented API), or
+2. Add the path to `expose` in `tach.toml` in the same change if it is intentionally public.
+
 ### "cli cannot depend on specific libs"
 
-The CLI layer can import types and utilities from any adapter (for validation, rendering), but should avoid deep orchestration logic. If you're writing workflow code in `cli/`, move it to `src/` instead.
+The CLI layer can import types and utilities from declared adapters (for validation, rendering), but should avoid deep orchestration logic. If you're writing workflow code in `cli/`, move it to `src/` instead. New adapter imports also need a `depends_on` update (`uv run tach sync --add`).
 
 ## Configuration (tach.toml)
 
-The `tach.toml` file at the repo root defines:
+The `tach.toml` file at the repo root is configured as strictly as tach allows for this repo:
 
-- **`source_roots`** — Where to search for modules (the repo root)
-- **`exclude`** — Paths to skip (tests, docs, scripts, `deploy.py`, etc.)
-- **`modules`** — Explicit layer definitions and utility declarations
-- **`exact`** — Fail when `depends_on` lists declare imports the code does not make (keeps allowlists honest)
-- **`root_module = "forbid"`** — Every file under `source_roots` must belong to a configured module
-- **`forbid_circular_dependencies`** — Prevent circular imports
-- **`ignore_type_checking_imports`** — Allow `TYPE_CHECKING` blocks to bypass import rules (used by webhook type stubs)
+- **`exact`** — unused `depends_on` entries fail
+- **`root_module = "forbid"`** — every file under `source_roots` must belong to a configured module
+- **`layers` + `layers_explicit_depends_on`** — directional layers; every cross-module edge still listed in `depends_on`
+- **`ignore_type_checking_imports = false`** — `TYPE_CHECKING` imports are enforced
+- **`include_string_imports = true`** — string/dynamic imports count
+- **`visibility`** — who may import each module
+- **`[[interfaces]]`** — frozen public import surface for `libs.*` and `src`
+- **`[rules]`** — unused / unjustified `tach-ignore` directives are errors
+- **`exclude`** — tests, docs, api fixtures, and root `deploy.py` (Modal entrypoint must stay at repo root)
 
-When you add a real import across modules, update `depends_on` (or run `uv run tach sync --add`) in the same change. See the `tach.toml` source for the full configuration.
+When you add a real import across modules, update `depends_on` and `[[interfaces]]` (or run `uv run tach sync --add` for depends_on) in the same change.
 
 ## Resources
 

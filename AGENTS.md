@@ -23,8 +23,8 @@ to mirror them.
 
 - **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`. Exceptions: utilities (`libs.telemetry`, `libs.logging`, `libs.filesystem`) are importable from anywhere.
 - **No orchestration in `libs/`.** Adapter modules must be callable in isolation.
-- **Module boundaries are enforced by tach**, run via trunk like every other linter. Reproduce with `trunk check --filter=tach`; CI runs `--all` on every push and PR. Config is strict: `exact = true` (unused `depends_on` entries fail) and `root_module = "forbid"` (undeclared packages fail). Bump the `dev`-group `tach` pin in `pyproject.toml` in lockstep with the `tach@` version in `.trunk/trunk.yaml` and the plugin `ref` in `oss-linter-trunk-tach`.
-- **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml`, and declare the module in `tach.toml` (or `uv run tach sync --add`).
+- **Module boundaries are enforced by tach**, run via trunk like every other linter. Reproduce with `trunk check --filter=tach`; CI runs `--all` on every push and PR. Config is max-strict for this repo: `exact`, `root_module = "forbid"`, layered modules with `layers_explicit_depends_on`, frozen `[[interfaces]]`, `visibility`, and `TYPE_CHECKING`/string imports enforced. Bump the `dev`-group `tach` pin in `pyproject.toml` in lockstep with the `tach@` version in `.trunk/trunk.yaml` and the plugin `ref` in `oss-linter-trunk-tach`.
+- **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml`, and declare the module (plus `depends_on` / `[[interfaces]]` as needed) in `tach.toml` — or `uv run tach sync --add` for depends_on.
 
 ## Public API and downstream consumers
 
