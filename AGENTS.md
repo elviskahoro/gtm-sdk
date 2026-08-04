@@ -133,6 +133,7 @@ When a script reads/writes files that live beside it, anchor on
 - Put the canonical Infisical example string in `scripts/lib/env.py` and reuse it from docstrings and error messages instead of hand-writing variants.
 - Usage examples must show `--projectId`, `--token`, and `--env`, or explicitly say the script depends on `infisical init`.
 - Scripts that need an isolated toolchain run one recipe under either of two executors — Dagger by default, Flox where no Dagger engine can start (Conductor cloud sandboxes). Each selects via its own `GTM_*_VIA_FLOX` flag through `env_flag()`: `webhooks-handlers-redeploy.py`, `pr-review-threads.py`, `hookdeck-connection_events-dump.py`. Add a step to the recipe, never to one executor; each script's docstring carries its specifics.
+- **New scripts default to Python.** The only standing shell exceptions are `scripts/conductor-workspace-setup.sh` (bootstraps the toolchain before a Python interpreter is guaranteed to exist, and Dagger's engine cannot start in a Conductor cloud sandbox — see the script's own header) and `scripts/git-hooks/{prepare-commit-msg,commit-msg}` (git invokes hook files directly and synchronously on every commit, so they can't assume a `uv` venv or a Dagger container is available). Don't add a fourth without the same kind of structural reason.
 
 ## Linting
 
