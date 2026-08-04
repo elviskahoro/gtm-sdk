@@ -20,10 +20,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from libs.attio.models import PersonInput
+from libs.attio import PersonInput
 from libs.harvest import client as harvest_client
-from libs.logging.structured import log
-from libs.parsers.countries import country_name_to_iso2
+from libs.logging import log
+from libs.parsers import country_name_to_iso2
 
 
 class HarvestProfile(BaseModel):

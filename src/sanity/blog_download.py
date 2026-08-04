@@ -21,13 +21,13 @@ from urllib.parse import quote
 
 import yaml
 
-from libs.sanity.blog import fetch_blog_posts_raw
-from libs.sanity.errors import DuplicateSlugError, UnsafeArchiveDirError
-from libs.sanity.models import BlogPost
-from libs.sanity.portable_text import escape_text, escape_trailing_atx, to_markdown
+from libs.sanity import fetch_blog_posts_raw
+from libs.sanity import DuplicateSlugError, UnsafeArchiveDirError
+from libs.sanity import BlogPost
+from libs.sanity import escape_text, escape_trailing_atx, to_markdown
 
 if TYPE_CHECKING:
-    from libs.sanity.client import SanityConfig
+    from libs.sanity import SanityConfig
 
 BLOG_BASE_URL = "https://dlthub.com/blog"
 

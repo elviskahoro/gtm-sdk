@@ -5,13 +5,13 @@ from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, Field
 
-from libs.attio.values import normalize_linkedin_url
-from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
+from libs.attio import normalize_linkedin_url
+from libs.dlt import etl_bucket_name, raw_bucket_name
 from libs.octolens import (
     RelevanceScore,
     Webhook as OctolensMentionWebhook,
 )
-from libs.webhook.filter import WebhookFilter, WebhookFilters
+from libs.webhook import WebhookFilter, WebhookFilters
 from src.octolens.utils import generate_gcs_filename
 
 
@@ -127,7 +127,7 @@ class Webhook(OctolensMentionWebhook):
 
     @staticmethod
     def raw_get_app_name() -> str:
-        from libs.dlt.filesystem_gcp import CloudGoogle
+        from libs.dlt import CloudGoogle
 
         return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
 

@@ -64,7 +64,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 import click
 import typer
 
-from libs.fathom import iter_meetings, webhook_from_sdk_meeting
+from src.edge import iter_meetings, webhook_from_sdk_meeting
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -169,7 +169,7 @@ def run_backfill(
         # Validate the Attio token's scopes once up front so a misconfigured key
         # fails the whole run immediately with an actionable message, rather than
         # failing every row deep inside a write (ai-ica).
-        from libs.attio.preflight import assert_attio_token_scopes
+        from src.edge import assert_attio_token_scopes
 
         assert_attio_token_scopes()
 

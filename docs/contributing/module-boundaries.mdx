@@ -44,6 +44,13 @@ The CLI layer parses arguments, validates input, and calls `src/` workflows. It 
 Imports into `libs.*` and `src` must match an `[[interfaces]]` expose entry in `tach.toml`. Other modules (`cli`, `webhooks`, `scripts`, `data-gen`) are constrained by `depends_on`, layers, and visibility only. New deep imports into a frozen-interface module fail until the interface (or call site) is updated.
 </Card>
 
+<Card title="Closed orchestration layer">
+The `orchestration` layer is closed. CLI commands, webhook handlers, and
+operator scripts reach adapters through `src.edge`; they do not import adapter
+packages or utility implementations directly. This keeps the edge contract
+small and makes all adapter coordination visible in `src/`.
+</Card>
+
 ## Enforcing boundaries with tach
 
 tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alongside every other linter/formatter in this repo — not as a bare binary.
@@ -51,10 +58,65 @@ tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alo
 1. **Locally** — Reproduce a finding before pushing:
    ```bash
    trunk check --filter=tach         # Verify all modules
-   uv run tach show                  # Visualize the dependency graph
+   uv run tach check --dependencies --interfaces --exact --output json
+   uv run tach show --mermaid -o -   # Print a temporary Mermaid graph
    ```
 
 2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs the normal hold-the-line checks, followed by an explicit full-graph `trunk check --filter=tach --all` step. This ensures module boundaries are checked even when a change does not touch a Python file. Violations block merges.
+
+### Run only impacted tests
+
+For a fast local feedback loop, Tach can pass only tests belonging to modules
+affected since the target branch. Keep the repository's normal full test gates
+as the final authority:
+
+```bash
+uv run tach test --base origin/main -- -q
+```
+
+Use `--disable-cache` when validating selection behavior or after changing the
+module graph. `--collect-only` is useful for inspecting the selected set
+without executing tests:
+
+```bash
+uv run tach test --disable-cache --base origin/main -- --collect-only -q
+```
+
+### Investigate dependencies and blast radius
+
+Use reports when diagnosing a boundary or deciding where a change belongs:
+
+```bash
+uv run tach report src --raw
+uv run tach report src/edge.pyi --raw
+uv run tach map --direction dependents --closure src/edge.pyi
+uv run tach show --mermaid -o -
+```
+
+`report` shows module dependencies, usages, and external dependencies. `map`
+is useful for a file-level dependency or dependent closure. The Mermaid and
+DOT outputs are intentionally generated on demand; do not commit graph files
+or hand-maintained module inventories.
+
+The JSON form of `tach check` is useful when a local script or editor needs
+machine-readable diagnostics. Trunk remains the CI integration point:
+
+```bash
+uv run tach check --dependencies --interfaces --exact --output json
+```
+
+### Commands intentionally not used here
+
+- `tach install pre-commit` is not enabled because linting is centralized in
+  Trunk and this repository has no pre-commit configuration.
+- `tach sync --add` is a manual repair aid only. It can add declarations but
+  does not remove stale dependencies, so it must not run automatically.
+- `tach upload` is closed beta and is not part of the CI workflow.
+- `tach export` is not currently reliable with this repository's configuration:
+  Tach 0.35.0 fails while resolving the excluded `tests/conftest.py` with
+  `Package root not found`. Do not make modularity-report artifacts a required
+  check until this is resolved upstream or through a tested configuration
+  change.
 
 ## Common violations and fixes
 
@@ -83,7 +145,10 @@ This applies when the target is `libs.*` or `src`. The import path is not in tha
 
 ### "cli cannot depend on specific libs"
 
-The CLI layer can import types and utilities from declared adapters (for validation, rendering), but should avoid deep orchestration logic. If you're writing workflow code in `cli/`, move it to `src/` instead. New adapter imports also need a `depends_on` update (`uv run tach sync --add`).
+The CLI, webhook, and script layers use `src.edge` for adapter types, utility
+functions, and protocol objects. If you're writing workflow code in `cli/`,
+move it to `src/` instead. New facade symbols require a package-root
+`__all__` entry and a matching `src` interface entry.
 
 ## Configuration (tach.toml)
 
@@ -98,8 +163,17 @@ The `tach.toml` file at the repo root is configured as strictly as tach allows f
 - **`[[interfaces]]`** — frozen public import surface for `libs.*` and `src`
 - **`[rules]`** — unused / unjustified `tach-ignore` directives are errors
 - **`exclude`** — tests, docs, `api/` fixtures, and root `deploy.py` (Modal entrypoint must stay at repo root)
+- **external path exclusions** — `scripts/**` is operational tooling and `data-gen/marketplace/**` is an optional product; both are excluded from runtime external-dependency ownership checks with rationale in CI and `tach.toml`.
 
-When you add a real import across modules, update `depends_on` for every enforced form (including `TYPE_CHECKING` and string imports; or run `uv run tach sync --add`). If the target is `libs.*` or `src`, also add the path to that module's `[[interfaces]].expose` list.
+When you add a real import across modules, update `depends_on` for every enforced form (including `TYPE_CHECKING` and string imports; or run `uv run tach sync --add`). If the target is `libs.*` or `src`, also add the path to that module's `[[interfaces]].expose` list. Add adapter symbols to the package root's `__all__` and import them through `src.edge` when the caller is outside `libs/`.
+
+To regenerate the public surface safely, inspect each adapter's `__all__`,
+then update its matching tach interface in the same change. Validate with:
+
+```shell
+uv run tach check --exact
+uv run tach check-external --exclude 'scripts/**,data-gen/marketplace/**'
+```
 
 ## Resources
 

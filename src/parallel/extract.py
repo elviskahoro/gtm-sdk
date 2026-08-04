@@ -2,8 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from libs.parallel.client import extract_excerpts, extract_full_content
-from libs.parallel.models import (
+from libs.parallel import extract_excerpts, extract_full_content
+from libs.parallel import (
     ExtractExcerptsInput,
     ExtractFullContentInput,
     ExtractResponse,

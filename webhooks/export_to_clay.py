@@ -11,9 +11,9 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from libs import infisical
-from libs.logging.structured import log, set_source, webhook_request_context
-from libs.telemetry import init_log_exporter, init_tracer, span
+from src.edge import log, set_source, webhook_request_context
+from src.edge import fetch_all as infisical_fetch_all
+from src.edge import init_log_exporter, init_tracer, span
 from src.clay.export import execute
 from src.secrets_bootstrap import bootstrap_secret
 
@@ -30,7 +30,7 @@ from src.rb2b.webhook.visit import (
 # trunk-ignore-end(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 
 if TYPE_CHECKING:
-    from libs.webhook.protocol import (
+    from src.edge import (
         WebhookModelTypeCheckShim as WebhookModelToReplace,
     )
 
@@ -72,7 +72,7 @@ def _export(webhook: WebhookModel) -> str:
     row = webhook.clay_get_row()
     url_key = WebhookModel.clay_get_webhook_url_secret_name()
     token_key = WebhookModel.clay_get_webhook_auth_token_secret_name()
-    with infisical.fetch_all([url_key, token_key]) as secrets:
+    with infisical_fetch_all([url_key, token_key]) as secrets:
         log("webhook.validated", row_count=1, event_id=row["event_id"])
         result = execute(
             webhook_url=secrets[url_key],

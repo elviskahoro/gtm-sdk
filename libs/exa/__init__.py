@@ -1,5 +1,6 @@
 """Exa API adapter — typed wrapper around Exa SDK."""
 
+from .client import ExaAPIKeyMissingError
 from .companies import find_companies
 from .errors import (
     ExaAuthError,
@@ -14,6 +15,7 @@ from .search import search
 
 __all__ = [
     "ExaAuthError",
+    "ExaAPIKeyMissingError",
     "ExaBadRequestError",
     "ExaError",
     "ExaRateLimitError",

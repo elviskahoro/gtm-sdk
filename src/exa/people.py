@@ -4,10 +4,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from libs.exa.client import ExaAPIKeyMissingError
-from libs.exa.errors import ExaError
-from libs.exa.models import SearchResponse
-from libs.exa.people import find_people
+from libs.exa import ExaAPIKeyMissingError
+from libs.exa import ExaError
+from libs.exa import SearchResponse
+from libs.exa import find_people
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets

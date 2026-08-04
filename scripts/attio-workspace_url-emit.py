@@ -58,8 +58,8 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from libs.attio.errors import AttioError  # noqa: E402
-from libs.attio.preflight import fetch_token_scopes  # noqa: E402
+from src.edge import AttioError  # noqa: E402
+from src.edge import fetch_token_scopes  # noqa: E402
 from scripts.lib.env import clean_env, infisical_run_example  # noqa: E402
 
 if TYPE_CHECKING:

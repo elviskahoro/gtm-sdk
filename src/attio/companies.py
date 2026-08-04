@@ -3,9 +3,9 @@ from typing import Any
 import modal
 from pydantic import BaseModel, ConfigDict
 
-from libs.attio.attributes import create_companies_attribute
-from libs.attio.companies import add_company, search_companies, update_company
-from libs.attio.models import (
+from libs.attio import create_companies_attribute
+from libs.attio import add_company, search_companies, update_company
+from libs.attio import (
     AttributeCreateResult,
     CompanyInput,
     CompanyResult,

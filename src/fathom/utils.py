@@ -7,7 +7,7 @@ from typing import Any
 import flatsplode
 import orjson
 
-from libs.fathom.models import ActionItem, CalendarInvitee
+from libs.fathom import ActionItem, CalendarInvitee
 
 
 def clean_timestamp(dt: datetime) -> str:

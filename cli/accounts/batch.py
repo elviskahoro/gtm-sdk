@@ -9,7 +9,7 @@ import typer
 from pydantic import ValidationError
 
 from cli.json_validation import emit_json_payload_validation_telemetry
-from libs.parsers.normalization import normalize_mapping_payload
+from src.edge import normalize_mapping_payload
 from src.accounts.batch import BatchAddCompaniesQuery, BatchAddPeopleQuery
 from src.modal_app import MODAL_APP
 

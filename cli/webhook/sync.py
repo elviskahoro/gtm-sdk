@@ -16,8 +16,8 @@ from cli.webhook.registry import (
     Registry,
     SourceEntry,
 )
-from libs.dlt.filesystem_gcp import CloudGoogle
-from libs.webhook.protocol import UNSUPPORTED_SLACK_CHANNEL_SECRET
+from src.edge import CloudGoogle
+from src.edge import UNSUPPORTED_SLACK_CHANNEL_SECRET
 from src.caldotcom.webhook.booking import Webhook as CaldotcomBookingWebhook
 from src.fathom.webhook.call import Webhook as FathomCallWebhook
 from src.fathom.webhook.message import Webhook as FathomMessageWebhook

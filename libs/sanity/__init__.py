@@ -9,9 +9,9 @@ from .client import (
     api_key_scope,
     query,
 )
-from .errors import SanityError, SanityQueryError
+from .errors import DuplicateSlugError, SanityError, SanityQueryError, UnsafeArchiveDirError
 from .models import Author, BlogPost, Category
-from .portable_text import to_markdown
+from .portable_text import escape_text, escape_trailing_atx, to_markdown
 
 __all__ = [
     "BLOG_POST_GROQ",
@@ -21,11 +21,15 @@ __all__ = [
     "Author",
     "BlogPost",
     "Category",
+    "DuplicateSlugError",
     "SanityConfig",
     "SanityError",
     "SanityQueryError",
+    "UnsafeArchiveDirError",
     "api_key_scope",
     "fetch_blog_posts_raw",
+    "escape_text",
+    "escape_trailing_atx",
     "query",
     "to_markdown",
 ]

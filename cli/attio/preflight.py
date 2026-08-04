@@ -6,14 +6,13 @@ from typing import Any
 
 import modal
 
-from libs import infisical
-from libs.attio.contracts import WarningEntry
-from libs.attio.errors import (
+from src.edge import WarningEntry, infisical
+from src.edge import (
     ConfigurationError,
     ConnectivityError,
     DeploymentMismatchError,
 )
-from libs.infisical.errors import InfisicalAuthError, InfisicalFetchError
+from src.edge import InfisicalAuthError, InfisicalFetchError
 from src.attio.deployment_parity import ParityStatus, ensure_modal_parity
 from src.modal_app import MODAL_APP
 

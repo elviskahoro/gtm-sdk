@@ -7,10 +7,10 @@ from libs.attio import (
     companies as attio_companies,
     people as attio_people,
 )
-from libs.attio.models import CompanyInput, PersonInput
+from libs.attio import CompanyInput, PersonInput
 from libs.parallel import client as parallel_client
-from libs.parallel.models import ExtractExcerptsInput, SearchInput, SearchResponse
-from libs.parsers.normalization import normalize_mapping_payload
+from libs.parallel import ExtractExcerptsInput, SearchInput, SearchResponse
+from libs.parsers import normalize_mapping_payload
 from src.accounts.models import (
     BatchMutationResult,
     EnrichResult,

@@ -2,15 +2,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from libs.parallel.client import findall_create, findall_result, findall_status
-from libs.parallel.models import (
+from libs.parallel import findall_create, findall_result, findall_status
+from libs.parallel import (
     FindAllCreateInput,
     FindAllLookupInput,
     FindAllResultData,
     FindAllRunData,
     MatchCondition,
 )
-from libs.parallel.types import FindAllGenerator
+from libs.parallel import FindAllGenerator
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets

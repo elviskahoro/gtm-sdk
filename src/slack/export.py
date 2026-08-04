@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from libs.logging.structured import log
+from libs.logging import log
 from libs.slack import lookup_user_id_by_email, post_message
 from src.slack.ops import SlackMessage
 from src.slack.thread_store import ThreadStore

@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from libs.attio.models import MeetingCandidate
+from libs.attio import MeetingCandidate
 from src.attio.meeting_match import overlap_coefficient
 
 # Minimum participant overlap for an api-token meeting to count as a duplicate of

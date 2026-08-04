@@ -10,13 +10,13 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from libs.attio.preflight import assert_attio_token_scopes
-from libs.logging.structured import (
+from src.edge import assert_attio_token_scopes
+from src.edge import (
     log,
     set_source,
     webhook_request_context,
 )
-from libs.telemetry import init_log_exporter, init_tracer, span
+from src.edge import init_log_exporter, init_tracer, span
 from src.attio.export import execute
 
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     # both the Pydantic surface (`model_rebuild`, `model_validate`) and the
     # WebhookModelProtocol contract. Eliminates the F821 suppression that
     # was structural before this Protocol landed.
-    from libs.webhook.protocol import (
+    from src.edge import (
         WebhookModelTypeCheckShim as WebhookModelToReplace,
     )
 

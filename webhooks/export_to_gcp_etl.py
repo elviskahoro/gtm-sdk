@@ -11,15 +11,15 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from libs.dlt.destination_type import DestinationType
-from libs.dlt.filesystem_gcp import CloudGoogle
-from libs.filesystem.files import DestinationFileData, SourceFileData
-from libs.logging.structured import (
+from src.edge import DestinationType
+from src.edge import CloudGoogle
+from src.edge import DestinationFileData, SourceFileData
+from src.edge import (
     log,
     set_source,
     webhook_request_context,
 )
-from libs.telemetry import init_log_exporter
+from src.edge import init_log_exporter
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -51,7 +51,7 @@ from src.caldotcom.webhook.booking import (
 if TYPE_CHECKING:
     # Type-check stand-in for the deploy-time placeholder; see
     # webhooks/export_to_attio.py for the full rationale.
-    from libs.webhook.protocol import (
+    from src.edge import (
         WebhookModelTypeCheckShim as WebhookModelToReplace,
     )
 

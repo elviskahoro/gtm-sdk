@@ -10,14 +10,13 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from libs import infisical
-from libs.logging.structured import (
+from src.edge import (
     log,
     set_source,
     webhook_request_context,
 )
-from libs.slack import get_client
-from libs.telemetry import init_log_exporter
+from src.edge import fetch as infisical_fetch, slack_get_client as get_client
+from src.edge import init_log_exporter
 
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
     # block in webhooks/export_to_attio.py for the full rationale. The
     # scripts/webhooks-handlers-redeploy.py substitution rewrites WebhookModelToReplace
     # to a concrete Webhook class before modal deploy.
-    from libs.webhook.protocol import (
+    from src.edge import (
         WebhookModelTypeCheckShim as WebhookModelToReplace,
     )
 
@@ -99,7 +98,7 @@ def _export(webhook: WebhookModel) -> str:
     # the Webhook declares (e.g. CALCOM_SLACK_CHANNEL_ID) so each automation
     # posts to its own channel.
     channel_key = WebhookModel.slack_get_channel_secret_name()
-    with hydrate("SLACK_BOT_TOKEN"), infisical.fetch(channel_key) as channel:
+    with hydrate("SLACK_BOT_TOKEN"), infisical_fetch(channel_key) as channel:
         messages = webhook.slack_get_messages()
         log("webhook.validated", message_count=len(messages))
         if not messages:
@@ -107,7 +106,7 @@ def _export(webhook: WebhookModel) -> str:
         result = execute(
             messages,
             channel=channel,
-            client=get_client(),
+            client=slack_get_client(),
             thread_store=modal_dict_thread_store(_THREAD_STORE_NAME),
         )
         body = result.body()

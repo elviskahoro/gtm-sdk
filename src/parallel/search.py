@@ -2,9 +2,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from libs.parallel.client import search
-from libs.parallel.models import SearchInput, SearchResponse
-from libs.parallel.types import SearchMode
+from libs.parallel import search
+from libs.parallel import SearchInput, SearchResponse
+from libs.parallel import SearchMode
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets

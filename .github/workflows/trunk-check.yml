@@ -41,6 +41,13 @@ jobs:
           check-mode: all
           arguments: --filter=tach
 
+      # External dependency ownership is enforced for runtime adapters. The
+      # scripts tree is operational tooling with intentionally separate tool
+      # requirements, and marketplace is an optional data product whose
+      # polars extra is not part of the core gtm distribution.
+      - name: Tach external dependencies
+        run: uv run tach check-external --exclude 'scripts/**,data-gen/marketplace/**'
+
       # requirements_bazel.txt is gitignored and generated from uv.lock, so it
       # cannot drift -- but `uv export` can still start failing (a lock that no
       # longer matches pyproject.toml, a dependency uv refuses to resolve), and

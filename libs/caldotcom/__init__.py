@@ -19,9 +19,11 @@ from libs.caldotcom.models import (
     Transcript,
     Webhook,
 )
+from libs.caldotcom.client import CalcomClient
 
 __all__ = [
     "BookingAttendee",
+    "CalcomClient",
     "BookingCancelledPayload",
     "BookingCreatedPayload",
     "BookingHost",

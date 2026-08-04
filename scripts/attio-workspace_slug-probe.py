@@ -56,8 +56,8 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from libs.attio.client import get_client  # noqa: E402
-from libs.attio.sdk_boundary import (  # noqa: E402
+from src.edge import get_client  # noqa: E402
+from src.edge import (  # noqa: E402
     describe_attio_error,
     model_dump_or_empty,
 )

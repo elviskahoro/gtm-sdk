@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from libs.sanity.client import (
+from src.edge import (
     DEFAULT_API_VERSION,
     DEFAULT_DATASET,
     DEFAULT_PROJECT_ID,

@@ -58,7 +58,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from libs.attio.meetings import iter_meetings_in_range  # noqa: E402
+from src.edge import iter_meetings_in_range  # noqa: E402
 from src.attio.orphan_meetings import (  # noqa: E402
     classify,
     detect_orphans,
@@ -125,7 +125,7 @@ def _run(
     # Confirm the token is active and name the workspace before a long page loop -
     # an inactive token or the wrong workspace (meetings live only in prod) is the
     # likely failure, and surfacing it up front beats a confusing empty result.
-    from libs.attio.preflight import fetch_token_scopes
+    from src.edge import fetch_token_scopes
 
     active, scopes, workspace = fetch_token_scopes()
     if not active:
