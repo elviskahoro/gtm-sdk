@@ -71,6 +71,10 @@ git -C "${action_dir}" checkout --quiet "${TRUNK_BAZEL_ACTION_REV}"
 # query uses the uv.lock belonging to the revision currently checked out.
 compute_script="${action_dir}/src/scripts/compute_impacted_targets.sh"
 sed -i '/git clean -dfx -f/a rm -rf .venv && uv run scripts/bazel-requirements-sync.py' "${compute_script}"
+# The current base revision still has the removed Dockerfile globs in its Bazel
+# package. Repair only that known historical tree; future revisions must retain
+# any intentionally added workflow inputs.
+sed -i '/git clean -dfx -f/a if test "$(git rev-parse HEAD)" = "42994092b8b40711573f1111b9f34c742c9a371d" && test -f .github/workflows/ci/BUILD.bazel; then sed -i -e "/Dockerfile/d" -e "/dockerignore/d" .github/workflows/ci/BUILD.bazel; fi' "${compute_script}"
 
 # Execute the same scripts and filters as trunk-io/bazel-action. Dagger owns
 # the ARM64 container and cache; this controller uploads the resulting target
