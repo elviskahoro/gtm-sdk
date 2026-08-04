@@ -19,6 +19,10 @@ PYTEST_DEPENDENCY_PACKER = (
 )
 FLOX_MANIFEST = Path(__file__).parents[2] / ".flox" / "env" / "manifest.toml"
 FLOX_MANIFEST_LOCK = FLOX_MANIFEST.with_name("manifest.lock")
+FLOX_TOOLCHAIN_MANIFEST = (
+    Path(__file__).parents[2] / "flox" / "toolchain" / ".flox" / "env" / "manifest.toml"
+)
+FLOX_TOOLCHAIN_LOCK = FLOX_TOOLCHAIN_MANIFEST.with_name("manifest.lock")
 PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
 UV_LOCK = Path(__file__).parents[2] / "uv.lock"
 PYTEST_INTEGRATION_DAGGER = (
@@ -111,6 +115,8 @@ def test_unit_dependency_image_contains_only_locked_dependencies() -> None:
     lock = tomllib.loads(UV_LOCK.read_text())
     manifest = tomllib.loads(FLOX_MANIFEST.read_text())
     manifest_lock = json.loads(FLOX_MANIFEST_LOCK.read_text())
+    toolchain_manifest = tomllib.loads(FLOX_TOOLCHAIN_MANIFEST.read_text())
+    toolchain_lock = json.loads(FLOX_TOOLCHAIN_LOCK.read_text())
 
     assert PYTEST_DEPENDENCY_PACKER.is_file()
     assert "unit-ci" in pyproject["dependency-groups"]
@@ -118,6 +124,21 @@ def test_unit_dependency_image_contains_only_locked_dependencies() -> None:
     assert manifest["install"]["python313"]["pkg-path"] == "python313"
     assert manifest["install"]["uv"]["version"] == "0.11.26"
     assert manifest_lock["manifest"]["install"]["python313"]["pkg-path"] == "python313"
+    assert toolchain_manifest["install"]["libgcc"]["pkg-path"] == "libgcc"
+    assert toolchain_manifest["install"]["libgcc"]["systems"] == [
+        "aarch64-linux",
+        "x86_64-linux",
+    ]
+    assert toolchain_lock["manifest"]["install"]["libgcc"]["pkg-path"] == "libgcc"
+
+
+def test_unit_pipeline_checks_binary_runtime_dependencies() -> None:
+    dagger = PYTEST_DAGGER.read_text()
+
+    assert "RUNTIME_CHECK_CMD" in dagger
+    assert "/opt/venv/bin/python -c 'import duckdb'" in dagger
+    assert "missing libstdc++.so.6" in dagger
+    assert "runtime_checked = installed.with_exec" in dagger
 
 
 def test_unit_workflow_supports_checkpoint_benchmarks() -> None:

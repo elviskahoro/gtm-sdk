@@ -75,6 +75,11 @@ PROJECT_INSTALL_CMD = (
     "uv pip install --no-deps --reinstall --no-build-isolation --offline "
     "--python /opt/venv/bin/python ."
 )
+RUNTIME_CHECK_CMD = (
+    "/opt/venv/bin/python -c 'import duckdb' || "
+    "{ echo 'error: Flox toolchain image is missing libstdc++.so.6, "
+    "required by duckdb' >&2; exit 1; }"
+)
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
@@ -288,10 +293,14 @@ def build_containers() -> tuple[
     )
     checked = prepared.with_exec(["bash", "-c", dependency_check_cmd(layout)])
     installed = checked.with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
+    runtime_checked = installed.with_exec(["bash", "-c", RUNTIME_CHECK_CMD])
     nonce = os.environ.get("PYTEST_BENCHMARK_NONCE", "").strip()
     if nonce:
-        installed = installed.with_env_variable("PYTEST_BENCHMARK_NONCE", nonce)
-    tested = installed.with_exec(["bash", "-c", PYTEST_CMD])
+        runtime_checked = runtime_checked.with_env_variable(
+            "PYTEST_BENCHMARK_NONCE",
+            nonce,
+        )
+    tested = runtime_checked.with_exec(["bash", "-c", PYTEST_CMD])
     return base, checked, installed, tested
 
 

@@ -15,6 +15,13 @@
       "git": {
         "pkg-path": "git"
       },
+      "libgcc": {
+        "pkg-path": "libgcc",
+        "systems": [
+          "aarch64-linux",
+          "x86_64-linux"
+        ]
+      },
       "python313": {
         "pkg-path": "python313"
       },
@@ -449,6 +456,82 @@
         "debug": "/nix/store/6mj7lgxzx4zzdinr3xvxwa8gd0jrp4jq-git-2.54.0-debug",
         "doc": "/nix/store/6k14cjwl7a5q78w3dddbm4x49k9g4ywp-git-2.54.0-doc",
         "out": "/nix/store/1k2lblqlj39azh6wn1sffa2869vrg3mr-git-2.54.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "libgcc",
+      "broken": false,
+      "derivation": "/nix/store/bxm1xaiv2f4r0yc5z1xgrr43v63hvszj-gcc-15.2.0.drv",
+      "description": "GNU Compiler Collection, version 15.2.0",
+      "install_id": "libgcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "gcc-15.2.0",
+      "pname": "libgcc",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T05:22:11.716360Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "15.2.0",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "checksum": "/nix/store/v7p4iaan4gmlcvbj36hszsg8bn9kc3a2-gcc-15.2.0-checksum",
+        "info": "/nix/store/fjbf3vyinwn96q72w0cdpwyi4vk29z4a-gcc-15.2.0-info",
+        "lib": "/nix/store/hp54qay7ayl502zksigjr1irfn7h7zrp-gcc-15.2.0-lib",
+        "libgcc": "/nix/store/ywqrpp6yixmafd0lszqb5ggv3c8zwfin-gcc-15.2.0-libgcc",
+        "man": "/nix/store/avnqzfjyp8rgsv34fnq599gfii09f6zc-gcc-15.2.0-man",
+        "out": "/nix/store/8f6sbbxpdxmkp0r55dabn645s5j4wcl4-gcc-15.2.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "libgcc",
+      "broken": false,
+      "derivation": "/nix/store/0k916n4i6bw36wvn4xq0abcss7sh3icc-gcc-15.2.0.drv",
+      "description": "GNU Compiler Collection, version 15.2.0",
+      "install_id": "libgcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "gcc-15.2.0",
+      "pname": "libgcc",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T05:55:21.798959Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "15.2.0",
+      "outputs_to_install": [
+        "man",
+        "man",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "checksum": "/nix/store/hir2zbdr2kcl8qqyigfhxmsqd4y2h608-gcc-15.2.0-checksum",
+        "info": "/nix/store/k47xnsg07pcksz62wxd4jz5c9zk0rvy2-gcc-15.2.0-info",
+        "lib": "/nix/store/8lahnh9pn3lrrnhax5nk7ibvjcbjmnkm-gcc-15.2.0-lib",
+        "libgcc": "/nix/store/wlj7fzgbchbxhd6hplwm2dwl15gizcn5-gcc-15.2.0-libgcc",
+        "man": "/nix/store/6zirpfdk199mxk7r3dzxrj143ahd3qdi-gcc-15.2.0-man",
+        "out": "/nix/store/0axpqqmj1rcanmm2i8vzpd8xxwkmq2jf-gcc-15.2.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
