@@ -18,6 +18,14 @@ from pathlib import Path
 import dagger
 
 
+def _write_github_output(name: str, value: str) -> None:
+    """Expose a publication result to later steps in the same job."""
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if output_path:
+        with Path(output_path).open("a", encoding="utf-8") as output:
+            output.write(f"{name}={value}\n")
+
+
 async def main() -> None:
     """Bind the published image to the committed lock for runtime provenance."""
     repo_root = Path(__file__).resolve().parents[3]
@@ -42,7 +50,8 @@ async def main() -> None:
             "github-actions",
             dagger.dag.set_secret("ghcr-token", token),
         )
-        await image.publish(image_ref)
+        published_ref = await image.publish(image_ref)
+        _write_github_output("image_ref", published_ref)
         if os.environ.get("FLOX_PUBLISH_LATEST") == "true":
             await image.publish(latest_ref)
 

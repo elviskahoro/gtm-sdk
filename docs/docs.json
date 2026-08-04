@@ -51,7 +51,8 @@
             "pages": [
               "contributing/development",
               "contributing/module-boundaries",
-              "contributing/pr-review-threads"
+              "contributing/pr-review-threads",
+              "contributing/ci-images"
             ]
           },
           {

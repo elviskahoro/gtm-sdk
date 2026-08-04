@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # trunk-ignore-all(bandit/B607): list-arg subprocess only; tool names resolved via PATH on purpose.
-"""Substitute, deploy, and restore a webhook handler in one safe step.
+"""Deploy webhook handlers from an isolated checkout copy.
 
 Port of scripts/redeploy-webhook.sh. Host-side Python does discovery,
-preflights, atomic locking, backup, placeholder substitution, restore, and
-restore verification. The deploy itself is one recipe run by one of two
-executors, so the env that ships images to Modal is reproducible
-operator-to-operator.
+preflights, and atomic locking. Each deploy runs from a temporary checkout
+copy, so placeholder substitution and dependency installation never mutate
+the operator's working tree.
 
 Every footgun this script exists to prevent is documented on the function
 that encodes it, as an explicit preflight or cleanup step -- this module is
@@ -150,13 +149,13 @@ import re  # noqa: E402
 import shutil  # noqa: E402
 import signal  # noqa: E402
 import subprocess  # noqa: E402
+import tempfile  # noqa: E402
 from typing import TYPE_CHECKING, NamedTuple, NoReturn  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
 WEBHOOKS_DIR = REPO_ROOT / "webhooks"
-BACKUP_DIR = REPO_ROOT / "tmp" / "webhook-deploy-bak"
 LOCK_DIR = REPO_ROOT / "tmp" / "webhook-deploy.lock"
 
 HANDLER_ALIASES: dict[str, str] = {
@@ -173,12 +172,9 @@ VALID_INFISICAL_ENVS: tuple[str, ...] = ("dev", "staging", "prod")
 # Module-level state read by ``_cleanup`` (registered via ``atexit`` and via
 # SIGINT/SIGTERM handlers). Mirrors the bash trap that captured globals by
 # name — until ``_backup_freshly_written`` flips to True, the cleanup hook is
-# a no-op so an early-failure path cannot restore stale content over a clean
-# worktree.
+# Module-level state used for deploy logging and lock cleanup.
 _handler: str | None = None
-_handler_file: Path | None = None
 _lock_acquired = False
-_backup_freshly_written = False
 
 # Populated once by _preflight_uv_version(); read by every internal `uv`
 # subprocess call below so a child's own PATH lookup can't re-discover an
@@ -711,7 +707,7 @@ def _preflight_gcs_buckets(
 
 
 # ---------------------------------------------------------------------------
-# Lock / backup / restore / cleanup
+# Lock / cleanup
 # ---------------------------------------------------------------------------
 
 
@@ -720,8 +716,7 @@ def _acquire_lock() -> None:
 
     Serializes concurrent invocations. Two terminals can both pass the
     clean-tree preflight and then race on the handler file and the shared
-    ``tmp/webhook-deploy-bak/``: one can delete the other's restore source,
-    or pick up its substitution and deploy the wrong source.
+    isolated checkout copies and deploy the wrong source.
 
     ``Path.mkdir(exist_ok=False)`` raises ``FileExistsError`` atomically on
     every POSIX filesystem. Avoids ``flock`` (not installed by default on
@@ -751,52 +746,13 @@ def _release_lock() -> None:
         pass
 
 
-def _write_backup(handler_file: Path) -> None:
-    """Snapshot the current handler so cleanup can always restore it.
-
-    Clear any stale backups from prior runs *before* taking the fresh one.
-    Otherwise a leftover backup — possibly for a different handler — would
-    be the restore source, leaving the worktree dirty. Safe because the
-    working-tree preflight already guaranteed ``webhooks/`` matches HEAD.
-    """
-    global _backup_freshly_written  # noqa: PLW0603 — read by atexit/signals
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    for stale in BACKUP_DIR.glob("*.py"):
-        stale.unlink()
-    shutil.copyfile(handler_file, BACKUP_DIR / f"{handler_file.stem}.py")
-    _backup_freshly_written = True
-
-
-def _restore_handler() -> None:
-    r"""Restore the current handler from its backup.
-
-    Gated on ``_backup_freshly_written`` so an early-failure path (e.g.
-    Modal preflight error) cannot copy a stale backup from a prior run on
-    top of a clean worktree. ``shutil.copyfile`` always overwrites — no
-    interactive-cp alias risk. Do not swap it for a helper that accepts
-    ``exist_ok=False``: that resurrects the ``cp -i`` footgun the bash
-    version needed ``\cp -f`` to dodge, where the restore silently refused.
-    """
-    if not _backup_freshly_written or _handler is None or _handler_file is None:
-        return
-    backup = BACKUP_DIR / f"{_handler}.py"
-    if backup.exists():
-        shutil.copyfile(backup, _handler_file)
-
-
 def _cleanup() -> None:
-    """Restore the handler and release the lock. Idempotent."""
-    _restore_handler()
+    """Release the host lock. Temporary deploy copies are context-managed."""
     _release_lock()
 
 
 def _install_signal_handlers() -> None:
-    """Convert SIGINT/SIGTERM into ``sys.exit`` so ``atexit`` runs.
-
-    Without this, a SIGINT during ``modal deploy`` would terminate the
-    process without firing the ``atexit``-registered cleanup, leaving the
-    substituted handler file in the worktree.
-    """
+    """Convert SIGINT/SIGTERM into ``sys.exit`` so lock cleanup runs."""
 
     def _handler(signum: int, _frame: object) -> None:
         sys.exit(128 + signum)
@@ -831,14 +787,6 @@ def _install_signal_handlers() -> None:
 # app reads at request time) is a payload value and deliberately does not
 # select credentials here.
 MODAL_TOKEN_INFISICAL_ENV = "dev"  # noqa: S105 # nosec B105 -- env slug, not a secret
-
-# Throwaway venv for the Flox executor's `uv sync --frozen`, the counterpart of
-# Dagger's `exclude=[".venv/"]` source-mount filter. Flox runs in place on the
-# operator's checkout, so syncing into `.venv` would mutate it mid-deploy — and
-# `uv sync` prunes: on an `--all-extras` workspace a plain sync uninstalls the
-# `marketplace` extra. `tmp/` is already this script's scratch dir and is
-# gitignored.
-FLOX_DEPLOY_VENV = REPO_ROOT / "tmp" / "webhook-deploy-venv"
 
 
 class DeployStep(NamedTuple):
@@ -1045,6 +993,7 @@ def _fetch_infisical_value(
 async def _deploy_via_dagger(
     handler_file: Path,
     *,
+    repo_root: Path,
     deploy_env: dict[str, str],
 ) -> None:
     """Run the single Flox recipe through the shared Dagger transport.
@@ -1060,10 +1009,10 @@ async def _deploy_via_dagger(
     commands share the same filesystem so the sync-created ``.venv`` remains
     available to the deploy command.
     """
-    rel = handler_file.relative_to(REPO_ROOT).as_posix()
+    rel = handler_file.relative_to(repo_root).as_posix()
     steps = deploy_steps(rel)
     await run_recipe_in_container_async(
-        repo_root=REPO_ROOT,
+        repo_root=repo_root,
         commands=[step.argv for step in steps],
         command_secrets=[
             {} if not step.with_credentials else deploy_env for step in steps
@@ -1071,7 +1020,12 @@ async def _deploy_via_dagger(
     )
 
 
-def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
+def _deploy_via_flox(
+    handler_file: Path,
+    *,
+    repo_root: Path,
+    deploy_env: dict[str, str],
+) -> None:
     """Run :func:`deploy_steps` in a Flox-activated shell (no Dagger engine).
 
     Flox is the primary execution path. It pins ``uv``/``git`` via the Nix
@@ -1096,20 +1050,20 @@ def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
     ``sh -c 'a && b'`` would reintroduce the shell-string form this script
     bans everywhere else.
     """
-    rel = handler_file.relative_to(REPO_ROOT).as_posix()
+    rel = handler_file.relative_to(repo_root).as_posix()
     base_env = _scrubbed_parent_env()
     # Set after the scrub (which strips every UV_*): redirect the sync into a
     # throwaway venv so an in-place deploy can never prune the operator's.
-    base_env["UV_PROJECT_ENVIRONMENT"] = str(FLOX_DEPLOY_VENV)
+    base_env["UV_PROJECT_ENVIRONMENT"] = str(repo_root / ".deploy-venv")
     for step in deploy_steps(rel):
         step_env = dict(base_env)
         if step.with_credentials:
             step_env |= deploy_env
-        flox_run(step.argv, repo_root=REPO_ROOT, env=step_env, clear_env=True)
+        flox_run(step.argv, repo_root=repo_root, env=step_env, clear_env=True)
 
 
-def _verify_clean_restore(handler_file: Path) -> None:
-    """Confirm restore left the file matching HEAD; fail loudly if not."""
+def _verify_host_tree_clean(handler_file: Path) -> None:
+    """Confirm deployment left the host handler untouched."""
     status = subprocess.run(
         ["git", "status", "--porcelain", "--", str(handler_file)],
         cwd=REPO_ROOT,
@@ -1120,8 +1074,8 @@ def _verify_clean_restore(handler_file: Path) -> None:
     if not status.strip():
         return
     print(
-        f"ERROR: {handler_file.relative_to(REPO_ROOT)} is dirty after restore "
-        f"— placeholder swap failed.",
+        f"ERROR: {handler_file.relative_to(REPO_ROOT)} is dirty after isolated "
+        f"deployment — host checkout was modified.",
         file=sys.stderr,
     )
     print(status, file=sys.stderr)
@@ -1147,8 +1101,28 @@ def _resolve_infisical_host() -> str | None:
     return os.environ.get("INFISICAL_HOST") or None
 
 
+def _isolated_checkout() -> tempfile.TemporaryDirectory[str]:
+    """Create a temporary checkout copy that excludes mutable local state."""
+    tmp_root = REPO_ROOT / "tmp"
+    tmp_root.mkdir(exist_ok=True)
+    workspace = tempfile.TemporaryDirectory(prefix="webhook-deploy-", dir=tmp_root)
+    shutil.copytree(
+        REPO_ROOT,
+        workspace.name,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            "tmp",
+            "__pycache__",
+            ".pytest_cache",
+        ),
+    )
+    return workspace
+
+
 def _deploy_one(handler_file: Path, source: str, *, deploy_env: dict[str, str]) -> None:
-    """Substitute placeholder → deploy → restore from backup → verify clean.
+    """Substitute and deploy from an isolated checkout copy.
 
     ``deploy_env`` is resolved once in ``main()`` and threaded through every
     source. Resolving it per source would let a token rotation or a transient
@@ -1160,23 +1134,27 @@ def _deploy_one(handler_file: Path, source: str, *, deploy_env: dict[str, str]) 
     print()
     print(f"=== Deploying {source} via {_handler} ===")
 
-    original = handler_file.read_text()
-    handler_file.write_text(original.replace(PLACEHOLDER, source))
-
-    try:
+    with _isolated_checkout() as checkout:
+        isolated_handler = Path(checkout) / handler_file.relative_to(REPO_ROOT)
+        isolated_handler.write_text(
+            isolated_handler.read_text().replace(PLACEHOLDER, source),
+        )
         if _use_dagger():
-            asyncio.run(_deploy_via_dagger(handler_file, deploy_env=deploy_env))
+            asyncio.run(
+                _deploy_via_dagger(
+                    isolated_handler,
+                    repo_root=Path(checkout),
+                    deploy_env=deploy_env,
+                ),
+            )
         else:
-            _deploy_via_flox(handler_file, deploy_env=deploy_env)
-    finally:
-        # Restore unconditionally — even on deploy failure — so the next
-        # iteration starts from a clean placeholder state and so a SIGINT
-        # between substitute and deploy still ends with a clean worktree.
-        backup = BACKUP_DIR / f"{handler_file.stem}.py"
-        if backup.exists():
-            shutil.copyfile(backup, handler_file)
+            _deploy_via_flox(
+                isolated_handler,
+                repo_root=Path(checkout),
+                deploy_env=deploy_env,
+            )
 
-    _verify_clean_restore(handler_file)
+    _verify_host_tree_clean(handler_file)
 
 
 # ---------------------------------------------------------------------------
@@ -1240,7 +1218,7 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
         prog="scripts/webhooks-handlers-redeploy.py",
         description=(
             "Substitute the WebhookModelToReplace placeholder, deploy via "
-            "Dagger-wrapped `modal deploy`, then restore the handler. "
+            "Dagger-wrapped `modal deploy` from an isolated checkout. "
             "See webhooks/AGENTS.md, and this script's own docstrings, for "
             "the full set of footguns this encodes."
         ),
@@ -1282,11 +1260,8 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
 
 
 def main() -> int:
-    """Run the deploy recipe without allowing container re-entry to mutate the host."""
-    global _handler, _handler_file  # noqa: PLW0603 — module state for cleanup
-
-    if in_container_phase():
-        _fail("webhook deploy cannot enter through the container phase")
+    """Run the deploy recipe without mutating the operator's checkout."""
+    global _handler  # noqa: PLW0603 — module state used for deploy logging
 
     handlers = _discover_handlers()
     handler, source_or_all = _parse_args(handlers)
@@ -1319,14 +1294,13 @@ def main() -> int:
 
     _preflight_uv_version()
     _preflight_env()
-    # Validate the primary Flox environment before taking the mutation lock.
+    # Validate the primary Flox environment before taking the deploy lock.
     if _needs_flox_preflight():
         _preflight_flox()
 
-    # Acquire lock *before* the working-tree preflight so the snapshot below
-    # cannot become stale between check and mutation. Install cleanup
-    # immediately after the lock so a Ctrl-C between here and the deploy
-    # always releases the lock + (eventually) restores the handler.
+    # The lock serializes deploys even though each source uses an isolated
+    # checkout copy, keeping --all deterministic and preventing overlapping
+    # Modal image builds.
     _acquire_lock()
     atexit.register(_cleanup)
     _install_signal_handlers()
@@ -1351,11 +1325,11 @@ def main() -> int:
     )
 
     _handler = handler
-    _handler_file = handler_file
-    _write_backup(handler_file)
-
-    for source in sources_to_deploy:
-        _deploy_one(handler_file, source, deploy_env=resolved_deploy_env)
+    try:
+        for source in sources_to_deploy:
+            _deploy_one(handler_file, source, deploy_env=resolved_deploy_env)
+    finally:
+        _cleanup()
 
     print()
     print("All deploys complete. Working tree clean.")

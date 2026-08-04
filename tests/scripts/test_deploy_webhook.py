@@ -1,6 +1,6 @@
 """Smoke tests for scripts/webhooks-handlers-redeploy.py.
 
-Verifies the substitute -> deploy -> restore loop preserves the working tree,
+Verifies the isolated substitute -> deploy loop preserves the working tree,
 even when the deploy fails mid-iteration. Stubs modal / infisical / uv / gcloud
 so the test never makes real network calls.
 
@@ -54,10 +54,8 @@ def deploy_workspace(tmp_path: Path) -> DeployWorkspace:
     """Copy the deploy surface into a writable mini-repo for each test.
 
     Bazel exposes source/data files through runfiles symlinks. The deploy
-    helper intentionally mutates ``webhooks/<handler>.py`` plus ``tmp/`` while
-    it substitutes and restores a handler, so the test must not run it against
-    the read-only runfiles tree or the developer checkout those symlinks may
-    resolve to.
+    helper deploys from a temporary checkout copy, so the test can assert the
+    developer checkout remains untouched.
     """
     root = tmp_path / "repo"
     root.mkdir()
@@ -297,7 +295,7 @@ def _run_deploy(
     )
 
 
-def test_substitution_and_restore(
+def test_substitution_and_isolated_deploy(
     deploy_workspace: DeployWorkspace,
     stub_bin: Path,
 ) -> None:
@@ -315,12 +313,12 @@ def test_substitution_and_restore(
         deploy_workspace.handler_file.suffix + ".bak",
     )
     assert not bak.exists(), "stale .bak sidecar left behind"
-    # The Flox preflight runs before mutation and verifies the activated tools.
+    # The Flox preflight runs before deployment and verifies the activated tools.
     assert "Preflighting Flox environment" in result.stdout
     assert "FLOX_ENV=" in result.stdout
 
 
-def test_missing_flox_env_fails_before_mutation(
+def test_missing_flox_env_fails_before_deploy(
     deploy_workspace: DeployWorkspace,
     stub_bin: Path,
 ) -> None:
@@ -340,7 +338,7 @@ def test_all_flag_deploys_every_source(
 
     Regression target: in early drafts argparse parsed ``--all`` as an
     unknown option, breaking the documented invocation entirely. Each
-    iteration must end with the placeholder restored, so the file must
+    every iteration uses a fresh isolated checkout, so the host file must
     match HEAD bit-for-bit after all five sources deploy.
     """
     original = deploy_workspace.handler_file.read_bytes()
@@ -377,15 +375,14 @@ def test_clay_handler_preflights_its_source_specific_secrets(
     assert "ATTIO_API_KEY" not in result.stdout
 
 
-def test_restore_on_deploy_failure(
+def test_isolated_deploy_failure_keeps_host_clean(
     deploy_workspace: DeployWorkspace,
     stub_bin: Path,
 ) -> None:
-    """AC2: EXIT trap restores the handler when `modal deploy` fails mid-iteration.
+    """AC2: an isolated deploy failure leaves the host handler unchanged.
 
-    Regression target: a refactor that drops the `trap … EXIT` registration
-    (or fails to flip BACKUP_FRESHLY_WRITTEN before the deploy) leaves the
-    substituted form of the handler committed locally.
+    Regression target: a refactor that substitutes the host file before
+    invoking the deploy leaves the substituted form committed locally.
     """
     (stub_bin / "modal").write_text(
         textwrap.dedent(
@@ -412,8 +409,7 @@ def test_restore_on_deploy_failure(
         "Script should have exited non-zero after stub modal deploy failed"
     )
     assert deploy_workspace.handler_file.read_bytes() == original, (
-        f"Handler file NOT restored after deploy failure — EXIT trap may be "
-        f"missing or BACKUP_FRESHLY_WRITTEN gate may be wrong.\n"
+        f"Handler file changed during isolated deploy failure.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
 
