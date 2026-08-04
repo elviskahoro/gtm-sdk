@@ -7,6 +7,11 @@ version: 2
 updates:
   - package-ecosystem: uv
     directory: / # Location of package manifests
+    # This is generated from pyproject.toml and uv.lock by
+    # scripts/bazel-requirements-sync.py; Dependabot must update the uv source
+    # files, not this Bazel-only export.
+    exclude-paths:
+      - requirements_bazel.txt
     schedule:
       interval: weekly
     cooldown:

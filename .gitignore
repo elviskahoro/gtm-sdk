@@ -84,4 +84,5 @@ CLAUDE.local.md
 
 # Bazel output symlinks and untracked workstation overrides
 /bazel-*
+requirements_bazel.txt
 /.bazelrc.user
