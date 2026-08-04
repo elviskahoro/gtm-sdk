@@ -142,7 +142,7 @@ def _make_beads_database(beads_dir: Path) -> None:
     (beads_dir / "dolt").mkdir(parents=True)
     (beads_dir / "dolt" / ".bd-dolt-ok").touch()
     (beads_dir / "metadata.json").write_text(
-        '{"database":"dolt","backend":"dolt","dolt_mode":"server"}\n'
+        '{"database":"dolt","backend":"dolt","dolt_mode":"server"}\n',
     )
 
 
