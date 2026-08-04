@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gtm-cli"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "gtm-sdk==0.1.0",
+  "typer>=0.15",
+]
+
+[tool.setuptools]
+packages = [
+  "cli",
+  "cli.accounts",
+  "cli.apollo",
+  "cli.attio",
+  "cli.enrichment",
+  "cli.exa",
+  "cli.gmail",
+  "cli.granola",
+  "cli.parallel",
+  "cli.sanity",
+  "cli.webhook",
+]
+package-dir = { "cli" = "." }
+
+[project.scripts]
+gtm = "cli.main:run"
