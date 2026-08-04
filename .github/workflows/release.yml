@@ -4,17 +4,24 @@ name: Publish Python package
 # builds the distributions, and uploads them to PyPI. Run the same controller
 # locally from the matching tag with RELEASE_TAG=v<version> and PYPI_TOKEN
 # in the environment.
+# trunk-ignore-begin(checkov/CKV_GHA_7): release_tag selects the immutable tag to publish.
 on:
   push:
     tags:
       - v*
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to publish (for example, v0.1.0)
+        required: true
+        type: string
+# trunk-ignore-end(checkov/CKV_GHA_7)
 
 permissions:
   contents: read
 
 concurrency:
-  group: pypi-publish-${{ github.ref_name }}
+  group: pypi-publish-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -28,7 +35,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -45,6 +52,6 @@ jobs:
 
       - name: Build and publish through Dagger
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv run dagger run python .github/workflows/ci/pypi_publish_dagger.py
