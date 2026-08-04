@@ -35,7 +35,7 @@ GIT_INIT_CMD = (
 # hidden behind an attempted test-report export.
 VALIDATE_CMD = f"""
 set -euo pipefail
-test "$(bazel --output_user_root=/var/cache/bazel/output-user-root --version)" = "bazel {BAZEL_VERSION}"
+test "$(bazel --version)" = "bazel {BAZEL_VERSION}"
 bazel --output_user_root=/var/cache/bazel/output-user-root run @python_3_13_13//:python3 -- --version 2>&1 | tee /tmp/hermetic-python-version.log
 test "$(tail -n 1 /tmp/hermetic-python-version.log)" = "Python 3.13.13"
 scripts/bazel-requirements-sync.py --check

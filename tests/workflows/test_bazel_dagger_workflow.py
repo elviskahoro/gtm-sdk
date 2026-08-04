@@ -40,6 +40,7 @@ def test_pipeline_uses_arm64_bazel_caches_and_exports_junit() -> None:
     assert "repository_cache=/var/cache/bazel/repository" in pipeline
     assert "disk_cache=/var/cache/bazel/disk" in pipeline
     assert "output_user_root=/var/cache/bazel/output-user-root" in pipeline
+    assert 'test "$(bazel --version)" = "bazel {BAZEL_VERSION}"' in pipeline
     assert (
         "bazel --output_user_root=/var/cache/bazel/output-user-root test //... --config=ci"
         in pipeline
