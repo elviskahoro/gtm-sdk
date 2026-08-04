@@ -137,6 +137,15 @@ def _write_flox(
             )
 
 
+def _make_beads_database(beads_dir: Path) -> None:
+    """Create the on-disk markers setup uses without starting Dolt."""
+    (beads_dir / "dolt").mkdir(parents=True)
+    (beads_dir / "dolt" / ".bd-dolt-ok").touch()
+    (beads_dir / "metadata.json").write_text(
+        '{"database":"dolt","backend":"dolt","dolt_mode":"server"}\n'
+    )
+
+
 def _write_curl_installer(
     bin_dir: Path,
     *,
@@ -417,9 +426,9 @@ def test_workspace_setup_does_not_initialize_zsh_completion() -> None:
 def test_worktree_links_beads_to_primary_checkout(tmp_path: Path) -> None:
     primary = tmp_path / "primary"
     (primary / ".git").mkdir(parents=True)
-    (primary / ".beads").mkdir()
+    _make_beads_database(primary / ".beads")
 
-    result, _ = _run_setup(
+    result, log = _run_setup(
         tmp_path,
         flox_succeeds=True,
         git_common_dir=primary / ".git",
@@ -429,12 +438,13 @@ def test_worktree_links_beads_to_primary_checkout(tmp_path: Path) -> None:
     workspace_beads = tmp_path / "repo" / ".beads"
     assert workspace_beads.is_symlink()
     assert workspace_beads.resolve() == (primary / ".beads").resolve()
+    assert "status" not in log.read_text()
 
 
 def test_worktree_repairs_stale_beads_symlink(tmp_path: Path) -> None:
     primary = tmp_path / "primary"
     (primary / ".git").mkdir(parents=True)
-    (primary / ".beads").mkdir()
+    _make_beads_database(primary / ".beads")
     stale = tmp_path / "wrong" / ".beads"
     stale.parent.mkdir()
     stale.mkdir()
