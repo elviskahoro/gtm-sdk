@@ -29,8 +29,9 @@ export TARGET_BRANCH=main
 export PR_BRANCH=HEAD
 export WORKSPACE_PATH=/src
 export BAZEL_PATH=bazel
+export BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root
 source "${action_dir}/src/scripts/prerequisites.sh"
-java="$(bazel --output_user_root=/var/cache/bazel/output-user-root info java-home)/bin/java"
+java="$(bazel ${BAZEL_STARTUP_OPTIONS} info java-home)/bin/java"
 export MERGE_INSTANCE_BRANCH_HEAD_SHA="${merge_base_sha}"
 export PR_BRANCH_HEAD_SHA="${pr_branch_testing_head_sha}"
 export BAZEL_DIFF_CMD="${java} -jar /opt/bazel-diff.jar"

@@ -62,6 +62,10 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert 'dagger.Platform("linux/arm64")' in pipeline
     assert "TRUNK_BAZEL_ACTION_REV" in pipeline
     assert "build-essential" in pipeline
+    assert (
+        "BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root"
+        in pipeline
+    )
     assert "BAZEL_DAGGER_DIFF_JAR" in pipeline
     assert 'source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")' in pipeline
     assert 'mkdir --parents "${CACHE_DIR}"' in pipeline
