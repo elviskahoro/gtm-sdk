@@ -24,6 +24,10 @@ lockfile or a poisoned working tree still cannot influence the filing step. That
 matters here more than usual: this pipeline runs *because* something in CI is
 already broken.
 
+This pipeline intentionally stays on a digest-pinned minimal Python image rather
+than the Flox toolchain image. Its isolation from the repository dependency graph
+is part of the failure-triage contract.
+
 The ``pip install`` is its own ``with_exec``, placed before the mounts so the
 layer caches on the base image and the pin alone -- a diagnosis file changing
 every run must not re-resolve the dependency. It installs with
@@ -58,7 +62,10 @@ import anyio
 import dagger
 from dagger import dag
 
-CONTAINER_IMAGE = "python:3.13-slim"
+CONTAINER_IMAGE = (
+    "python:3.13-slim@sha256:"
+    "6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91"
+)
 
 # Keep in lockstep with the PEP 723 header in the filing script, the project's
 # floor, and the first requirement line of CONSTRAINTS_FILE --

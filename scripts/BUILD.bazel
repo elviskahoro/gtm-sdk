@@ -15,6 +15,8 @@ exports_files(
         "attio-workspace_slug-probe.py",
         "attio-workspace_url-emit.py",
         "bazel-requirements-sync.py",
+        "bazel-dagger-toolchain.py",
+        "bazel-dagger-validate.py",
         "beads-rig-sync_to.py",
         "caldotcom-bookings-backfill.py",
         "ci-suite-validate.py",
@@ -167,6 +169,18 @@ py_binary(
         "@pypi//click",
         "@pypi//typer",
     ],
+)
+
+py_binary(
+    name = "bazel-dagger-toolchain",
+    srcs = ["bazel-dagger-toolchain.py"],
+    visibility = ["//:__subpackages__"],
+)
+
+py_binary(
+    name = "bazel-dagger-validate",
+    srcs = ["bazel-dagger-validate.py"],
+    visibility = ["//:__subpackages__"],
 )
 
 py_binary(

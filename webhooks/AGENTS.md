@@ -24,12 +24,11 @@ scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
 - **Deploying one source does not redeploy the others.** After a shared-code
   change (e.g. `libs/dlt/`), bump each source individually or stale containers
   keep importing removed symbols.
-- **`GTM_DEPLOY_VIA_FLOX=1` on Conductor cloud sandboxes** — Dagger's engine
-  cannot start there (#284, cause corrected in #443; see `_deploy_via_flox`).
-- **The deploy is one recipe, two executors.** Add a step or a credential to
-  `deploy_steps()` / `deploy_env()`, **never** to an executor — the two argv
-  lists drifted into deploying *different apps* once already, and
-  `tests/scripts/test_deploy_webhook_dagger.py` now pins them together.
+- **`RUN_WITH_DAGGER=1` is opt-in isolation.** Conductor cloud sandboxes use
+  the default Flox path because Dagger's engine cannot start there.
+- **The deploy is one recipe with a shared transport.** Add a step or a
+  credential to `deploy_steps()` / `deploy_env()` and route it through
+  `scripts/lib/container.py` / `scripts/lib/flox.py`.
 - **Do not register these in `src/app.py`.** They are standalone Modal apps.
 - **A handler image's `uv_pip_install` must list every dependency the handler
   transitively imports.** A package present in the local venv but absent from

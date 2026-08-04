@@ -1,0 +1,22 @@
+schema-version = "1.13.0"
+
+[install]
+uv.pkg-path = "uv"
+uv.version = "0.11.26"
+python313.pkg-path = "python313"
+# Python packages such as duckdb link against libstdc++ at runtime. Keep the
+# runtime library in Linux images without pulling in the full compiler.
+libgcc.pkg-path = "libgcc"
+libgcc.systems = ["aarch64-linux", "x86_64-linux"]
+time.pkg-path = "time"
+git.pkg-path = "git"
+bash.pkg-path = "bash"
+coreutils.pkg-path = "coreutils"
+findutils.pkg-path = "findutils"
+
+[containerize.config]
+user = "1000:1000"
+working-dir = "/src"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]

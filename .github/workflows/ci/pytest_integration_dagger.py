@@ -8,10 +8,11 @@ installed:
     uv run dagger run python .github/workflows/ci/pytest_integration_dagger.py
 
 CI resolves `python` to a dedicated dagger-io/anyio venv via `$GITHUB_PATH`
-instead (see `.github/workflows/tests-unit.yml`), so the CI invocation stays
+instead (see `.github/workflows/tests-bazel.yml`), so the CI invocation stays
 a bare `dagger run python "${pipeline}"`.
 
-The pipeline runs the integration test marker inside a python:3.13 container, then
+The pipeline runs the integration test marker inside a locked, Flox-derived full
+dependency image, then
 exports `junit.xml` to the host so a follow-up step (e.g. trunk-io/analytics-uploader)
 can upload it.
 
@@ -29,6 +30,10 @@ Each required value must be present in the host environment — in CI from indiv
 `secrets.*` GitHub Actions secrets (synced into the repo by Infisical's GitHub App
 integration), locally from `infisical run -- …`. They are forwarded into the container
 as Dagger secrets, never baked into an image layer.
+
+The integration pipeline uses the shared dependency-image recipe with the
+`full-compiled` layout. This keeps the suite on the locked Flox toolchain without
+coupling it to the deliberately minimal triage images.
 """
 
 from __future__ import annotations
@@ -36,12 +41,18 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Mapping
+from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
 
 import anyio
 import dagger
 from dagger import dag
+from pytest_dependency_image import (
+    PROJECT_INSTALL_CMD,
+    SOURCE_EXCLUDES,
+    dependency_base,
+)
 
 # Credentials the integration suite reads at runtime. Audited from tests/conftest.py
 # (ATTIO_API_KEY) and tests/integration/test_gtm_remote_smoke.py (the MODAL_* +
@@ -59,31 +70,18 @@ INTEGRATION_SECRET_ENV_VARS = (
 # succeeds and `junit.xml` is guaranteed exportable; main() reads pytest_rc back
 # and re-raises the real code. Do NOT restore a `|| true` here (see ai-eun).
 PYTEST_CMD = (
-    "uv run pytest -m integration --junit-xml=junit.xml -o junit_family=xunit1; "
+    "/opt/venv/bin/python -m pytest -m integration "
+    "--junit-xml=junit.xml -o junit_family=xunit1; "
     "echo $? > /src/pytest_rc"
 )
 JUNIT_HOST_PATH = "junit.xml"
 PYTEST_RC_PATH = "/src/pytest_rc"
 PYTEST_RC_HOST_PATH = "pytest_rc"
-
 # Distinct exit code the conftest preflight uses when a required Attio object is
 # missing ("infra not ready"), so a green-checkmark-masking 0-test run is RED but
 # still distinguishable from a genuine regression. Keep in sync with
 # PREFLIGHT_MISSING_OBJECT_RC in tests/integration/conftest.py.
 PREFLIGHT_MISSING_OBJECT_RC = 86
-
-
-SOURCE_EXCLUDES = [
-    ".venv",
-    "tmp",
-    ".pytest_cache",
-    ".ruff_cache",
-    "gtm.egg-info",
-    "out",
-    "data",
-    "worktrees",
-    "pytest_rc",
-]
 
 
 def build_container(secret_env: Mapping[str, str]) -> dagger.Container:
@@ -95,28 +93,22 @@ def build_container(secret_env: Mapping[str, str]) -> dagger.Container:
     image layer or the build log.
     """
     source = dag.host().directory(".", exclude=SOURCE_EXCLUDES)
-    uv_cache = dag.cache_volume("uv-cache")
-
     ctr = (
-        dag.container()
-        .from_("python:3.13")
-        .with_exec(
-            ["bash", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"],
-        )
-        .with_env_variable("PATH", "/root/.local/bin:/usr/local/bin:/usr/bin:/bin")
-        .with_mounted_cache("/root/.cache/uv", uv_cache)
+        dependency_base(source)
+        .with_directory("/src", source, owner="1000:1000")
+        .with_workdir("/src")
+        .with_env_variable("PYTHONPATH", "/src")
+        .with_exec(["bash", "-c", PROJECT_INSTALL_CMD])
     )
 
     for name, value in secret_env.items():
-        secret = dag.set_secret(name.lower().replace("_", "-"), value)
+        secret_name = (
+            f"{name.lower().replace('_', '-')}-{sha256(value.encode()).hexdigest()}"
+        )
+        secret = dag.set_secret(secret_name, value)
         ctr = ctr.with_secret_variable(name, secret)
 
-    return (
-        ctr.with_directory("/src", source)
-        .with_workdir("/src")
-        .with_exec(["uv", "sync", "--all-extras", "--dev"])
-        .with_exec(["bash", "-c", PYTEST_CMD])
-    )
+    return ctr.with_exec(["bash", "-c", PYTEST_CMD])
 
 
 async def main() -> None:

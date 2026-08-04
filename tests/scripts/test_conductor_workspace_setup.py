@@ -126,7 +126,7 @@ def _write_flox(
     )
     if succeeds:
         flox_bin.mkdir(parents=True)
-        for tool in ("uv", "dolt", "infisical", "gh", "bd", "roborev"):
+        for tool in ("uv", "dolt", "infisical", "gh", "bd", "roborev", "bazel"):
             _write_stub(
                 flox_bin,
                 tool,
@@ -301,6 +301,7 @@ def test_successful_flox_activation_uses_flox_provided_tools(tmp_path: Path) -> 
     assert "flox activate" in log.read_text()
     assert "flox-bd version" in log.read_text()
     assert "flox-roborev version" in log.read_text()
+    assert "flox-bazel --version" in log.read_text()
     assert "fallback-roborev" not in log.read_text()
 
 

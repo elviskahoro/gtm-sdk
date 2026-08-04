@@ -46,7 +46,7 @@ OZ_SDK_CONSTRAINTS = (
     REPO_ROOT / ".github" / "workflows" / "ci" / "constraints" / "oz-agent-sdk.txt"
 )
 
-# Kept in lockstep with tests-unit.yml / tests-integration.yml and with the
+# Kept in lockstep with tests-bazel.yml / tests-integration.yml and with the
 # dagger-io pin the workflow installs.
 DAGGER_VERSION = "0.21.7"
 

@@ -18,7 +18,7 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 `--repo`/`--pr` default to the current branch's associated PR (via `gh pr view`). `--provider coderabbitai` is a shorthand for the `coderabbitai[bot]` author login; any other value matches an exact `author.login`.
 
-`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is injected into the Dagger container only as a secret environment variable — never in command-line arguments, image layers, logs, or the script's own output.
+`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is passed only as a child-process environment variable — never in command-line arguments, image layers, logs, or the script's own output. With `RUN_WITH_DAGGER=1`, the wrapper supplies it to the container as a secret environment variable; otherwise it stays in the activated project process.
 
 ## Safety model
 
@@ -30,4 +30,4 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 ## Implementation notes
 
-Pagination is fully recursive across `reviewThreads`, `reviews`, top-level pull request comments, and each thread's own nested `comments` connection. The base container image is pinned (`ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim`), matching `scripts/webhooks-handlers-redeploy.py`'s `DAGGER_BASE_IMAGE`, for dependency-version consistency across the repo's Dagger pipelines.
+Pagination is fully recursive across `reviewThreads`, `reviews`, top-level pull request comments, and each thread's own nested `comments` connection. By default `gh` runs in the repo's activated project environment; `RUN_WITH_DAGGER=1` opts into the shared prebuilt execution image.

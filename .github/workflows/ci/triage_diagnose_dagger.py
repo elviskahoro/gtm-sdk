@@ -20,6 +20,10 @@ broken. The install uses ``--require-hashes`` against the committed
 not just the top-level pin. Regenerate that file with the command in its own
 header comment whenever ``OZ_SDK_PIN`` changes.
 
+This pipeline intentionally stays on a digest-pinned minimal Python image rather
+than the Flox toolchain image. Its isolation from the repository dependency graph
+is part of the failure-triage contract.
+
 The agent executes on Warp's infrastructure, not in this container, so the
 container never needs repo access. All evidence is passed in as files that the
 caller extracted on the runner (log tail, and the diff between the default branch
@@ -43,7 +47,10 @@ import anyio
 import dagger
 from dagger import dag
 
-CONTAINER_IMAGE = "python:3.13-slim"
+CONTAINER_IMAGE = (
+    "python:3.13-slim@sha256:"
+    "6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91"
+)
 
 # Pinned so an upstream SDK release cannot silently change agent behaviour with no
 # diff in this repo. Keep in step with the PEP 723 block in

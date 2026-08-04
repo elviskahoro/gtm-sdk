@@ -4,7 +4,7 @@ Mirrors the three workflows under `.github/workflows/`:
 
   - trunk-check.yml         -> `trunk check --all` (defined here; not run in
                                Dagger upstream)
-  - tests-unit.yml          -> imports `.github/workflows/ci/pytest_dagger.py`
+  - tests-bazel.yml          -> runs `scripts/bazel-dagger-validate.py`
   - tests-integration.yml   -> imports `.github/workflows/ci/pytest_integration_dagger.py`
 
 The pytest pipelines are imported from the actual workflow scripts so any
@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 from enum import StrEnum
@@ -50,6 +51,11 @@ TMP_DIR = REPO_ROOT / "tmp"
 
 
 def _load_module(name: str, path: Path):
+    # Workflow entrypoints may share helpers beside the loaded script. Keep the
+    # real workflow directory importable when loading it through importlib too.
+    workflow_dir = str(path.resolve().parent)
+    if workflow_dir not in sys.path:
+        sys.path.insert(0, workflow_dir)
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         msg = f"could not load module from {path}"
@@ -59,19 +65,29 @@ def _load_module(name: str, path: Path):
     return module
 
 
-pytest_dagger = _load_module(
-    "pytest_dagger",
-    WORKFLOW_CI_DIR / "pytest_dagger.py",
-)
 pytest_integration_dagger = _load_module(
     "pytest_integration_dagger",
     WORKFLOW_CI_DIR / "pytest_integration_dagger.py",
 )
 
-# Reuse the source-exclude list and git-init shim from the unit pipeline so the
-# trunk container matches what the unit tests see.
-SOURCE_EXCLUDES = pytest_dagger.SOURCE_EXCLUDES
-GIT_INIT_CMD = pytest_dagger.GIT_INIT_CMD
+# Keep the trunk container free of generated/cache state. Bazel owns the unit
+# test environment now, so this no longer mirrors the retired pytest image.
+SOURCE_EXCLUDES = [
+    ".git",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    "bazel-*",
+    "tmp",
+    "worktrees",
+]
+GIT_INIT_CMD = (
+    "git init -q && "
+    "git -c user.email=ci@example.com -c user.name=ci "
+    "-c commit.gpgsign=false add -A && "
+    "git -c user.email=ci@example.com -c user.name=ci "
+    "-c commit.gpgsign=false commit -q -m 'dagger throwaway' --no-verify"
+)
 
 TRUNK_INSTALL = "curl -fsSL https://get.trunk.io | bash -s -- -y"
 TRUNK_CMD = "trunk check --all --ci"
@@ -106,7 +122,7 @@ async def _read_pytest_rc(ctr: dagger.Container) -> int:
     closed); a failure to *read* the file (e.g. the exec itself failed) is left
     to propagate so the caller's `ExecError`/`Exception` arms can dump the log.
     """
-    rc_text = await ctr.file(pytest_dagger.PYTEST_RC_PATH).contents()
+    rc_text = await ctr.file(pytest_integration_dagger.PYTEST_RC_PATH).contents()
     try:
         return int(rc_text.strip())
     except ValueError:
@@ -155,27 +171,31 @@ def _dump_exec_error(name: str, exc: dagger.ExecError) -> Path:
 
 
 async def run_unit(results: list[JobResult]) -> None:
-    try:
-        ctr = pytest_dagger.build_container()
-        rc = await _read_pytest_rc(ctr)
-        if rc == 0:
-            results.append(JobResult("unit", ok=True))
-        else:
-            log = await _dump_pytest_logs("unit", ctr)
-            results.append(
-                JobResult("unit", ok=False, detail=f"pytest exit {rc} (log: {log})"),
-            )
-    except dagger.ExecError as exc:
-        log = _dump_exec_error("unit", exc)
-        results.append(
-            JobResult("unit", ok=False, detail=f"exit {exc.exit_code} (log: {log})"),
-        )
-    except dagger.DaggerError as exc:
-        # e.g. /src/pytest_rc unreadable when the exec itself did not raise an
-        # ExecError — surface as a controlled red result, not a traceback abort.
-        results.append(JobResult("unit", ok=False, detail=f"dagger error: {exc}"))
-    except Exception as exc:  # noqa: BLE001
-        results.append(JobResult("unit", ok=False, detail=str(exc)))
+    command = [
+        "uv",
+        "run",
+        str(REPO_ROOT / "scripts" / "bazel-dagger-validate.py"),
+    ]
+    completed = await anyio.run_process(
+        command,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode == 0:
+        results.append(JobResult("unit", ok=True))
+        return
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    log = TMP_DIR / "ci-unit.log"
+    log.write_bytes(completed.stdout + completed.stderr)
+    results.append(
+        JobResult(
+            "unit",
+            ok=False,
+            detail=f"bazel validation exit {completed.returncode} (log: {log})",
+        ),
+    )
 
 
 async def run_integration(results: list[JobResult]) -> None:

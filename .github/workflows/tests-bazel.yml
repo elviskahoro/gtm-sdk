@@ -1,8 +1,27 @@
 name: Bazel tests
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+    inputs:
+      run_impacted:
+        required: false
+        type: boolean
+        default: false
+      run_full:
+        required: false
+        type: boolean
+        default: false
+      diff_base_sha:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      TRUNK_API_TOKEN:
+        required: false
 
 concurrency:
   group: bazel-tests-${{ github.workflow }}-${{ github.ref }}
@@ -12,9 +31,8 @@ permissions:
   contents: read
 
 jobs:
-  bazel_impacted:
-    name: Impacted Bazel targets (Dagger)
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  unit_tests:
+    name: Unit tests
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
@@ -87,26 +105,8 @@ jobs:
         run: |
           set -euo pipefail
           toolchain_dir="$HOME/.bazel-dagger/toolchain"
-          bazel_binary="${toolchain_dir}/bazel"
-          bazel_diff_jar="${toolchain_dir}/bazel-diff_deploy.jar"
-          bazel_sha="bfe9558bd8a2ecfe4841ec46c0dbccb4b469fe22d81f2f859de0de222b3e7ce3"
-          bazel_diff_sha="4b649929970167f75a188d184cd07f00c83a82b363c70f74d3c1ad1f7cdefd51"
-          if ! printf '%s  %s\n' "${bazel_sha}" "${bazel_binary}" | sha256sum --check --status 2>/dev/null; then
-            curl --fail --location --silent --show-error \
-              https://releases.bazel.build/8.7.0/release/bazel-8.7.0-linux-arm64 \
-              --output "${bazel_binary}"
-            printf '%s  %s\n' "${bazel_sha}" "${bazel_binary}" | sha256sum --check
-            chmod +x "${bazel_binary}"
-            refreshed=true
-          fi
-          if ! printf '%s  %s\n' "${bazel_diff_sha}" "${bazel_diff_jar}" | sha256sum --check --status 2>/dev/null; then
-            curl --fail --location --silent --show-error \
-              https://github.com/Tinder/bazel-diff/releases/download/v33.0.0/bazel-diff_deploy.jar \
-              --output "${bazel_diff_jar}"
-            printf '%s  %s\n' "${bazel_diff_sha}" "${bazel_diff_jar}" | sha256sum --check
-            refreshed=true
-          fi
-          echo "refreshed=${refreshed:-false}" >> "$GITHUB_OUTPUT"
+          uv run scripts/bazel-dagger-toolchain.py --directory "${toolchain_dir}"
+          echo "refreshed=true" >> "$GITHUB_OUTPUT"
 
       - name: Save repaired Dagger controller and Bazel data
         if: steps.bazel_cache.outputs.cache-matched-key == '' || steps.dagger_sdk.outputs.rebuilt == 'true' || steps.bazel_tools.outputs.refreshed == 'true'
@@ -123,17 +123,24 @@ jobs:
         with:
           version: 0.21.7
 
-      - name: Run impacted Bazel targets in Dagger
+      - name: Run impacted Bazel unit tests in Dagger
         env:
+          BAZEL_DAGGER_BINARY: ${{ github.workspace }}/.bazel-dagger/toolchain/bazel
+          BAZEL_DAGGER_CACHE_DIR: ${{ github.workspace }}/.bazel-dagger/cache
+          BAZEL_DAGGER_DIFF_JAR: ${{ github.workspace }}/.bazel-dagger/toolchain/bazel-diff_deploy.jar
+          BAZEL_DAGGER_SOURCE_DIR: ${{ runner.temp }}/bazel-dagger-source
+          BAZEL_RUN_IMPACTED: ${{ inputs.run_impacted || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+          BAZEL_RUN_FULL: ${{ inputs.run_full || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+          BAZEL_DIFF_BASE_SHA: ${{ inputs.diff_base_sha || (github.event_name == 'push' && github.event.before) || '' }}
           TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
           TRUNK_REPOSITORY: ${{ github.repository }}
           TRUNK_PR_NUMBER: ${{ github.event.pull_request.number }}
           TRUNK_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           TRUNK_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           CUSTOM: "true"
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
-          COMMIT_BRANCH: ${{ github.event.pull_request.head.ref }}
-          JOB_NAME: Impacted Bazel targets (Dagger)
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_BRANCH: ${{ github.ref_name }}
+          JOB_NAME: Unit tests
           JOB_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           export BAZEL_DAGGER_BINARY="$HOME/.bazel-dagger/toolchain/bazel"

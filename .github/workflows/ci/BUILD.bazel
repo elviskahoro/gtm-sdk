@@ -4,8 +4,6 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 filegroup(
     name = "workflow_ci_sources",
     srcs = glob([
-        "*.Dockerfile",
-        "*.dockerignore",
         "*.py",
         "constraints/*.txt",
     ]),
@@ -23,19 +21,13 @@ py_binary(
 )
 
 py_binary(
-    name = "pytest_dagger",
-    srcs = ["pytest_dagger.py"],
+    name = "flox_image_dagger",
+    srcs = ["flox_image_dagger.py"],
     visibility = ["//:__subpackages__"],
     deps = [
         "@pypi//anyio",
         "@pypi//dagger_io",
     ],
-)
-
-py_binary(
-    name = "pytest_dependency_pack",
-    srcs = ["pytest_dependency_pack.py"],
-    visibility = ["//:__subpackages__"],
 )
 
 py_binary(
@@ -43,9 +35,17 @@ py_binary(
     srcs = ["pytest_integration_dagger.py"],
     visibility = ["//:__subpackages__"],
     deps = [
+        ":pytest_dependency_image",
         "@pypi//anyio",
         "@pypi//dagger_io",
     ],
+)
+
+py_library(
+    name = "pytest_dependency_image",
+    srcs = ["pytest_dependency_image.py"],
+    visibility = ["//:__subpackages__"],
+    deps = ["@pypi//dagger_io"],
 )
 
 py_binary(
@@ -72,8 +72,8 @@ py_library(
     name = "ci",
     srcs = [
         "bazel_dagger.py",
-        "pytest_dagger.py",
-        "pytest_dependency_pack.py",
+        "flox_image_dagger.py",
+        "pytest_dependency_image.py",
         "pytest_integration_dagger.py",
         "triage_dagger.py",
         "triage_diagnose_dagger.py",

@@ -40,6 +40,9 @@ jq.pkg-path = "jq"
 bash.pkg-path = "bash"
 coreutils.pkg-path = "coreutils"
 findutils.pkg-path = "findutils"
+bazel.pkg-path = "flox/bazel"
+bazel.pkg-group = "bazel"
+bazel.version = "9.2.0"
 # gum.pkg-path = "gum"
 # gum.version = "^0.14.5"
 
@@ -104,9 +107,7 @@ working-dir = "/src"
 ## ... environments to create a composed environment
 ## ------------------------------------------------------------------
 [include]
-# environments = [
-#     { dir = "../common" }
-# ]
+environments = [{ dir = "flox/toolchain" }]
 
 
 ## Build and publish your own packages ------------------------------

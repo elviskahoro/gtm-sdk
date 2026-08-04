@@ -49,20 +49,20 @@ def test_hypothesis_pytest_plugin_is_loaded(pytestconfig: pytest.Config) -> None
 # restate the registration and fail on every harmless tweak.
 _EXPECTED_MAX_EXAMPLES = {"dev": 50, "ci": 200, "nightly": 1000}
 
-# Set only by the unit CI container (pytest_dagger.py), never locally, which
+# Set only by the legacy pytest CI container, never locally, which
 # makes it a non-circular "am I in that container?" signal. Needed because
 # HYPOTHESIS_PROFILE cannot detect its own absence -- see the test below.
 _CI_CONTAINER_SIGNAL = "PYTEST_DISABLE_PLUGIN_AUTOLOAD"
 
 
 def test_ci_container_actually_requests_the_ci_profile() -> None:
-    """In the unit CI container, ``HYPOTHESIS_PROFILE`` must be ``ci``.
+    """In a CI container that disables autoload, the profile must be ``ci``.
 
     ``test_requested_profile_is_the_one_in_force`` below cannot cover this: with
     the variable absent it validates the ``dev`` profile and passes, so a CI run
     that silently lost the variable looks identical to a healthy one. The
-    workflow-source assertion in ``tests/workflows/test_unit_workflow.py`` catches
-    someone editing it out of ``pytest_dagger.py``, but not a *new* CI entrypoint
+    workflow-source assertions catch someone editing it out of a CI entrypoint,
+    but not a *new* CI entrypoint
     that never set it, nor a value that is set but wrong.
 
     Keyed off ``PYTEST_DISABLE_PLUGIN_AUTOLOAD`` because only that container sets
@@ -70,23 +70,23 @@ def test_ci_container_actually_requests_the_ci_profile() -> None:
     """
     if os.environ.get(_CI_CONTAINER_SIGNAL) is None:
         pytest.skip(
-            f"{_CI_CONTAINER_SIGNAL} unset — not the unit CI container, so there "
+            f"{_CI_CONTAINER_SIGNAL} unset — this runner does not assert a CI "
+            "profile, so there "
             f"is no CI configuration to assert here",
         )
     assert os.environ.get("HYPOTHESIS_PROFILE") == "ci", (
-        "running in the unit CI container without HYPOTHESIS_PROFILE=ci, so "
+        "running in a CI container without HYPOTHESIS_PROFILE=ci, so "
         "property tests fall back to the dev profile: a third of the examples, "
         "randomized generation, and a 400ms per-example deadline across four "
-        "xdist workers. Set it in pytest_dagger.py's container env."
+        "xdist workers. Set it in the CI container environment."
     )
 
 
 def test_requested_profile_is_the_one_in_force() -> None:
     """The profile named by ``HYPOTHESIS_PROFILE`` must actually be active.
 
-    ``HYPOTHESIS_PROFILE`` is set on the container by ``pytest_dagger.py``, and
-    by the same base-branch rule that governs ``PYTEST_CMD``, a change to it only
-    reaches the container after landing on ``main``. If it ever stops arriving,
+    ``HYPOTHESIS_PROFILE`` is set by the canonical Bazel Dagger command. If it
+    ever stops arriving,
     the suite silently falls back to the ``dev`` profile: a third of the examples,
     randomized generation, and a 400 ms per-example deadline on a shared
     four-worker runner — i.e. exactly the Trunk-flake exposure the ``ci`` profile

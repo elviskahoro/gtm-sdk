@@ -1,25 +1,9 @@
 #!/usr/bin/env python3
 r"""Dump all Hookdeck events attached to a single connection.
 
-By default, runs the `hookdeck` CLI inside a Dagger-managed container so the
-dump is reproducible and the host machine does not need `hookdeck`/`jq`
-installed. Authenticates to Hookdeck headlessly via `hookdeck ci --api-key
-...`, paginates `event list --connection-id`, and writes one `<event-id>.json`
-(metadata) plus one `<event-id>.body` (raw request body) per event to the
-host output dir.
-
-Set `GTM_HOOKDECK_DUMP_VIA_FLOX=1` to instead run the same dump script via a
-Flox-activated host shell (`scripts/lib/flox.py::flox_activate_prefix()`) --
-the fallback for Conductor cloud sandboxes, where Dagger's container engine
-cannot start at all (issue #284; do not reinvestigate). `jq` comes from
-`.flox/env/manifest.toml`. `hookdeck-cli` does NOT: its npm package is a thin
-postinstall wrapper around a prebuilt Go binary published on GitHub releases,
-so the Flox path downloads that same binary directly (pinned version,
-checksum-verified) into a scratch prefix under `tmp/hookdeck-dump-bin/` --
-never a system-wide install, and no Node/npm dependency at all. Delete that
-directory to force a re-download. See AGENTS.md's "Dagger-fallback pattern
-(Flox)" section for the pattern shared with
-`scripts/webhooks-handlers-redeploy.py` and `scripts/pr-review-threads.py`.
+Runs the `hookdeck` CLI in the repo's activated Flox environment. The pinned
+binary and `jq` are resolved from the manifest; the CLI is downloaded into a
+versioned scratch prefix under `tmp/` with checksum verification.
 
 You can identify the connection either by ID (`--connection-id web_xxx`) or by
 its human name (`--connection-name rb2b-visits-mock`). Name lookups happen
@@ -51,23 +35,18 @@ if __name__ == "__main__":
     _bootstrap_uv(script_path=__file__, mode="python")
 
 import argparse
-import asyncio
 import hashlib
 import os
 import platform
 import re
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
 
-import dagger
-
-from scripts.lib.env import env_flag
-from scripts.lib.flox import flox_activate_prefix
+from scripts.lib.flox import run as flox_run
 
 # Anchor on the script's directory so relative output paths resolve correctly
 # regardless of the CWD `uv run` was invoked from.
@@ -77,7 +56,7 @@ DEFAULT_OUTPUT_ROOT = REPO_ROOT / "out" / "hookdeck-events"
 
 # Pinned so the Flox executor's downloaded binary is reproducible run to run,
 # matching this repo's habit of pinning exact toolchain versions elsewhere
-# (e.g. DAGGER_BASE_IMAGE, the `uv` version in .flox/env/manifest.toml).
+# (e.g. the `uv` version in .flox/env/manifest.toml).
 HOOKDECK_CLI_VERSION = "2.3.1"
 HOOKDECK_RELEASE_BASE = (
     f"https://github.com/hookdeck/hookdeck-cli/releases/download/"
@@ -214,58 +193,14 @@ _SLUG_RE = re.compile(r"[^a-zA-Z0-9._-]+")
 def _slugify(name: str) -> str:
     """Filesystem-safe slug derived from a connection's display name."""
     slug = _SLUG_RE.sub("-", name).strip("-._").lower()
-    return slug or ""
-
-
-async def _dump_via_dagger(
-    *,
-    connection_id: str | None,
-    connection_name: str | None,
-    output_dir: Path,
-    api_key: str,
-    limit_per_page: int,
-    max_events: int | None,
-) -> None:
-    """Run the Dagger pipeline that dumps Hookdeck events for one connection.
-
-    Exactly one of `connection_id` / `connection_name` should be provided; the
-    container resolves a name to an ID before paginating events. `OUT_DIR`/
-    `HD_TMP_DIR` are deliberately left unset here -- DUMP_SCRIPT's own
-    `${OUT_DIR:-/out}` / `${HD_TMP_DIR:-/tmp/hd}` defaults already match this
-    container's ephemeral filesystem layout.
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    async with dagger.connection(dagger.Config(log_output=sys.stderr)):
-        # set_secret keeps the key out of container layer history; only visible
-        # inside the running exec via the env var binding below.
-        api_secret = dagger.dag.set_secret("hookdeck-api-key", api_key)
-
-        container = (
-            dagger.dag.container()
-            .from_("node:20-alpine")
-            .with_exec(["apk", "add", "--no-cache", "bash", "jq", "ca-certificates"])
-            .with_exec(["npm", "install", "-g", "hookdeck-cli"])
-            .with_new_file("/work/dump.sh", contents=DUMP_SCRIPT, permissions=0o755)
-        )
-
-        executed = (
-            container.with_secret_variable("HOOKDECK_API_KEY", api_secret)
-            .with_env_variable("CONNECTION_ID", connection_id or "")
-            .with_env_variable("CONNECTION_NAME", connection_name or "")
-            .with_env_variable("LIMIT_PER_PAGE", str(limit_per_page))
-            .with_env_variable(
-                "MAX_EVENTS",
-                str(max_events) if max_events is not None else "",
-            )
-            .with_exec(["/work/dump.sh"])
-        )
-
-        await executed.directory("/out").export(str(output_dir))
+    # Keep every derived path below the operator-selected output directory.
+    # Names containing only punctuation, symbols, or non-ASCII letters would
+    # otherwise produce an empty slug and make ``root / slug`` equal ``root``.
+    return slug or "dump"
 
 
 # ---------------------------------------------------------------------------
-# Flox executor -- the fallback for sandboxes with no Dagger engine.
+# Flox recipe.
 # ---------------------------------------------------------------------------
 
 
@@ -455,26 +390,13 @@ def _dump_via_flox(
         env["OUT_DIR"] = str(output_dir)
         env["HD_TMP_DIR"] = str(hd_tmp_dir)
 
-        subprocess.run(  # noqa: S603 — argv list, shell disabled
-            [*flox_activate_prefix(REPO_ROOT), "bash", str(script_path)],
-            cwd=REPO_ROOT,
-            env=env,
-            check=True,
-        )
+        flox_run(["bash", str(script_path)], repo_root=REPO_ROOT, env=env)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def _use_flox() -> bool:
-    """Whether `GTM_HOOKDECK_DUMP_VIA_FLOX` selects the Flox executor.
-
-    Routed through `env_flag` so an unrecognized value (e.g. a typo) fails
-    loudly instead of silently selecting Dagger.
-    """
-    return env_flag("GTM_HOOKDECK_DUMP_VIA_FLOX")
-
-
 def main() -> int:
+    """Keep Hookdeck dumps Flox-only because its CLI is not in the shared image."""
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -532,7 +454,7 @@ def main() -> int:
     # the user may have supplied just a name, with no ID yet).
     target_token = args.connection_id or args.connection_name or ""
     root = args.output_dir.resolve()
-    staging_dir = root / f".staging-{_slugify(target_token) or 'dump'}"
+    staging_dir = root / f".staging-{_slugify(target_token)}"
     if args.connection_id:
         print(f"[connection]  id={args.connection_id}")
     else:
@@ -544,31 +466,22 @@ def main() -> int:
     if staging_dir.exists():
         shutil.rmtree(staging_dir)
 
-    if _use_flox():
-        _dump_via_flox(
-            connection_id=args.connection_id,
-            connection_name=args.connection_name,
-            output_dir=staging_dir,
-            api_key=api_key,
-            limit_per_page=args.limit_per_page,
-            max_events=args.max_events,
-        )
-    else:
-        asyncio.run(
-            _dump_via_dagger(
-                connection_id=args.connection_id,
-                connection_name=args.connection_name,
-                output_dir=staging_dir,
-                api_key=api_key,
-                limit_per_page=args.limit_per_page,
-                max_events=args.max_events,
-            ),
-        )
+    _dump_via_flox(
+        connection_id=args.connection_id,
+        connection_name=args.connection_name,
+        output_dir=staging_dir,
+        api_key=api_key,
+        limit_per_page=args.limit_per_page,
+        max_events=args.max_events,
+    )
 
     name_file = staging_dir / ".connection_name"
     raw_name = name_file.read_text().strip() if name_file.exists() else ""
     slug = _slugify(raw_name) if raw_name else _slugify(target_token)
     final_dir = root / slug
+    if final_dir.parent != root or final_dir == root:
+        msg = f"Refusing to replace output directory with derived path {final_dir}"
+        raise RuntimeError(msg)
 
     if final_dir.exists():
         shutil.rmtree(final_dir)

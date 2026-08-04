@@ -46,6 +46,28 @@ pytest_test(
 )
 
 pytest_test(
+    name = "test_bazel_dagger_toolchain",
+    srcs = ["test_bazel_dagger_toolchain.py"],
+    data = ["//scripts:bazel-dagger-toolchain.py"],  # keep
+    deps = [
+        "//scripts:bazel-dagger-toolchain",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_bazel_dagger_validate",
+    srcs = ["test_bazel_dagger_validate.py"],
+    data = ["//scripts:bazel-dagger-validate.py"],  # keep
+    deps = [
+        "//scripts:bazel-dagger-validate",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
     name = "test_bazel_requirements_sync",
     srcs = ["test_bazel_requirements_sync.py"],
     data = ["//scripts:bazel-requirements-sync.py"],  # keep
@@ -130,6 +152,16 @@ pytest_test(
 )
 
 pytest_test(
+    name = "test_container_wrapper",
+    srcs = ["lib/test_container.py"],
+    deps = [
+        "//scripts/lib",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
     name = "test_deploy_webhook",
     srcs = ["test_deploy_webhook.py"],
     data = [
@@ -154,25 +186,6 @@ pytest_test(
         "//scripts:webhooks-handlers-redeploy",  # keep
         "//src:secrets_bootstrap",
         "//tests:conftest",
-        "@pypi//pytest",
-    ],
-)
-
-pytest_test(
-    name = "test_deploy_webhook_dagger_real",
-    srcs = ["test_deploy_webhook_dagger_real.py"],
-    data = [
-        "//:webhook_export_to_attio_source",
-        "//scripts:webhooks-handlers-redeploy.py",
-    ],  # keep
-    tags = [
-        "integration",
-        "manual",
-    ],  # keep
-    deps = [
-        "//scripts:webhooks-handlers-redeploy",  # keep
-        "//tests:conftest",
-        "@pypi//dagger_io",
         "@pypi//pytest",
     ],
 )
@@ -253,6 +266,28 @@ pytest_test(
     data = ["//scripts:hookdeck-connection_events-dump.py"],  # keep
     deps = [
         "//scripts:hookdeck-connection_events-dump",  # keep
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_hookdeck_connection_events_dump_properties",
+    srcs = ["test_hookdeck_connection_events_dump_properties.py"],
+    data = ["//scripts:hookdeck-connection_events-dump.py"],  # keep
+    deps = [
+        "//scripts:hookdeck-connection_events-dump",  # keep
+        "//tests:conftest",
+        "@pypi//hypothesis",
+        "@pypi//pytest",
+    ],
+)
+
+pytest_test(
+    name = "test_flox",
+    srcs = ["test_flox.py"],
+    deps = [
+        "//scripts/lib",
         "//tests:conftest",
         "@pypi//pytest",
     ],

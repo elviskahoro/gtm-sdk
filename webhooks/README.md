@@ -76,14 +76,11 @@ scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
 scripts/webhooks-handlers-redeploy.py export_to_gcp_raw --all
 ```
 
-The deploy itself is one recipe — `uv sync --frozen`, then `uv run modal
-deploy` — run by one of two interchangeable executors, so the env that ships
-images to Modal is reproducible operator-to-operator. Dagger runs the recipe
-in a container. Conductor cloud workspaces cannot start the Dagger engine, so
-set `GTM_DEPLOY_VIA_FLOX=1` there to run the same recipe under the
-repository's pinned Flox environment instead. A parity test keeps the two
-executors on identical commands and credentials; the recipe is the only place
-to add a step or a variable.
+The deploy itself is one recipe — `uv sync --frozen`, then `uv run --no-sync
+modal deploy` — run by the repository's pinned Flox environment. Set
+`RUN_WITH_DAGGER=1` to run the same recipe through the shared prebuilt
+Flox-toolchain container. The recipe is the only place to add a step or a
+credential.
 
 Two differences between the executors are real rather than papered over. The
 Flox path runs in your working tree, so it syncs into a throwaway
@@ -134,8 +131,9 @@ are documented on the functions that implement them in
 test at `tests/scripts/test_deploy_webhook.py` drives the Flox executor
 end-to-end: substitute/restore, cleanup on deploy failure, the
 `MODAL_TOKEN_ID` pop at the preflight, and the environment scrub.
-`tests/scripts/test_deploy_webhook_dagger.py` holds the executor parity
-checks. The lock and the full preflight paths are not yet exercised in CI.
+`tests/scripts/test_deploy_webhook_dagger.py` pins the shared recipe, transport
+selector, container-runner delegation, and credential scrub surface. The lock
+and the full preflight paths are not yet exercised in CI.
 
 ## Registry
 

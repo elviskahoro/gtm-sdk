@@ -19,17 +19,10 @@ Usage:
     scripts/webhooks-handlers-redeploy.py <handler> <source>
     scripts/webhooks-handlers-redeploy.py <handler> --all
 
-Both executors run the *same* recipe -- see ``deploy_steps`` / ``deploy_env``
-below. They differ only in the isolation layer; anything else is drift, and
-``tests/scripts/test_deploy_webhook_dagger.py`` fails on it. Dagger runs the
-recipe in a container. ``GTM_DEPLOY_VIA_FLOX=1`` runs it under ``flox
-activate`` on the host instead, for environments where Dagger's engine cannot
-start at all (Conductor cloud sandboxes -- see ``_deploy_via_flox`` for the
-cause, and issue #284, whose originally-recorded cause is corrected in #443).
-Flox
-(`.flox/env/manifest.toml`) pins `uv`/`git` via the Nix store rather than
-container namespaces, giving the same reproducibility guarantee. The test
-suite uses that path so CI needs no Dagger engine.
+Both transports run the *same* recipe -- see ``deploy_steps`` / ``deploy_env``
+below. Flox is the default; ``RUN_WITH_DAGGER=1`` opts into the shared
+prebuilt Flox-toolchain container for isolation. The test suite uses the
+primary path so CI needs no Dagger engine.
 
 The shebang is a plain ``python3``, not ``uv run python``: ``[tool.uv]
 required-version`` in pyproject.toml makes *any* incompatible ``uv`` binary
@@ -51,8 +44,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(REPO_ROOT))
+from scripts.lib.container import (  # noqa: E402
+    RUN_WITH_DAGGER,
+    in_container_phase,
+    run_recipe_in_container_async,
+)
 from scripts.lib.env import env_flag  # noqa: E402
-from scripts.lib.flox import flox_activate_prefix  # noqa: E402
+from scripts.lib.flox import (  # noqa: E402
+    FloxEnvironmentNotActivatedError,
+    preflight as flox_preflight,
+    run as flox_run,
+)
 from scripts.lib.uv_resolve import (  # noqa: E402
     NoCompatibleUvError,
     find_compatible_uv_for_repo,
@@ -60,6 +62,7 @@ from scripts.lib.uv_resolve import (  # noqa: E402
 
 
 def _fail(msg: str) -> NoReturn:
+    """Print a user-facing preflight error and terminate the command."""
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(1)
 
@@ -143,14 +146,11 @@ if __name__ == "__main__":
 import argparse  # noqa: E402
 import asyncio  # noqa: E402
 import atexit  # noqa: E402
-import hashlib  # noqa: E402
 import re  # noqa: E402
 import shutil  # noqa: E402
 import signal  # noqa: E402
 import subprocess  # noqa: E402
 from typing import TYPE_CHECKING, NamedTuple, NoReturn  # noqa: E402
-
-import dagger  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -169,13 +169,6 @@ HANDLER_ALIASES: dict[str, str] = {
 PLACEHOLDER = "WebhookModelToReplace"
 REQUIRED_MODAL_SECRETS: tuple[str, ...] = ("devx-gcp-202605260000",)
 VALID_INFISICAL_ENVS: tuple[str, ...] = ("dev", "staging", "prod")
-
-# Pinned uv image matching the repo's requires-python (>=3.13,<3.14) and
-# required uv version (>=0.11.8,<0.12). The unversioned bookworm tag began
-# resolving to uv 0.9.x, which made `uv sync --frozen` reject this project
-# before the deploy ran. Keep the toolchain pin explicit so registry tag drift
-# cannot silently break guarded deploys.
-DAGGER_BASE_IMAGE = "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
 
 # Module-level state read by ``_cleanup`` (registered via ``atexit`` and via
 # SIGINT/SIGTERM handlers). Mirrors the bash trap that captured globals by
@@ -285,6 +278,7 @@ def _preflight_uv_version() -> None:
 
 
 def _require_uv_path() -> str:
+    """Return the compatible uv selected during bootstrap."""
     if _uv_path is None:  # set by _preflight_uv_version() before use
         _fail("uv path requested before uv preflight completed")
     return _uv_path
@@ -602,11 +596,10 @@ def _preflight_otel_log_sink_keys() -> None:
 
 
 def _preflight_flox() -> None:
-    """Verify the Flox environment can actually pin the deploy toolchain.
+    """Verify the Flox environment can pin the deploy toolchain.
 
-    Only meaningful when ``GTM_DEPLOY_VIA_FLOX`` selects the Flox executor —
-    running it unconditionally would make every Mac Dagger deploy realize a
-    Nix environment for nothing.
+    Only meaningful for the default Flox transport; the Dagger wrapper already
+    starts from the prebuilt toolchain image.
 
     Asks flox where its environment is rather than re-deriving the path from
     ``uname``: ``FLOX_ENV`` is set inside a ``--mode run`` activation and
@@ -627,72 +620,22 @@ def _preflight_flox() -> None:
     - Tool resolution asks the *activated* shell. ``shutil.which`` in this
       process cannot see inside an activation.
 
-    ``--mode run``, matching :func:`flox_activate_prefix` — ``--mode dev``
+    ``--mode run``, matching :func:`scripts.lib.flox.preflight` — ``--mode dev``
     resolves a different store path, so probing it would verify the wrong
     environment.
     """
     print("Preflighting Flox environment")
-    if shutil.which("flox") is None:
+    try:
+        flox_env = flox_preflight(REPO_ROOT, ("uv", "git"))
+    except FloxEnvironmentNotActivatedError:
         _fail(
-            "GTM_DEPLOY_VIA_FLOX is set but `flox` is not on PATH. Either "
-            "install it (scripts/conductor-workspace-setup.sh provisions it "
-            "on Linux sandboxes, and falls back to curl installers when it "
-            "cannot) or unset GTM_DEPLOY_VIA_FLOX to deploy via Dagger.",
+            "Flox activation did not set FLOX_ENV; toolchain pinning cannot be verified",
         )
-    probe = subprocess.run(  # noqa: S603 — argv list, shell disabled
-        [*flox_activate_prefix(REPO_ROOT), "sh", "-c", 'printf %s "$FLOX_ENV"'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if probe.returncode != 0:
-        _fail(
-            f"`flox activate --dir {REPO_ROOT} --mode run` failed "
-            f"(exit {probe.returncode}). The environment in "
-            f".flox/env/manifest.toml could not be realized, so the deploy "
-            f"toolchain is unpinned.\n{probe.stderr.strip()}",
-        )
-    flox_env = probe.stdout.strip()
-    if not flox_env:
-        # An rc=0 activation that reports no FLOX_ENV is not really flox (the
-        # test suite's pass-through stub is the known case). A genuinely
-        # failed activation already raised above, so the only thing lost here
-        # is the pinning guarantee — say so rather than claiming a check we
-        # did not perform.
-        print("  activation returned no FLOX_ENV; toolchain pinning unverified")
-        return
+    except RuntimeError as exc:
+        _fail(f"Flox activation failed: {exc}")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        _fail(f"Flox activation failed: {exc}")
     print(f"  FLOX_ENV={flox_env}")
-    missing = [
-        tool for tool in ("uv", "git") if not (Path(flox_env) / "bin" / tool).exists()
-    ]
-    if not missing:
-        print("  uv, git pinned by the Flox environment ✓")
-        return
-    # A tool can be on the activated PATH without living in $FLOX_ENV/bin
-    # (flox composes multiple store paths), so fall back to asking the
-    # activation itself before failing.
-    resolved = subprocess.run(  # noqa: S603 — argv list, shell disabled
-        [
-            *flox_activate_prefix(REPO_ROOT),
-            "sh",
-            "-c",
-            "command -v uv && command -v git",
-        ],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if resolved.returncode != 0:
-        _fail(
-            f"The Flox environment does not provide {', '.join(missing)}. "
-            f"Add them via `flox install` (never by hand-editing "
-            f".flox/env/manifest.toml) before deploying.",
-        )
-    print(
-        f"  uv, git resolved inside the activation ✓ ({missing} not in $FLOX_ENV/bin)",
-    )
 
 
 _BUCKET_METHOD_RE = re.compile(r"WebhookModel\.([a-z_]+_get_bucket_name)")
@@ -882,18 +825,6 @@ def _install_signal_handlers() -> None:
 # step-by-step, because these already drifted once.
 
 
-# The uv base image ships no git, but pyproject pins the public `gtm-linear`
-# git dep, so `uv sync --frozen` shells out to git and dies with "Git
-# executable not found" before modal deploy runs (ai-8h3). `update` + `install`
-# MUST share one exec or Dagger can reuse a stale apt index against a fresh
-# install. `sh` (dash) is guaranteed on Debian; `bash` may be absent on -slim.
-# Dagger-only: the Flox environment already pins git via the Nix store.
-GIT_INSTALL_EXEC: tuple[str, ...] = (
-    "sh",
-    "-c",
-    "apt-get update && apt-get install -y --no-install-recommends git",
-)
-
 # The Modal token pair identifies a *workspace*, not a deploy target. Both
 # executors resolve it from this one Infisical env so a prod deploy and a dev
 # deploy land in the same Modal workspace — INFISICAL_ENV (which the deployed
@@ -932,7 +863,10 @@ def deploy_steps(rel: str) -> tuple[DeployStep, ...]:
     """
     return (
         DeployStep(argv=["uv", "sync", "--frozen"], with_credentials=False),
-        DeployStep(argv=["uv", "run", "modal", "deploy", rel], with_credentials=True),
+        DeployStep(
+            argv=["uv", "run", "--no-sync", "modal", "deploy", rel],
+            with_credentials=True,
+        ),
     )
 
 
@@ -1032,17 +966,14 @@ def _scrubbed_parent_env() -> dict[str, str]:
     }
 
 
-def _use_flox() -> bool:
-    """Whether ``GTM_DEPLOY_VIA_FLOX`` selects the Flox executor.
+def _use_dagger() -> bool:
+    """Whether this host process should hand the recipe to the wrapper."""
+    return env_flag(RUN_WITH_DAGGER) and not in_container_phase()
 
-    Routed through ``env_flag`` so ``GTM_DEPLOY_VIA_FLOX=true`` fails loudly
-    instead of silently selecting Dagger, which is what an ``== "1"``
-    comparison used to do.
-    """
-    try:
-        return env_flag("GTM_DEPLOY_VIA_FLOX")
-    except ValueError as exc:
-        _fail(str(exc))
+
+def _needs_flox_preflight() -> bool:
+    """Whether this host process, rather than the image, needs Flox probing."""
+    return not env_flag(RUN_WITH_DAGGER) and not in_container_phase()
 
 
 # ---------------------------------------------------------------------------
@@ -1083,6 +1014,7 @@ def _fetch_infisical_value(
     *,
     env_slug: str = MODAL_TOKEN_INFISICAL_ENV,
 ) -> str:
+    """Fetch one required secret value from the configured Infisical environment."""
     proc = subprocess.run(
         [
             "infisical",
@@ -1110,112 +1042,40 @@ def _fetch_infisical_value(
     return proc.stdout.strip()
 
 
-def _content_addressed_secret_name(base: str, value: str) -> str:
-    """Derive a Dagger secret name that changes when ``value`` changes.
-
-    ``dagger.dag.set_secret(name, value)`` caches downstream ``with_exec``
-    steps keyed on the secret's name/ID, not its plaintext — rotating a
-    token (e.g. switching Infisical projects) while keeping the same literal
-    name silently replays a stale cached ``modal deploy`` result against the
-    OLD credentials. Suffixing the name with a hash of the value ties the
-    Dagger secret's identity to its content without leaking the value into
-    logs or the returned name.
-    """
-    digest = hashlib.sha256(value.encode()).hexdigest()[:12]
-    return f"{base}-{digest}"
-
-
-def _dagger_secret_base(env_name: str) -> str:
-    """``MODAL_TOKEN_ID`` -> ``modal-token-id``, the Dagger secret's base name."""
-    return env_name.lower().replace("_", "-")
-
-
 async def _deploy_via_dagger(
     handler_file: Path,
     *,
     deploy_env: dict[str, str],
 ) -> None:
-    """Run :func:`deploy_steps` inside a container (Mac/CI isolation layer).
+    """Run the single Flox recipe through the shared Dagger transport.
 
-    Installs ``git`` first: the base image lacks it, but the lock file pins
+    The image is prebuilt from the same Flox manifest, so it already contains
+    the pinned ``git`` and ``uv`` tools. The lock file pins
     the public ``gtm-linear`` git dependency that ``uv sync`` must clone (the
     repo is public, so no credentials are needed). Without git the sync
     aborts with "Git executable not found" before ``modal deploy`` runs
     (ai-8h3).
 
-    Mounts the repo at ``/repo`` (excluding ``.venv``, ``tmp/``, bytecode
-    caches, and **both** the worktree's ``.git`` file/dir — worktrees use
-    a gitlink file, not a directory, and a stray gitlink inside the
-    container points back at host-only git metadata that would break any
-    git-aware step), then runs the recipe's steps in order.
-
-    ``deploy_env`` arrives as Dagger secrets — never image-layer env vars —
-    so the values appear neither in layers nor in Dagger's stderr, and they
-    are attached only before the first step that declares
-    ``with_credentials``. Each handler's ``bootstrap_secret()`` reads those
-    Infisical vars from ``os.environ`` at module-import time inside
-    ``modal deploy`` and bakes them into a ``modal.Secret.from_dict`` the
-    deployed app uses at request time; without them the deploy succeeds but
-    the app raises ``InfisicalAuthError`` on its first webhook event.
+    Credentials are attached to the one container that runs the recipe. The
+    commands share the same filesystem so the sync-created ``.venv`` remains
+    available to the deploy command.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
-    async with dagger.connection(dagger.Config(log_output=sys.stderr)):
-        secrets = {
-            name: dagger.dag.set_secret(
-                _content_addressed_secret_name(_dagger_secret_base(name), value),
-                value,
-            )
-            for name, value in deploy_env.items()
-        }
-        src = dagger.dag.host().directory(
-            str(REPO_ROOT),
-            exclude=[
-                ".venv/",
-                "tmp/",
-                "**/__pycache__/",
-                "*.pyc",
-                # Belt-and-suspenders for both worktree shapes:
-                #   - main checkout: ``.git`` is a directory.
-                #   - linked worktree: ``.git`` is a gitlink file pointing
-                #     back at host-only metadata that is unreachable from
-                #     inside the container.
-                ".git",
-                ".git/",
-            ],
-        )
-        container = (
-            dagger.dag.container()
-            .from_(DAGGER_BASE_IMAGE)
-            # Placed before the source mount so the apt layer caches on the
-            # base image alone and is not busted by source churn.
-            .with_exec(list(GIT_INSTALL_EXEC))
-            .with_directory("/repo", src)
-            .with_workdir("/repo")
-        )
-        credentials_attached = False
-        for step in deploy_steps(rel):
-            if step.with_credentials and not credentials_attached:
-                for name, secret in secrets.items():
-                    container = container.with_secret_variable(name, secret)
-                credentials_attached = True
-            container = container.with_exec(step.argv)
-        await container.sync()
+    steps = deploy_steps(rel)
+    await run_recipe_in_container_async(
+        repo_root=REPO_ROOT,
+        commands=[step.argv for step in steps],
+        command_secrets=[
+            {} if not step.with_credentials else deploy_env for step in steps
+        ],
+    )
 
 
 def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
     """Run :func:`deploy_steps` in a Flox-activated shell (no Dagger engine).
 
-    Selected by ``GTM_DEPLOY_VIA_FLOX``. Dagger cannot run in Conductor cloud
-    sandboxes (issue #284): those kernels cannot load ``xt_comment``, CNI
-    bridge setup fails, the engine falls back to ``networkMode = "host"``,
-    and Dagger's per-exec telemetry proxy — which assumes a per-exec network
-    namespace — errors with no fallback branch. Namespace creation itself
-    demonstrably works: the "nested runc fails at the kernel level" cause
-    recorded for this originally is wrong and dead-ends the next reader
-    (corrected in #443 — do not reinvestigate). Flox pins ``uv``/``git`` via
-    the Nix store (``.flox/env/manifest.toml``) rather than container
-    namespaces, so ``flox activate`` gives the same version-reproducibility
-    guarantee without containerization.
+    Flox is the primary execution path. It pins ``uv``/``git`` via the Nix
+    store, while ``RUN_WITH_DAGGER`` selects the shared isolation wrapper.
 
     Scrub-then-apply, not merge: ``{**os.environ, **deploy_env}`` cannot
     express "unset", and ``libs/telemetry`` distinguishes an unset
@@ -1237,7 +1097,6 @@ def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
     bans everywhere else.
     """
     rel = handler_file.relative_to(REPO_ROOT).as_posix()
-    prefix = flox_activate_prefix(REPO_ROOT)
     base_env = _scrubbed_parent_env()
     # Set after the scrub (which strips every UV_*): redirect the sync into a
     # throwaway venv so an in-place deploy can never prune the operator's.
@@ -1246,12 +1105,7 @@ def _deploy_via_flox(handler_file: Path, *, deploy_env: dict[str, str]) -> None:
         step_env = dict(base_env)
         if step.with_credentials:
             step_env |= deploy_env
-        subprocess.run(
-            [*prefix, *step.argv],
-            cwd=REPO_ROOT,
-            env=step_env,
-            check=True,
-        )
+        flox_run(step.argv, repo_root=REPO_ROOT, env=step_env, clear_env=True)
 
 
 def _verify_clean_restore(handler_file: Path) -> None:
@@ -1310,10 +1164,10 @@ def _deploy_one(handler_file: Path, source: str, *, deploy_env: dict[str, str]) 
     handler_file.write_text(original.replace(PLACEHOLDER, source))
 
     try:
-        if _use_flox():
-            _deploy_via_flox(handler_file, deploy_env=deploy_env)
-        else:
+        if _use_dagger():
             asyncio.run(_deploy_via_dagger(handler_file, deploy_env=deploy_env))
+        else:
+            _deploy_via_flox(handler_file, deploy_env=deploy_env)
     finally:
         # Restore unconditionally — even on deploy failure — so the next
         # iteration starts from a clean placeholder state and so a SIGINT
@@ -1428,7 +1282,11 @@ def _parse_args(handlers: list[str]) -> tuple[str, str]:
 
 
 def main() -> int:
+    """Run the deploy recipe without allowing container re-entry to mutate the host."""
     global _handler, _handler_file  # noqa: PLW0603 — module state for cleanup
+
+    if in_container_phase():
+        _fail("webhook deploy cannot enter through the container phase")
 
     handlers = _discover_handlers()
     handler, source_or_all = _parse_args(handlers)
@@ -1461,9 +1319,8 @@ def main() -> int:
 
     _preflight_uv_version()
     _preflight_env()
-    # Resolve the selector once, up front: a typo'd GTM_DEPLOY_VIA_FLOX must
-    # abort before the lock is taken, not on the first deploy.
-    if _use_flox():
+    # Validate the primary Flox environment before taking the mutation lock.
+    if _needs_flox_preflight():
         _preflight_flox()
 
     # Acquire lock *before* the working-tree preflight so the snapshot below
