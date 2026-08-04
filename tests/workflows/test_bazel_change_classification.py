@@ -1,3 +1,4 @@
+# ruff: noqa: ANN201, INP001, PT006, PT018, S101
 """Tests for the conservative required Bazel CI diff classifier."""
 
 import importlib.util
@@ -58,7 +59,9 @@ def test_bazel_control_files_under_docs_require_full_suite(path: str) -> None:
 
 
 @pytest.mark.parametrize("status", ["D", "R100", "C100", "T"])
-def test_deletes_renames_copies_and_mode_changes_require_full_suite(status: str) -> None:
+def test_deletes_renames_copies_and_mode_changes_require_full_suite(
+    status: str,
+) -> None:
     run_full, _ = MODULE.classify(changes((status, "README.md")))
     assert run_full
 

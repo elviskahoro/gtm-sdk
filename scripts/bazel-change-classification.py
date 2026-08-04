@@ -1,4 +1,5 @@
 #!/usr/bin/env -S uv run python
+# ruff: noqa: N999
 """Classify a git diff for the required Bazel CI check.
 
 The classifier is intentionally an allowlist.  A path that is not known to be
@@ -23,6 +24,7 @@ SKIPPABLE_EXACT: Final = frozenset(
     },
 )
 SKIPPABLE_PREFIXES: Final = ("docs/", ".github/ISSUE_TEMPLATE/")
+MALFORMED_DIFF_MESSAGE: Final = "malformed git diff --name-status -z output"
 BAZEL_CONTROL_NAMES: Final = frozenset(
     {
         ".bazelrc",
@@ -55,7 +57,7 @@ def parse_changes(raw: bytes) -> list[Change]:
         path_count = 2 if status[:1] in {"R", "C"} else 1
         paths = fields[index : index + path_count]
         if len(paths) != path_count or any(not path for path in paths):
-            raise ValueError("malformed git diff --name-status -z output")
+            raise ValueError(MALFORMED_DIFF_MESSAGE)  # noqa: TRY003
         changes.extend(
             Change(status=status, path=path.decode("utf-8")) for path in paths
         )
