@@ -325,7 +325,7 @@ depends_on = []
 # ============================================================================
 
 [[interfaces]]
-from = ["libs.apollo"]
+from = ['libs\.apollo']
 expose = [
   "client",
   "models",
@@ -342,7 +342,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.attio"]
+from = ['libs\.attio']
 expose = [
   "attributes",
   "attributes\\.create_attribute",
@@ -431,11 +431,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.browserbase"]
+from = ['libs\.browserbase']
 expose = []
 
 [[interfaces]]
-from = ["libs.caldotcom"]
+from = ['libs\.caldotcom']
 expose = [
   "BookingCancelledPayload",
   "BookingCreatedPayload",
@@ -458,11 +458,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.clay_http"]
+from = ['libs\.clay_http']
 expose = ["post_row"]
 
 [[interfaces]]
-from = ["libs.dlt"]
+from = ['libs\.dlt']
 expose = [
   "bucket_naming",
   "bucket_naming\\.etl_bucket_name",
@@ -475,7 +475,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.exa"]
+from = ['libs\.exa']
 expose = [
   "client",
   "client\\.ExaAPIKeyMissingError",
@@ -494,7 +494,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.fathom"]
+from = ['libs\.fathom']
 expose = [
   "Webhook",
   "iter_meetings",
@@ -505,7 +505,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.filesystem"]
+from = ['libs\.filesystem']
 expose = [
   "files",
   "files\\.DestinationFileData",
@@ -514,11 +514,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.fireflies"]
+from = ['libs\.fireflies']
 expose = ["FirefliesRecording", "from_motherduck_row"]
 
 [[interfaces]]
-from = ["libs.gmail"]
+from = ['libs\.gmail']
 expose = [
   "url_decoder",
   "url_decoder\\.decode_token",
@@ -526,7 +526,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.granola"]
+from = ['libs\.granola']
 expose = [
   "errors",
   "errors\\.ConfigError",
@@ -552,23 +552,23 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.harvest"]
+from = ['libs\.harvest']
 expose = ["client"]
 
 [[interfaces]]
-from = ["libs.infisical"]
+from = ['libs\.infisical']
 expose = ["errors", "errors.InfisicalAuthError", "errors.InfisicalFetchError"]
 
 [[interfaces]]
-from = ["libs.linear"]
+from = ['libs\.linear']
 expose = ["client"]
 
 [[interfaces]]
-from = ["libs.linkedin"]
+from = ['libs\.linkedin']
 expose = []
 
 [[interfaces]]
-from = ["libs.logging"]
+from = ['libs\.logging']
 expose = [
   "structured",
   "structured\\.log",
@@ -577,15 +577,15 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.meetings"]
+from = ['libs\.meetings']
 expose = ["canonical_meeting_uid"]
 
 [[interfaces]]
-from = ["libs.motherduck"]
+from = ['libs\.motherduck']
 expose = ["connect", "query"]
 
 [[interfaces]]
-from = ["libs.octolens"]
+from = ['libs\.octolens']
 expose = [
   "RelevanceScore",
   "Source",
@@ -597,11 +597,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.openai"]
+from = ['libs\.openai']
 expose = []
 
 [[interfaces]]
-from = ["libs.parallel"]
+from = ['libs\.parallel']
 expose = [
   "client",
   "client\\.extract_excerpts",
@@ -627,7 +627,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.parsers"]
+from = ['libs\.parsers']
 expose = [
   "constants",
   "constants\\.EMAIL_DOMAINS_TO_KEEP",
@@ -638,11 +638,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.perplexity"]
+from = ['libs\.perplexity']
 expose = []
 
 [[interfaces]]
-from = ["libs.rb2b"]
+from = ['libs\.rb2b']
 expose = [
   "Webhook",
   "compute_event_id",
@@ -651,11 +651,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.resend"]
+from = ['libs\.resend']
 expose = []
 
 [[interfaces]]
-from = ["libs.sanity"]
+from = ['libs\.sanity']
 expose = [
   "blog",
   "blog\\.fetch_blog_posts_raw",
@@ -677,11 +677,11 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.slack"]
+from = ['libs\.slack']
 expose = ["client", "get_client", "lookup_user_id_by_email", "post_message"]
 
 [[interfaces]]
-from = ["libs.telemetry"]
+from = ['libs\.telemetry']
 expose = [
   "annotate_span",
   "collector_target",
@@ -693,7 +693,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["libs.webhook"]
+from = ['libs\.webhook']
 expose = [
   "filter",
   "filter\\.WebhookFilter",
@@ -704,7 +704,7 @@ expose = [
 ]
 
 [[interfaces]]
-from = ["src"]
+from = ['src']
 expose = [
   "accounts",
   "accounts\\.accounts",
