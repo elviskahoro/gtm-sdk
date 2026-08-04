@@ -176,21 +176,19 @@ async def run_unit(results: list[JobResult]) -> None:
         "run",
         str(REPO_ROOT / "scripts" / "bazel-dagger-validate.py"),
     ]
-    completed = await anyio.to_thread.run_sync(
-        lambda: subprocess.run(  # noqa: S603 -- fixed local validation command.
-            command,
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        ),
+    completed = await anyio.run_process(
+        command,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
     )
     if completed.returncode == 0:
         results.append(JobResult("unit", ok=True))
         return
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     log = TMP_DIR / "ci-unit.log"
-    log.write_text(completed.stdout + completed.stderr)
+    log.write_bytes(completed.stdout + completed.stderr)
     results.append(
         JobResult(
             "unit",
