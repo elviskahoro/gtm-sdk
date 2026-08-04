@@ -49,6 +49,11 @@ def test_impacted_targets_use_dagger_and_trunk() -> None:
 
 def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     pipeline = PIPELINE.read_text()
+    assert (
+        'BASE_IMAGE = (\n    "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"\n'
+        '    "@sha256:0b973c14a35cb0dc8fe63a2e8c9919fd797ac566de13090fcf0df4a6b3994b78"\n'
+        ")"
+    ) in pipeline
     assert 'dagger.Platform("linux/arm64")' in pipeline
     assert "TRUNK_BAZEL_ACTION_REV" in pipeline
     assert "build-essential" in pipeline
