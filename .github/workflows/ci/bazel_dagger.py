@@ -89,6 +89,9 @@ export PR_BRANCH=HEAD
 export WORKSPACE_PATH=/src
 export BAZEL_PATH=bazel
 export BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root
+if [ -n "${BAZEL_DIFF_BASE_SHA:-}" ]; then
+  git update-ref refs/remotes/origin/main "${BAZEL_DIFF_BASE_SHA}"
+fi
 source "${action_dir}/src/scripts/prerequisites.sh"
 uv run scripts/bazel-requirements-sync.py
 test -s requirements_bazel.txt
@@ -129,10 +132,18 @@ bazel --output_user_root=/var/cache/bazel/output-user-root test //... \
 COMBINED_VALIDATE_CMD = f"""
 set -u
 full_rc=0
-({FULL_VALIDATE_CMD}) || full_rc=$?
+if [ "${{BAZEL_RUN_FULL:-false}}" = "true" ]; then
+  set +e
+  ({FULL_VALIDATE_CMD})
+  full_rc=$?
+  set -e
+fi
 impacted_rc=0
 if [ "${{BAZEL_RUN_IMPACTED:-false}}" = "true" ]; then
-  ({IMPACTED_VALIDATE_CMD}) || impacted_rc=$?
+  set +e
+  ({IMPACTED_VALIDATE_CMD})
+  impacted_rc=$?
+  set -e
 fi
 printf '%s\\n' "$full_rc" > {FULL_RESULT_PATH}
 printf '%s\\n' "$impacted_rc" > {IMPACTED_RESULT_PATH}
@@ -260,6 +271,16 @@ apt-get install --yes --no-install-recommends build-essential ca-certificates cu
             "TRUNK_BAZEL_ACTION_REV",
             TRUNK_BAZEL_ACTION_REV,
         )
+    container = container.with_env_variable(
+        "BAZEL_RUN_IMPACTED",
+        str(run_impacted).lower(),
+    ).with_env_variable(
+        "BAZEL_RUN_FULL",
+        os.environ.get("BAZEL_RUN_FULL", "false").strip().lower(),
+    )
+    diff_base_sha = os.environ.get("BAZEL_DIFF_BASE_SHA", "").strip()
+    if diff_base_sha:
+        container = container.with_env_variable("BAZEL_DIFF_BASE_SHA", diff_base_sha)
     for name in UPLOAD_ENV_VARS:
         value = os.environ.get(name, "").strip()
         if value:
@@ -323,6 +344,10 @@ async def main() -> None:
             message = "BAZEL_RUN_IMPACTED must be 'true' or 'false'"
             raise ValueError(message)
         run_impacted_bool = run_impacted == "true"
+        run_full = os.environ.get("BAZEL_RUN_FULL", "false").strip()
+        if run_full not in {"true", "false"}:
+            message = "BAZEL_RUN_FULL must be 'true' or 'false'"
+            raise ValueError(message)
         diff_jar = (
             _required_env_path("BAZEL_DAGGER_DIFF_JAR")
             if run_impacted_bool
@@ -348,7 +373,16 @@ async def main() -> None:
                 await container.file(ANALYTICS_RESULT_PATH).contents()
             ).strip()
             analytics_rc = int(analytics_result)
-            if run_impacted_bool:
+            has_pr_metadata = all(
+                os.environ.get(name, "").strip()
+                for name in (
+                    "TRUNK_REPOSITORY",
+                    "TRUNK_PR_NUMBER",
+                    "TRUNK_PR_HEAD_SHA",
+                    "TRUNK_PR_BASE_REF",
+                )
+            )
+            if run_impacted_bool and has_pr_metadata:
                 targets = (
                     await container.file(IMPACTED_TARGETS_PATH).contents()
                 ).splitlines()

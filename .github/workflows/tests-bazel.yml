@@ -5,6 +5,23 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+    inputs:
+      run_impacted:
+        required: false
+        type: boolean
+        default: false
+      run_full:
+        required: false
+        type: boolean
+        default: false
+      diff_base_sha:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      TRUNK_API_TOKEN:
+        required: false
 
 concurrency:
   group: bazel-tests-${{ github.workflow }}-${{ github.ref }}
@@ -106,13 +123,15 @@ jobs:
         with:
           version: 0.21.7
 
-      - name: Run Bazel unit tests and impacted targets in Dagger
+      - name: Run impacted Bazel unit tests in Dagger
         env:
           BAZEL_DAGGER_BINARY: ${{ github.workspace }}/.bazel-dagger/toolchain/bazel
           BAZEL_DAGGER_CACHE_DIR: ${{ github.workspace }}/.bazel-dagger/cache
           BAZEL_DAGGER_DIFF_JAR: ${{ github.workspace }}/.bazel-dagger/toolchain/bazel-diff_deploy.jar
           BAZEL_DAGGER_SOURCE_DIR: ${{ runner.temp }}/bazel-dagger-source
-          BAZEL_RUN_IMPACTED: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+          BAZEL_RUN_IMPACTED: ${{ inputs.run_impacted || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+          BAZEL_RUN_FULL: ${{ inputs.run_full || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+          BAZEL_DIFF_BASE_SHA: ${{ inputs.diff_base_sha || (github.event_name == 'push' && github.event.before) || '' }}
           TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
           TRUNK_REPOSITORY: ${{ github.repository }}
           TRUNK_PR_NUMBER: ${{ github.event.pull_request.number }}

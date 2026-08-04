@@ -22,29 +22,33 @@ def _run_step(workflow: dict[object, Any]) -> dict[str, Any]:
     return next(
         step
         for step in workflow["jobs"]["unit_tests"]["steps"]
-        if step.get("name") == "Run Bazel unit tests and impacted targets in Dagger"
+        if step.get("name") == "Run impacted Bazel unit tests in Dagger"
     )
 
 
 def test_only_one_canonical_unit_test_job_runs_on_prs_and_main_pushes() -> None:
     workflow = _workflow(WORKFLOW)
     triggers = workflow.get("on") or workflow.get(True)
-    assert triggers == {
-        "push": {"branches": ["main"]},
-        "pull_request": {"branches": ["main"]},
-    }
+    assert set(triggers) == {"push", "pull_request", "workflow_call"}
+    assert triggers["push"] == {"branches": ["main"]}
+    assert triggers["pull_request"] == {"branches": ["main"]}
     assert set(workflow["jobs"]) == {"unit_tests"}
     assert workflow["jobs"]["unit_tests"]["name"] == "Unit tests"
     assert "if" not in workflow["jobs"]["unit_tests"]
 
 
-def test_canonical_job_runs_full_and_impacted_bazel_in_one_dagger_call() -> None:
+def test_canonical_job_runs_impacted_bazel_in_one_dagger_call() -> None:
     workflow = _workflow(WORKFLOW)
     run_step = _run_step(workflow)
     assert (
         run_step["env"]["BAZEL_RUN_IMPACTED"]
-        == "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}"
+        == "${{ inputs.run_impacted || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}"
     )
+    assert (
+        run_step["env"]["BAZEL_RUN_FULL"]
+        == "${{ inputs.run_full || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}"
+    )
+    assert "github.event.before" in run_step["env"]["BAZEL_DIFF_BASE_SHA"]
     assert run_step["env"]["JOB_NAME"] == "Unit tests"
     assert "TRUNK_API_TOKEN" in run_step["env"]
     assert "TRUNK_PR_NUMBER" in run_step["env"]
@@ -52,11 +56,8 @@ def test_canonical_job_runs_full_and_impacted_bazel_in_one_dagger_call() -> None
 
     pipeline = PIPELINE.read_text()
     assert "COMBINED_VALIDATE_CMD" in pipeline
-    assert (
-        "bazel --output_user_root=/var/cache/bazel/output-user-root test //..."
-        in pipeline
-    )
-    assert "--test_tag_filters=-manual" in pipeline
+    assert "BAZEL_RUN_FULL" in pipeline
+    assert 'if [ "${{BAZEL_RUN_FULL:-false}}" = "true" ]' in pipeline
     assert "--build_event_json_file=/src/full_build_events.json" in pipeline
     assert "--build_event_json_file=/src/impacted_build_events.json" in pipeline
     assert "export HYPOTHESIS_PROFILE=ci" in pipeline
@@ -125,11 +126,24 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert 'export BAZEL_SCOPE_FILTER=""' in pipeline
 
 
-def test_main_pushes_skip_pr_only_impacted_upload_without_skipping_full_tests() -> None:
+def test_main_pushes_run_impacted_tests_without_pr_only_upload() -> None:
     pipeline = PIPELINE.read_text()
-    assert "BAZEL_RUN_IMPACTED:-false" in pipeline
+    assert "has_pr_metadata" in pipeline
     assert "BAZEL_RUN_IMPACTED must be 'true' or 'false'" in pipeline
+    assert (
+        'git update-ref refs/remotes/origin/main "${BAZEL_DIFF_BASE_SHA}"' in pipeline
+    )
     assert "raise SystemExit(rc)" in pipeline
+
+
+def test_full_workflow_is_scheduled_and_manual() -> None:
+    workflow = _workflow(REPO_ROOT / ".github" / "workflows" / "tests-bazel-full.yml")
+    triggers = workflow.get("on") or workflow.get(True)
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    assert workflow["jobs"]["full_suite"]["with"] == {
+        "run_full": True,
+        "run_impacted": False,
+    }
 
 
 def test_workflow_prepares_history_and_cache_before_dagger() -> None:
