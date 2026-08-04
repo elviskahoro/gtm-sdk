@@ -24,10 +24,12 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
+from typer.testing import CliRunner
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -317,6 +319,29 @@ def test_plan_mutations_unknown_id_blocks_even_with_valid_ids(prt: ModuleType) -
 # ---------------------------------------------------------------------------
 
 
+def test_typer_cli_preserves_subcommand_options_and_repeatable_threads(
+    prt: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[SimpleNamespace] = []
+    monkeypatch.setattr(prt, "_run", lambda args: captured.append(args) or 0)
+    result = CliRunner().invoke(
+        prt.app,
+        ["resolve", "--repo", "o/r", "--pr", "1", "--thread", "T1", "--thread", "T2"],
+    )
+    assert result.exit_code == 0
+    assert captured[0].threads == ["T1", "T2"]
+    assert captured[0].format == "table"
+
+
+def test_typer_cli_reports_help_and_usage_errors(prt: ModuleType) -> None:
+    runner = CliRunner()
+    assert runner.invoke(prt.app, ["--help"]).exit_code == 0
+    assert (
+        runner.invoke(prt.app, ["resolve", "--repo", "o/r"]).exit_code == prt.EXIT_USAGE
+    )
+
+
 def test_cmd_inspect_never_calls_resolve_mutation(prt: ModuleType) -> None:
     calls: list[list[str]] = []
 
@@ -324,8 +349,13 @@ def test_cmd_inspect_never_calls_resolve_mutation(prt: ModuleType) -> None:
         calls.append(args)
         return json.dumps(_threads_payload([_thread_node("T1")]))
 
-    args = prt._build_parser().parse_args(
-        ["inspect", "--repo", "o/r", "--pr", "1", "--format", "json"],
+    args = SimpleNamespace(
+        command="inspect",
+        repo="o/r",
+        pr=1,
+        provider=None,
+        unresolved_only=False,
+        format="json",
     )
     exit_code = prt._cmd_inspect(args, fake_run_gh)
     assert exit_code == prt.EXIT_OK
@@ -356,8 +386,13 @@ def test_cmd_resolve_mutates_only_selected_thread(prt: ModuleType) -> None:
             _threads_payload([_thread_node("T1"), _thread_node("T2", resolved=True)]),
         )
 
-    args = prt._build_parser().parse_args(
-        ["resolve", "--repo", "o/r", "--pr", "1", "--thread", "T1", "--thread", "T2"],
+    args = SimpleNamespace(
+        command="resolve",
+        repo="o/r",
+        pr=1,
+        threads=["T1", "T2"],
+        allow_outdated=False,
+        format="table",
     )
     exit_code = prt._cmd_resolve(args, fake_run_gh)
     assert exit_code == prt.EXIT_OK
@@ -369,8 +404,13 @@ def test_cmd_resolve_refuses_unknown_thread(prt: ModuleType) -> None:
     def fake_run_gh(_args: list[str]) -> str:
         return json.dumps(_threads_payload([_thread_node("T1")]))
 
-    args = prt._build_parser().parse_args(
-        ["resolve", "--repo", "o/r", "--pr", "1", "--thread", "NOPE"],
+    args = SimpleNamespace(
+        command="resolve",
+        repo="o/r",
+        pr=1,
+        threads=["NOPE"],
+        allow_outdated=False,
+        format="table",
     )
     exit_code = prt._cmd_resolve(args, fake_run_gh)
     assert exit_code == prt.EXIT_REFUSAL
@@ -404,20 +444,13 @@ def test_cmd_resolve_reports_partial_progress_on_mutation_failure(
             )
         return json.dumps(_threads_payload([_thread_node("T1"), _thread_node("T2")]))
 
-    args = prt._build_parser().parse_args(
-        [
-            "resolve",
-            "--repo",
-            "o/r",
-            "--pr",
-            "1",
-            "--thread",
-            "T1",
-            "--thread",
-            "T2",
-            "--format",
-            "json",
-        ],
+    args = SimpleNamespace(
+        command="resolve",
+        repo="o/r",
+        pr=1,
+        threads=["T1", "T2"],
+        allow_outdated=False,
+        format="json",
     )
     exit_code = prt._cmd_resolve(args, fake_run_gh)
     assert exit_code == prt.EXIT_API_ERROR

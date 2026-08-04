@@ -142,7 +142,6 @@ def _bootstrap_uv() -> None:
 if __name__ == "__main__":
     _bootstrap_uv()
 
-import argparse  # noqa: E402
 import asyncio  # noqa: E402
 import atexit  # noqa: E402
 import re  # noqa: E402
@@ -151,6 +150,8 @@ import signal  # noqa: E402
 import subprocess  # noqa: E402
 import tempfile  # noqa: E402
 from typing import TYPE_CHECKING, NamedTuple, NoReturn  # noqa: E402
+
+import typer  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -1200,71 +1201,42 @@ def _infisical_run(
 # ---------------------------------------------------------------------------
 
 
-def _parse_args(handlers: list[str]) -> tuple[str, str]:
-    """Parse argv into ``(handler, source_or_all)``.
+_CLI_HELP = """Substitute the WebhookModelToReplace placeholder, deploy via Dagger-wrapped `modal deploy`, then restore the handler.
 
-    The user-facing UX matches the bash predecessor:
+Preconditions:
+  - INFISICAL_PROJECT_ID and INFISICAL_TOKEN exported
+    (run: set -a && source .env.local && set +a)
+  - INFISICAL_ENV exported (dev|staging|prod) — no default
+  - working tree under webhooks/ is clean
+  - required Modal secrets exist in the dlthub workspace
 
-        scripts/webhooks-handlers-redeploy.py <handler> <source>
-        scripts/webhooks-handlers-redeploy.py <handler> --all
+Handlers and sources are discovered from the repository at execution time.
+Aliases: attio=export_to_attio, etl=export_to_gcp_etl,
+raw=export_to_gcp_raw, slack=export_to_slack.
+"""
 
-    ``--all`` is implemented as an explicit flag rather than a positional
-    sentinel because argparse parses a leading-dash positional as an
-    unknown option, breaking the documented invocation. The caller above
-    sees a single string (either the alias name or the literal ``--all``)
-    and dispatches on that, so the internal contract stays the same.
-    """
-    parser = argparse.ArgumentParser(
-        prog="scripts/webhooks-handlers-redeploy.py",
-        description=(
-            "Substitute the WebhookModelToReplace placeholder, deploy via "
-            "Dagger-wrapped `modal deploy` from an isolated checkout. "
-            "See webhooks/AGENTS.md, and this script's own docstrings, for "
-            "the full set of footguns this encodes."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Preconditions:\n"
-            "  - INFISICAL_PROJECT_ID and INFISICAL_TOKEN exported\n"
-            "    (run: set -a && source .env.local && set +a)\n"
-            "  - INFISICAL_ENV exported (dev|staging|prod) — no default\n"
-            "  - working tree under webhooks/ is clean\n"
-            "  - required Modal secrets exist in the dlthub workspace\n"
-            f"\nDiscovered handlers: {' '.join(handlers)}"
-        ),
-    )
-    aliases = ", ".join(f"{a}={t}" for a, t in HANDLER_ALIASES.items())
-    parser.add_argument(
-        "handler",
-        help=f"one of: {' '.join(handlers)} (aliases: {aliases})",
-    )
-    parser.add_argument(
-        "source",
-        nargs="?",
-        help="a 'Webhook as <Alias>' alias imported by the handler",
-    )
-    parser.add_argument(
-        "--all",
-        dest="all_sources",
-        action="store_true",
-        help="deploy every source imported by the handler",
-    )
-    args = parser.parse_args()
-    if args.all_sources and args.source is not None:
-        parser.error("specify either <source> or --all, not both")
-    if args.all_sources:
-        return args.handler, "--all"
-    if args.source is None:
-        parser.error("specify a <source> alias or pass --all")
-    return args.handler, args.source
+app = typer.Typer(add_completion=False, help=_CLI_HELP)
 
 
-def main() -> int:
+def _validate_deploy_target(
+    handler: str,
+    source: str | None,
+    all_sources: bool,  # noqa: FBT001
+) -> tuple[str, str]:
+    if all_sources and source is not None:
+        raise typer.BadParameter("specify either <source> or --all, not both")
+    if all_sources:
+        return handler, "--all"
+    if source is None:
+        raise typer.BadParameter("specify a <source> alias or pass --all")
+    return handler, source
+
+
+def _run(handler: str, source_or_all: str) -> int:
     """Run the deploy recipe without mutating the operator's checkout."""
     global _handler  # noqa: PLW0603 — module state used for deploy logging
 
     handlers = _discover_handlers()
-    handler, source_or_all = _parse_args(handlers)
     handler = HANDLER_ALIASES.get(handler, handler)
     if handler not in handlers:
         print(
@@ -1336,5 +1308,26 @@ def main() -> int:
     return 0
 
 
+@app.command(help=_CLI_HELP)
+def main(
+    handler: str = typer.Argument(..., help="Webhook handler name or configured alias."),
+    source: str | None = typer.Argument(
+        None,
+        help="A 'Webhook as <Alias>' source imported by the handler.",
+    ),
+    all_sources: bool = typer.Option(
+        False,
+        "--all",
+        help="Deploy every imported source.",
+    ),
+) -> None:
+    selected_handler, source_or_all = _validate_deploy_target(
+        handler,
+        source,
+        all_sources,
+    )
+    raise typer.Exit(_run(selected_handler, source_or_all))
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    app()

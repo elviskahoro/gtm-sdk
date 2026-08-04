@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
+from typer.testing import CliRunner
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -65,14 +66,42 @@ def test_main_uses_flox_recipe_by_default(
 
     runner.side_effect = create_output_dir
     monkeypatch.setattr(hd, "_dump_via_flox", runner)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["dump.py", "--connection-id", "web_x", "--output-dir", str(tmp_path)],
-    )
-
-    assert hd.main() == 0
+    assert hd._run("web_x", None, tmp_path, 100, None) == 0
     runner.assert_called_once()
+
+
+def test_typer_cli_preserves_defaults_and_exclusive_target(
+    hd: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: list[tuple[object, ...]] = []
+
+    def fake_run(*args: object) -> int:
+        captured.append(args)
+        return 0
+
+    monkeypatch.setattr(hd, "_run", fake_run)
+    runner = CliRunner()
+    result = runner.invoke(hd.app, ["--connection-id", "web_x", "--output-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert captured[0][3:] == (100, None)
+    assert runner.invoke(hd.app, []).exit_code == 2
+    assert runner.invoke(hd.app, ["--connection-id", "x", "--connection-name", "x"]).exit_code == 2
+    help_result = runner.invoke(hd.app, ["--help"])
+    assert help_result.exit_code == 0
+    assert "Usage:" in help_result.output
+
+
+def test_typer_cli_propagates_domain_exit_code(
+    hd: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(*_args: object) -> int:
+        return 2
+
+    monkeypatch.setattr(hd, "_run", fake_run)
+    assert CliRunner().invoke(hd.app, ["--connection-id", "web_x"]).exit_code == 2
 
 
 def test_derived_path_outside_the_root_is_refused(
@@ -96,14 +125,8 @@ def test_derived_path_outside_the_root_is_refused(
         return "../sibling"
 
     monkeypatch.setattr(hd, "_slugify", escaping_slug)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["dump.py", "--connection-id", "web_x", "--output-dir", str(root)],
-    )
-
     with pytest.raises(RuntimeError, match="Refusing to replace"):
-        hd.main()
+        hd._run("web_x", None, root, 100, None)
     assert (sibling / "keep.txt").exists()
 
 
