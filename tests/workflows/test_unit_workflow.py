@@ -2,6 +2,7 @@
 
 """Static contracts for the GitHub-hosted ARM64 unit-test workflow."""
 
+import json
 import tomllib
 from pathlib import Path
 
@@ -9,19 +10,15 @@ WORKFLOW = Path(__file__).parents[2] / ".github" / "workflows" / "tests-unit.yml
 PYTEST_DAGGER = (
     Path(__file__).parents[2] / ".github" / "workflows" / "ci" / "pytest_dagger.py"
 )
-PYTEST_DEPENDENCY_DOCKERFILE = (
+PYTEST_DEPENDENCY_PACKER = (
     Path(__file__).parents[2]
     / ".github"
     / "workflows"
     / "ci"
-    / "pytest-deps.Dockerfile"
+    / "pytest_dependency_pack.py"
 )
-PYTEST_DEPENDENCY_DOCKERIGNORE = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
-    f"{PYTEST_DEPENDENCY_DOCKERFILE.name}.dockerignore",
-)
-PYTEST_DEPENDENCY_PACKER = PYTEST_DEPENDENCY_DOCKERFILE.with_name(
-    "pytest_dependency_pack.py",
-)
+FLOX_MANIFEST = Path(__file__).parents[2] / ".flox" / "env" / "manifest.toml"
+FLOX_MANIFEST_LOCK = FLOX_MANIFEST.with_name("manifest.lock")
 PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
 UV_LOCK = Path(__file__).parents[2] / "uv.lock"
 PYTEST_INTEGRATION_DAGGER = (
@@ -61,9 +58,7 @@ def test_unit_workflow_has_no_namespace_dependency() -> None:
         assert "NSC_" not in source
         assert "NAMESPACE_" not in source
     assert not (WORKFLOW.parent.parent / "actionlint.yaml").exists()
-    assert not PYTEST_DEPENDENCY_DOCKERFILE.with_name(
-        "pytest_dependency_key.py",
-    ).exists()
+    assert not (PYTEST_DEPENDENCY_PACKER.parent / "pytest_dependency_key.py").exists()
 
 
 def test_unit_workflow_keeps_trusted_pr_controller() -> None:
@@ -87,11 +82,11 @@ def test_unit_dagger_builds_locked_arm64_dependencies_locally() -> None:
     dagger = PYTEST_DAGGER.read_text()
 
     assert 'dagger.Platform("linux/arm64")' in dagger
-    assert ".docker_build(" in dagger
-    assert "Pytest dependency image: building from the locked Dockerfile" in dagger
+    assert "flox_toolchain_image(source)" in dagger
+    assert "Pytest dependency image: building from the Flox manifest" in dagger
     assert "PYTEST_DEPENDENCY_IMAGE" not in dagger
     assert ".with_registry_auth" not in dagger
-    assert "pytest-deps.Dockerfile" in dagger
+    assert "FLOX_MANIFEST_PATH" in dagger
     assert ".with_file(DEPENDENCY_PACKER_PATH, packer)" in dagger
 
 
@@ -114,22 +109,17 @@ def test_local_dagger_commands_provision_the_project_environment() -> None:
 
 
 def test_unit_dependency_image_contains_only_locked_dependencies() -> None:
-    dockerfile = PYTEST_DEPENDENCY_DOCKERFILE.read_text()
-    dockerignore = PYTEST_DEPENDENCY_DOCKERIGNORE.read_text()
     pyproject = tomllib.loads(PYPROJECT.read_text())
     lock = tomllib.loads(UV_LOCK.read_text())
+    manifest = tomllib.loads(FLOX_MANIFEST.read_text())
+    manifest_lock = json.loads(FLOX_MANIFEST_LOCK.read_text())
 
-    assert "UV_PROJECT_ENVIRONMENT=/opt/venv" in dockerfile
-    assert "COPY pyproject.toml uv.lock ./" in dockerfile
-    assert "COPY . " not in dockerfile
-    assert "--locked" in dockerfile
-    assert "pytest_dependency_pack.py" in dockerfile
     assert PYTEST_DEPENDENCY_PACKER.is_file()
-    assert dockerignore.splitlines()[-1] == (
-        "!.github/workflows/ci/pytest_dependency_pack.py"
-    )
     assert "unit-ci" in pyproject["dependency-groups"]
     assert any(package["name"] == "setuptools" for package in lock["package"])
+    assert manifest["install"]["python313"]["pkg-path"] == "python313"
+    assert manifest["install"]["uv"]["version"] == "0.11.26"
+    assert manifest_lock["manifest"]["install"]["python313"]["pkg-path"] == "python313"
 
 
 def test_unit_workflow_supports_checkpoint_benchmarks() -> None:
