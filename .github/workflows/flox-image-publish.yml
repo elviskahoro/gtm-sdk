@@ -19,6 +19,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - uses: flox/install-flox-action@1128abd73431089ab9d871c893b4e72a729354e1 # v2.6.0
+      - uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: 0.21.7
       - name: Publish toolchain image
         env:
           FLOX_TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository }}/flox-toolchain:${{ github.sha }}

@@ -153,12 +153,9 @@ jobs:
           pipeline=".github/workflows/ci/pytest_dagger.py"
           if [ "${PULL_REQUEST_RUN}" = "true" ]; then
             trusted_pipeline="${RUNNER_TEMP}/pytest_dagger.py"
-            trusted_dockerfile="${RUNNER_TEMP}/pytest-deps.Dockerfile"
             trusted_packer="${RUNNER_TEMP}/pytest_dependency_pack.py"
-            if git show "${BASE_SHA}:.github/workflows/ci/pytest_dagger.py" > "${trusted_pipeline}" &&
-              git show "${BASE_SHA}:.github/workflows/ci/pytest-deps.Dockerfile" > "${trusted_dockerfile}"; then
+            if git show "${BASE_SHA}:.github/workflows/ci/pytest_dagger.py" > "${trusted_pipeline}"; then
               pipeline="${trusted_pipeline}"
-              export PYTEST_DEPENDENCY_DOCKERFILE="${trusted_dockerfile}"
               if git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_pack.py" > "${trusted_packer}"; then
                 export PYTEST_DEPENDENCY_PACKER="${trusted_packer}"
                 echo "Pull request controller: trusted base SHA (${BASE_SHA})"
@@ -168,7 +165,7 @@ jobs:
               fi
             elif [ "${SAME_REPOSITORY_PR}" = "true" ]; then
               echo "::warning::bootstrapping trusted CI assets from this same-repository PR"
-              rm -f "${trusted_pipeline}" "${trusted_dockerfile}" "${trusted_packer}"
+              rm -f "${trusted_pipeline}" "${trusted_packer}"
             else
               echo "::error::trusted CI assets are unavailable for a fork pull request"
               exit 1

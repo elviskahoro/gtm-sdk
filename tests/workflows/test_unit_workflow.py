@@ -67,14 +67,12 @@ def test_unit_workflow_keeps_trusted_pr_controller() -> None:
 
     assert 'git show "${BASE_SHA}:.github/workflows/ci/pytest_dagger.py"' in run_step
     assert (
-        'git show "${BASE_SHA}:.github/workflows/ci/pytest-deps.Dockerfile"' in run_step
-    )
-    assert (
         'git show "${BASE_SHA}:.github/workflows/ci/pytest_dependency_pack.py"'
         in run_step
     )
-    assert "PYTEST_DEPENDENCY_DOCKERFILE" in run_step
     assert "PYTEST_DEPENDENCY_PACKER" in run_step
+    assert "pytest-deps.Dockerfile" not in run_step
+    assert "PYTEST_DEPENDENCY_DOCKERFILE" not in run_step
     assert "PYTEST_DEPENDENCY_IMAGE" not in workflow
 
 
