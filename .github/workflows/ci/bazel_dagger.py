@@ -39,12 +39,12 @@ test "$(bazel --version)" = "bazel {BAZEL_VERSION}"
 bazel --output_user_root=/var/cache/bazel/output-user-root run @python_3_13_13//:python3 -- --version 2>&1 | tee /tmp/hermetic-python-version.log
 test "$(tail -n 1 /tmp/hermetic-python-version.log)" = "Python 3.13.13"
 scripts/bazel-requirements-sync.py --check
-bazel --output_user_root=/var/cache/bazel/output-user-root test //... --config=ci --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
 bazel --output_user_root=/var/cache/bazel/output-user-root run //:gazelle --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
 # Gazelle can create a new BUILD file. Intent-to-add makes that untracked file
 # visible to the following diff without changing the throwaway commit contents.
 git add --intent-to-add -- ':(glob)**/BUILD' ':(glob)**/BUILD.bazel'
 git diff --exit-code -- MODULE.bazel.lock BUILD.bazel ':(glob)**/BUILD' ':(glob)**/BUILD.bazel'
+bazel --output_user_root=/var/cache/bazel/output-user-root test //... --config=ci --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
 """.strip()
 
 IMPACTED_VALIDATE_CMD = """

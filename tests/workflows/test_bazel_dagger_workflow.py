@@ -6,7 +6,8 @@ from typing import Any
 
 import yaml
 
-REPO_ROOT = Path(__file__).parents[2]
+TEST_DIR = Path(__file__).resolve().parent
+REPO_ROOT = TEST_DIR.parents[1]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel-dagger.yml"
 STANDARD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel.yml"
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "bazel_dagger.py"
@@ -24,6 +25,10 @@ def test_trial_runs_on_namespace_for_prs_and_main_pushes() -> None:
     assert isinstance(triggers, dict)
     assert set(triggers) == {"push", "pull_request", "workflow_dispatch"}
     assert workflow["jobs"]["bazel_dagger"]["runs-on"] == "namespace-profile-test"
+    assert workflow["concurrency"] == {
+        "group": "arm64-dagger-bazel-${{ github.workflow }}-${{ github.ref }}",
+        "cancel-in-progress": True,
+    }
 
 
 def test_impacted_target_trial_runs_in_dagger_alongside_trunk() -> None:
@@ -96,24 +101,28 @@ def test_workflow_initializes_cold_namespace_cache_mounts() -> None:
     workflow = _workflow()
     steps = workflow["jobs"]["bazel_dagger"]["steps"]
     names = [step.get("name") for step in steps]
+    assert names.index("Prepare Namespace cache paths") < names.index(
+        "Cache Dagger controller and Bazel data",
+    )
     assert names.index("Cache Dagger controller and Bazel data") < names.index(
         "Initialize Namespace cache mounts",
     )
     assert names.index("Initialize Namespace cache mounts") < names.index(
         "Install Dagger Python SDK",
     )
-    initialize = next(
-        step
-        for step in steps
-        if step.get("name") == "Initialize Namespace cache mounts"
-    )
-    for cache_path in (
+    cache_paths = (
         "$HOME/.dagger-sdk/bazel-controller-venv",
         "$HOME/.dagger-sdk/bazel-uv-python",
         "$HOME/.bazel-dagger/toolchain",
         "$HOME/.bazel-dagger/cache",
+    )
+    for step_name in (
+        "Prepare Namespace cache paths",
+        "Initialize Namespace cache mounts",
     ):
-        assert f'"{cache_path}"' in initialize["run"]
+        step = next(step for step in steps if step.get("name") == step_name)
+        for cache_path in cache_paths:
+            assert f'"{cache_path}"' in step["run"]
 
 
 def test_workflow_classifies_changes_before_starting_dagger() -> None:
