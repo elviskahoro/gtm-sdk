@@ -18,7 +18,7 @@ DEFAULT_BASE = "origin/main"
 
 def _run(command: list[str], *, cwd: Path = REPO_ROOT) -> None:
     """Run a fixed local preparation command and fail on non-zero status."""
-    subprocess.run(command, cwd=cwd, check=True)  # noqa: S603,S607 -- fixed local argv.  # nosec B607
+    subprocess.run(command, cwd=cwd, check=True)  # noqa: S603,S607 -- fixed local argv.  # nosec B603,B607
 
 
 def _resolve_commit(ref: str) -> str:
@@ -90,7 +90,7 @@ def run(base: str, mode: str) -> int:
             ["git", "update-ref", "refs/remotes/origin/main", base_commit],
             cwd=source_dir,
         )
-        return subprocess.run(  # noqa: S603,S607 -- fixed controller argv.  # nosec B607
+        return subprocess.run(  # noqa: S603,S607 -- fixed controller argv.  # nosec B603,B607
             ["uv", "run", "dagger", "run", "python", str(CONTROLLER)],  # noqa: S607 -- uv is resolved via PATH.
             cwd=REPO_ROOT,
             env=_controller_env(
