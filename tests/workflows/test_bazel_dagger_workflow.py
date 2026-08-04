@@ -1,3 +1,4 @@
+# ruff: noqa: INP001, S101 -- workflow tests are standalone and assertion-based.
 """Static contracts for the parallel ARM64 Dagger/Bazel trial in #488."""
 
 from pathlib import Path
@@ -10,13 +11,16 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests-bazel-dagger.yml"
 PIPELINE = REPO_ROOT / ".github" / "workflows" / "ci" / "bazel_dagger.py"
 
 
-def _workflow() -> dict[str, Any]:
-    return yaml.safe_load(WORKFLOW.read_text())
+def _workflow() -> dict[object, Any]:
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    assert isinstance(workflow, dict)
+    return workflow
 
 
 def test_trial_runs_on_namespace_for_prs_and_main_pushes() -> None:
     workflow = _workflow()
-    triggers = workflow.get("on") or workflow[True]
+    triggers = workflow.get("on") or workflow.get(True)
+    assert isinstance(triggers, dict)
     assert set(triggers) == {"push", "pull_request", "workflow_dispatch"}
     assert workflow["jobs"]["bazel_dagger"]["runs-on"] == "namespace-profile-test"
 
@@ -36,7 +40,10 @@ def test_pipeline_uses_arm64_bazel_caches_and_exports_junit() -> None:
     assert "repository_cache=/var/cache/bazel/repository" in pipeline
     assert "disk_cache=/var/cache/bazel/disk" in pipeline
     assert "output_user_root=/var/cache/bazel/output-user-root" in pipeline
-    assert "${BAZEL} test //... --config=ci" in pipeline
+    assert (
+        "bazel --output_user_root=/var/cache/bazel/output-user-root test //... --config=ci"
+        in pipeline
+    )
     assert "GIT_INIT_CMD" in pipeline
     assert "git add --intent-to-add" in pipeline
     assert 'directory("/src/bazel-testlogs").export(JUNIT_HOST_PATH)' in pipeline
@@ -45,7 +52,7 @@ def test_pipeline_uses_arm64_bazel_caches_and_exports_junit() -> None:
 def test_workflow_uploads_bazel_junit_results_to_trunk() -> None:
     workflow = WORKFLOW.read_text()
     assert "trunk-io/analytics-uploader@" in workflow
-    assert 'junit-paths: "bazel-testlogs/**/test.xml"' in workflow
+    assert "junit-paths: bazel-testlogs/**/test.xml" in workflow
 
 
 def test_workflow_persists_the_controller_binary_and_bazel_caches() -> None:
@@ -68,7 +75,9 @@ def test_workflow_initializes_cold_namespace_cache_mounts() -> None:
         "Install Dagger Python SDK",
     )
     initialize = next(
-        step for step in steps if step.get("name") == "Initialize Namespace cache mounts"
+        step
+        for step in steps
+        if step.get("name") == "Initialize Namespace cache mounts"
     )
     for cache_path in (
         "$HOME/.dagger-sdk/bazel-controller-venv",

@@ -1,3 +1,4 @@
+# ruff: noqa: INP001, TRY003 -- .github/workflows/ci/ is a workflow-support package.
 """Run the full Bazel validation suite inside the ARM64 Dagger runner.
 
 This is deliberately a parallel trial runner for #488. It mirrors the
@@ -34,13 +35,12 @@ GIT_INIT_CMD = (
 # hidden behind an attempted test-report export.
 VALIDATE_CMD = f"""
 set -euo pipefail
-BAZEL='bazel --output_user_root=/var/cache/bazel/output-user-root'
-test "$(${BAZEL} --version)" = "bazel {BAZEL_VERSION}"
-${BAZEL} run @python_3_13_13//:python3 -- --version 2>&1 | tee /tmp/hermetic-python-version.log
+test "$(bazel --output_user_root=/var/cache/bazel/output-user-root --version)" = "bazel {BAZEL_VERSION}"
+bazel --output_user_root=/var/cache/bazel/output-user-root run @python_3_13_13//:python3 -- --version 2>&1 | tee /tmp/hermetic-python-version.log
 test "$(tail -n 1 /tmp/hermetic-python-version.log)" = "Python 3.13.13"
 scripts/bazel-requirements-sync.py --check
-${BAZEL} test //... --config=ci --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
-${BAZEL} run //:gazelle --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
+bazel --output_user_root=/var/cache/bazel/output-user-root test //... --config=ci --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
+bazel --output_user_root=/var/cache/bazel/output-user-root run //:gazelle --repository_cache=/var/cache/bazel/repository --disk_cache=/var/cache/bazel/disk
 # Gazelle can create a new BUILD file. Intent-to-add makes that untracked file
 # visible to the following diff without changing the throwaway commit contents.
 git add --intent-to-add -- ':(glob)**/BUILD' ':(glob)**/BUILD.bazel'
@@ -51,7 +51,8 @@ git diff --exit-code -- MODULE.bazel.lock BUILD.bazel ':(glob)**/BUILD' ':(glob)
 def _required_env_path(name: str) -> Path:
     value = os.environ.get(name, "").strip()
     if not value:
-        raise ValueError(f"{name} must name a prepared host cache path")
+        message = f"{name} must name a prepared host cache path"
+        raise ValueError(message)
     return Path(value)
 
 
