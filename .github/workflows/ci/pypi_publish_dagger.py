@@ -1,4 +1,4 @@
-"""Validate, build, and publish both project distributions inside Dagger."""
+"""Keep tagged PyPI releases reproducible through Dagger isolation."""
 
 # ruff: noqa: INP001, ASYNC240 -- workflow script executed directly by Dagger.
 
@@ -19,7 +19,7 @@ BASE_IMAGE = (
 
 
 def _release_command() -> list[str]:
-    """Return the hermetic validation, build, and publish command."""
+    """Keep release validation and artifact creation inside the pinned image."""
     return [
         "bash",
         "-euo",
@@ -36,9 +36,15 @@ def _release_command() -> list[str]:
 
         sdk_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
         cli_version="$(python -c 'import tomllib; print(tomllib.load(open("cli/pyproject.toml", "rb"))["project"]["version"])')"
+        cli_sdk_requirement="$(python -c 'import tomllib; dependencies=tomllib.load(open("cli/pyproject.toml", "rb"))["project"]["dependencies"]; print(next((dependency for dependency in dependencies if dependency.split(";", 1)[0].strip().startswith("gtm-sdk")), ""))')"
         tag_version="${RELEASE_TAG#v}"
         if [[ "$sdk_version" != "$cli_version" ]]; then
           echo "gtm-sdk version $sdk_version does not match gtm-cli version $cli_version" >&2
+          exit 1
+        fi
+        expected_sdk_requirement="gtm-sdk==$sdk_version"
+        if [[ "$cli_sdk_requirement" != "$expected_sdk_requirement" ]]; then
+          echo "gtm-cli must pin $expected_sdk_requirement, found: ${cli_sdk_requirement:-missing}" >&2
           exit 1
         fi
         if [[ "$tag_version" != "$sdk_version" ]]; then
@@ -59,7 +65,7 @@ def _release_command() -> list[str]:
 
 
 def _verify_release_checkout(release_tag: str) -> None:
-    """Require local publication to use a clean checkout of the release tag."""
+    """Ensure local publication releases the intended immutable revision."""
     status = subprocess.run(  # noqa: S603, S607 -- fixed git executable and arguments
         ["/usr/bin/git", "status", "--porcelain", "--untracked-files=all"],
         check=True,
@@ -97,7 +103,7 @@ def _verify_release_checkout(release_tag: str) -> None:
 
 
 async def main() -> None:
-    """Publish the checked-out release using only Dagger container operations."""
+    """Require release invariants before delegating the upload to Dagger."""
     release_tag = os.environ.get("RELEASE_TAG", "").strip()
     publish = os.environ.get("PUBLISH", "true").strip().lower() == "true"
     token = os.environ.get("PYPI_TOKEN", "").strip()
