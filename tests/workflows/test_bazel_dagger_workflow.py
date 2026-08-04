@@ -48,6 +48,7 @@ def test_impacted_target_trials_use_dagger_and_trunk() -> None:
         if step.get("name") == "Run impacted Bazel targets in Dagger"
     )
     assert "BAZEL_DAGGER_DIFF_JAR" in run_step["run"]
+    assert "BAZEL_DAGGER_SOURCE_DIR" in run_step["run"]
     assert "bazel-diff_deploy.jar" in WORKFLOW.read_text()
 
     standard_workflow = STANDARD_WORKFLOW.read_text()
@@ -61,7 +62,7 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert 'dagger.Platform("linux/arm64")' in pipeline
     assert "TRUNK_BAZEL_ACTION_REV" in pipeline
     assert "BAZEL_DAGGER_DIFF_JAR" in pipeline
-    assert 'directory("/src/.git", dag.host().directory(".git"))' in pipeline
+    assert 'source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")' in pipeline
     assert "prerequisites.sh" in pipeline
     assert "compute_impacted_targets.sh" in pipeline
     assert "test_impacted_targets.sh" in pipeline
@@ -72,6 +73,9 @@ def test_workflow_initializes_namespace_cache_mounts_before_dagger() -> None:
     workflow = _workflow(WORKFLOW)
     steps = workflow["jobs"]["bazel_impacted_dagger"]["steps"]
     names = [step.get("name") for step in steps]
+    assert names.index("Prepare self-contained Git history") < names.index(
+        "Run impacted Bazel targets in Dagger",
+    )
     assert names.index("Prepare Namespace cache paths") < names.index(
         "Cache Dagger controller and Bazel data",
     )

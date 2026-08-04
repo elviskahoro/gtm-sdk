@@ -59,14 +59,14 @@ def _required_env_path(name: str) -> Path:
 def build_container(
     bazel_binary: Path,
     cache_dir: Path,
+    source_dir: Path,
     *,
     diff_jar: Path,
 ) -> dagger.Container:
     """Build the isolated ARM64 Bazel environment from Namespace-backed caches."""
     source = dag.host().directory(
-        ".",
+        str(source_dir),
         exclude=[
-            ".git",
             ".venv",
             ".pytest_cache",
             ".ruff_cache",
@@ -89,13 +89,11 @@ apt-get install --yes --no-install-recommends git unzip
         .with_workdir("/src")
         .with_directory("/var/cache/bazel", dag.host().directory(str(cache_dir)))
     )
-    container = (
-        container.with_directory("/src/.git", dag.host().directory(".git"))
-        .with_file("/opt/bazel-diff.jar", dag.host().file(str(diff_jar)))
-        .with_env_variable(
-            "TRUNK_BAZEL_ACTION_REV",
-            TRUNK_BAZEL_ACTION_REV,
-        )
+    container = container.with_file(
+        "/opt/bazel-diff.jar", dag.host().file(str(diff_jar))
+    ).with_env_variable(
+        "TRUNK_BAZEL_ACTION_REV",
+        TRUNK_BAZEL_ACTION_REV,
     )
     return container.with_exec(
         [
@@ -112,9 +110,11 @@ async def main() -> None:
         bazel_binary = _required_env_path("BAZEL_DAGGER_BINARY")
         cache_dir = _required_env_path("BAZEL_DAGGER_CACHE_DIR")
         diff_jar = _required_env_path("BAZEL_DAGGER_DIFF_JAR")
+        source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")
         container = build_container(
             bazel_binary,
             cache_dir,
+            source_dir,
             diff_jar=diff_jar,
         )
         await container.sync()
