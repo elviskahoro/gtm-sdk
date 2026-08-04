@@ -15,7 +15,10 @@ pytest_test(
 pytest_test(
     name = "test_integration_workflow",
     srcs = ["test_integration_workflow.py"],
-    data = ["//:github_workflow_sources"],  # keep
+    data = [
+        "//:github_workflow_sources",
+        "//:flox_manifest_sources",
+    ],  # keep
     pyi_deps = ["@pypi//types_pyyaml"],
     deps = [
         "//tests:conftest",
