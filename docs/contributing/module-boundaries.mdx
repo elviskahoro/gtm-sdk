@@ -44,7 +44,7 @@ tach runs as a trunk custom linter (see the `oss-linter-trunk-tach` plugin), alo
    uv run tach show                  # Visualize the dependency graph
    ```
 
-2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs the normal hold-the-line checks, followed by an explicit full-graph `trunk check --filter=tach --all` step. This ensures module boundaries are checked even when a change does not touch a Python file. Violations block merges.
+2. **In CI** — The `trunk-check.yml` workflow's `Trunk Check` step runs the normal hold-the-line checks, followed by an explicit full-graph `trunk check --filter=tach --all` step. This ensures module boundaries are checked even when a change does not touch a Python file. Violations block merges. The check runs with `exact = true` and `root_module = "forbid"`, so unused `depends_on` entries and undeclared packages both fail CI.
 
 ## Common violations and fixes
 
@@ -73,12 +73,14 @@ The CLI layer can import types and utilities from any adapter (for validation, r
 The `tach.toml` file at the repo root defines:
 
 - **`source_roots`** — Where to search for modules (the repo root)
-- **`exclude`** — Paths to skip (tests, docs, scripts, etc.)
+- **`exclude`** — Paths to skip (tests, docs, scripts, `deploy.py`, etc.)
 - **`modules`** — Explicit layer definitions and utility declarations
+- **`exact`** — Fail when `depends_on` lists declare imports the code does not make (keeps allowlists honest)
+- **`root_module = "forbid"`** — Every file under `source_roots` must belong to a configured module
 - **`forbid_circular_dependencies`** — Prevent circular imports
 - **`ignore_type_checking_imports`** — Allow `TYPE_CHECKING` blocks to bypass import rules (used by webhook type stubs)
 
-See the `tach.toml` source for the full configuration.
+When you add a real import across modules, update `depends_on` (or run `uv run tach sync --add`) in the same change. See the `tach.toml` source for the full configuration.
 
 ## Resources
 

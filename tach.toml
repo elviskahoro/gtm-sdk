@@ -6,6 +6,10 @@
 
 source_roots = ["."]
 exclude = [
+  # Modal entrypoint must live at repo root (src/attio/ would shadow the
+  # attio pip package if deploy.py moved under src/). Keep it out of the
+  # module graph rather than inventing a one-file root module for it.
+  "deploy.py",
   "tests/**",
   "docs/**",
   "api/**",
@@ -19,6 +23,14 @@ exclude = [
 ]
 
 forbid_circular_dependencies = true
+# Fail when depends_on lists declare imports the code does not make. Without
+# this, cli/src/webhooks can keep a "depend on every adapter" allowlist and
+# new cross-layer imports never get reviewed in tach.toml.
+exact = true
+# Every file under source_roots must belong to a configured module. The
+# previous default ("ignore") left undeclared packages like libs.clay_http
+# invisible to the graph.
+root_module = "forbid"
 ignore_type_checking_imports = true
 
 # ============================================================================
@@ -45,35 +57,14 @@ utility = true
 path = "cli"
 depends_on = [
   "src",
-  "libs.apollo",
   "libs.attio",
-  "libs.browserbase",
-  "libs.caldotcom",
   "libs.dlt",
-  "libs.exa",
-  "libs.fathom",
-  "libs.fireflies",
   "libs.gmail",
   "libs.granola",
-  "libs.harvest",
   "libs.infisical",
-  "libs.linear",
-  "libs.linkedin",
-  "libs.logging",
-  "libs.meetings",
-  "libs.motherduck",
-  "libs.octolens",
-  "libs.openai",
-  "libs.parallel",
   "libs.parsers",
-  "libs.perplexity",
-  "libs.rb2b",
-  "libs.resend",
   "libs.sanity",
-  "libs.slack",
-  "libs.telemetry",
   "libs.webhook",
-  "libs.filesystem",
 ]
 
 [[modules]]
@@ -81,68 +72,35 @@ path = "src"
 depends_on = [
   "libs.apollo",
   "libs.attio",
-  "libs.browserbase",
   "libs.caldotcom",
+  "libs.clay_http",
   "libs.dlt",
   "libs.exa",
   "libs.fathom",
   "libs.fireflies",
-  "libs.gmail",
   "libs.granola",
   "libs.harvest",
   "libs.infisical",
   "libs.linear",
-  "libs.linkedin",
-  "libs.logging",
   "libs.meetings",
   "libs.motherduck",
   "libs.octolens",
-  "libs.openai",
   "libs.parallel",
   "libs.parsers",
-  "libs.perplexity",
   "libs.rb2b",
-  "libs.resend",
   "libs.sanity",
   "libs.slack",
-  "libs.telemetry",
   "libs.webhook",
-  "libs.filesystem",
 ]
 
 [[modules]]
 path = "webhooks"
 depends_on = [
   "src",
-  "libs.apollo",
   "libs.attio",
-  "libs.browserbase",
-  "libs.caldotcom",
   "libs.dlt",
-  "libs.exa",
-  "libs.fathom",
-  "libs.fireflies",
-  "libs.gmail",
-  "libs.granola",
-  "libs.harvest",
   "libs.infisical",
-  "libs.linear",
-  "libs.linkedin",
-  "libs.logging",
-  "libs.meetings",
-  "libs.motherduck",
-  "libs.octolens",
-  "libs.openai",
-  "libs.parallel",
-  "libs.parsers",
-  "libs.perplexity",
-  "libs.rb2b",
-  "libs.resend",
-  "libs.sanity",
   "libs.slack",
-  "libs.telemetry",
-  "libs.webhook",
-  "libs.filesystem",
 ]
 
 # ============================================================================
@@ -152,107 +110,111 @@ depends_on = [
 
 [[modules]]
 path = "libs.apollo"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.attio"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.browserbase"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.caldotcom"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
+
+[[modules]]
+path = "libs.clay_http"
+depends_on = []
 
 [[modules]]
 path = "libs.dlt"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.exa"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.fathom"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.fireflies"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.gmail"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.granola"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.harvest"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.infisical"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.linear"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.linkedin"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.meetings"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.motherduck"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.octolens"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.openai"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.parallel"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.parsers"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.perplexity"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.rb2b"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.resend"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.sanity"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.slack"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 [[modules]]
 path = "libs.webhook"
-depends_on = ["libs.telemetry", "libs.logging", "libs.filesystem"]
+depends_on = []
 
 # ============================================================================
 # DATA EXPORT: Standalone products with no inter-product dependencies
