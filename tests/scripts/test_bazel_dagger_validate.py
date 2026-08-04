@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,10 +13,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from types import ModuleType
 
-    import pytest
+import pytest  # noqa: TC002
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "bazel-dagger-validate.py"
+GIT_FAILURE = 128
 
 
 def _load() -> ModuleType:
@@ -32,6 +34,25 @@ def test_default_base_is_origin_main() -> None:
     module = _load()
 
     assert module.DEFAULT_BASE == "origin/main"
+
+
+def test_main_preserves_unresolved_base_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load()
+
+    def raise_bad_ref(*_args: object, **_kwargs: object) -> int:
+        raise subprocess.CalledProcessError(
+            GIT_FAILURE,
+            ["git"],
+            stderr="fatal: bad ref\n",
+        )
+
+    monkeypatch.setattr(module, "run", raise_bad_ref)
+
+    assert module.main(["--base", "missing"]) == GIT_FAILURE
+    assert "fatal: bad ref" in capsys.readouterr().err
 
 
 def test_controller_environment_uses_shared_cache_and_omits_trunk_metadata(

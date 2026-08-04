@@ -18,7 +18,7 @@ scripts/pr-review-threads.py resolve --repo OWNER/REPO --pr NUMBER \
 
 `--repo`/`--pr` default to the current branch's associated PR (via `gh pr view`). `--provider coderabbitai` is a shorthand for the `coderabbitai[bot]` author login; any other value matches an exact `author.login`.
 
-`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is passed only as a child-process environment variable — never in command-line arguments, image layers, logs, or the script's own output. With `RUN_WITH_DAGGER=1`, the wrapper supplies it to the container as a secret environment variable.
+`GH_TOKEN` (or `GITHUB_TOKEN`, or `gh auth token` output) is required and is passed only as a child-process environment variable — never in command-line arguments, image layers, logs, or the script's own output. With `RUN_WITH_DAGGER=1`, the wrapper supplies it to the container as a secret environment variable; otherwise it stays in the activated project process.
 
 ## Safety model
 

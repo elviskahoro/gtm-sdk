@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import sys
 import tomllib
 from pathlib import Path
@@ -56,6 +57,7 @@ def test_existing_valid_artifacts_are_reused(
 
     assert toolchain.bazel == bazel
     assert toolchain.bazel_diff == diff
+    assert toolchain.bazel.stat().st_mode & 0o100
 
 
 def test_dagger_bazel_download_pins_are_stable() -> None:
@@ -69,6 +71,28 @@ def test_dagger_bazel_download_pins_are_stable() -> None:
     assert module.BAZEL_SHA256 == (
         "049dd21f40ad979db11c3ee68c96a42ce75f1185e69ac61ab20de1501427a410"
     )
+
+
+def test_download_uses_bounded_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load()
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(url: str, *, timeout: int) -> io.BytesIO:
+        seen.update(url=url, timeout=timeout)
+        return io.BytesIO(b"payload")
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+    destination = tmp_path / "artifact"
+    module._download("https://example.invalid/artifact", destination)  # noqa: SLF001
+
+    assert seen == {
+        "url": "https://example.invalid/artifact",
+        "timeout": module.DOWNLOAD_TIMEOUT_SECONDS,
+    }
+    assert destination.read_bytes() == b"payload"
 
 
 def test_dagger_bazel_pin_matches_flox_manifest() -> None:

@@ -18,6 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DOWNLOAD_TIMEOUT_SECONDS = 60
+DOWNLOAD_TMP_DIR = REPO_ROOT / "tmp" / "bazel-dagger-downloads"
 BAZEL_VERSION = "9.2.0"
 BAZEL_SHA256 = "049dd21f40ad979db11c3ee68c96a42ce75f1185e69ac61ab20de1501427a410"
 BAZEL_URL = (
@@ -48,7 +51,10 @@ def _matches_checksum(path: Path, expected: str) -> bool:
 
 def _download(url: str, destination: Path) -> None:
     """Download one pinned artifact to a temporary or cache destination."""
-    request = urlopen(url)  # noqa: S310 -- URLs and checksums are pinned above.  # nosec B310
+    request = urlopen(  # noqa: S310 -- URLs and checksums are pinned above.  # nosec B310
+        url,
+        timeout=DOWNLOAD_TIMEOUT_SECONDS,
+    )
     with request, destination.open("wb") as output:
         shutil.copyfileobj(request, output)
 
@@ -64,9 +70,12 @@ def _ensure_artifact(
     """Verify or atomically download one controller artifact."""
     destination = directory / name
     if _matches_checksum(destination, checksum):
+        if executable:
+            destination.chmod(destination.stat().st_mode | stat.S_IXUSR)
         return destination
 
-    with tempfile.NamedTemporaryFile(dir=directory, delete=False) as temporary:
+    DOWNLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=DOWNLOAD_TMP_DIR, delete=False) as temporary:
         temporary_path = Path(temporary.name)
     try:
         _download(url, temporary_path)

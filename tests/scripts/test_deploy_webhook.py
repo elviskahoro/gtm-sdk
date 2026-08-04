@@ -265,6 +265,11 @@ def _run_deploy(
     env["INFISICAL_TOKEN"] = "test-token"
     env.pop("RUN_WITH_DAGGER", None)
     env.pop("CONTAINER_PHASE", None)
+    flox_env = deploy_workspace.root / "tmp" / "flox-env"
+    (flox_env / "bin").mkdir(parents=True)
+    for tool in ("uv", "git"):
+        (flox_env / "bin" / tool).touch()
+    env["FLOX_ENV"] = str(flox_env)
     # INFISICAL_ENV is a fail-closed preflight added by ai-2aw — see the
     # script header. Tests pin to "dev" since they stub the modal binary
     # and never reach Infisical.
@@ -310,11 +315,21 @@ def test_substitution_and_restore(
         deploy_workspace.handler_file.suffix + ".bak",
     )
     assert not bak.exists(), "stale .bak sidecar left behind"
-    # The Flox preflight runs (it is gated on the selector) and survives the
-    # pass-through `flox` stub, which activates nothing and so reports no
-    # FLOX_ENV. It must degrade to "unverified", not abort the deploy.
+    # The Flox preflight runs before mutation and verifies the activated tools.
     assert "Preflighting Flox environment" in result.stdout
-    assert "toolchain pinning unverified" in result.stdout
+    assert "FLOX_ENV=" in result.stdout
+
+
+def test_missing_flox_env_fails_before_mutation(
+    deploy_workspace: DeployWorkspace,
+    stub_bin: Path,
+) -> None:
+    original = deploy_workspace.handler_file.read_bytes()
+    result = _run_deploy(deploy_workspace, stub_bin, env_overrides={"FLOX_ENV": ""})
+
+    assert result.returncode != 0
+    assert "toolchain pinning cannot be verified" in result.stderr
+    assert deploy_workspace.handler_file.read_bytes() == original
 
 
 def test_all_flag_deploys_every_source(

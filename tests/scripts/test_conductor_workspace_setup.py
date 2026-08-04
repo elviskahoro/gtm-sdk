@@ -301,6 +301,7 @@ def test_successful_flox_activation_uses_flox_provided_tools(tmp_path: Path) -> 
     assert "flox activate" in log.read_text()
     assert "flox-bd version" in log.read_text()
     assert "flox-roborev version" in log.read_text()
+    assert "flox-bazel --version" in log.read_text()
     assert "fallback-roborev" not in log.read_text()
 
 

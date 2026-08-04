@@ -18,14 +18,25 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - uses: flox/install-flox-action@1128abd73431089ab9d871c893b4e72a729354e1 # v2.6.0
       - uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
         with:
           version: 0.21.7
+      - name: Check latest publication eligibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)" == "${GITHUB_SHA}" ]]; then
+            echo "FLOX_PUBLISH_LATEST=true" >> "$GITHUB_ENV"
+          else
+            echo "FLOX_PUBLISH_LATEST=false" >> "$GITHUB_ENV"
+          fi
       - name: Publish toolchain image
         env:
           FLOX_TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository }}/flox-toolchain:${{ github.sha }}

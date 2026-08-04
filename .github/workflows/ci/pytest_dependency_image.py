@@ -75,8 +75,10 @@ def dependency_base(source: dagger.Directory) -> dagger.Container:
             [
                 "bash",
                 "-c",
-                "uv sync --all-extras --dev --compile-bytecode --locked "
-                "--no-install-project --python python3.13",
+                (
+                    "uv sync --all-extras --dev --compile-bytecode --locked "
+                    "--no-install-project --python python3.13"
+                ),
             ],
         )
         .with_exec(["mkdir", "-p", "/home/runner/.cache/uv"])

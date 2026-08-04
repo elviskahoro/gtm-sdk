@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -119,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run(args.base, run_impacted=not args.skip_impacted)
     except subprocess.CalledProcessError as exc:
+        if exc.stderr:
+            print(exc.stderr, end="", file=sys.stderr)
         return exc.returncode
     except FileNotFoundError as exc:
         print(f"required command is unavailable: {exc.filename}")

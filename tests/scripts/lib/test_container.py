@@ -1,5 +1,7 @@
-"""Tests for the shared Dagger transport boundary."""
+"""Prevent regressions at the Dagger transport trust boundary."""
 
+# These tests intentionally execute direct imports, assertions, private helpers,
+# and typing-only imports to verify the transport boundary contract.
 # ruff: noqa: INP001, S101, SLF001, TC003
 
 from __future__ import annotations

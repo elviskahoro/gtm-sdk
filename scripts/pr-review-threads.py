@@ -252,7 +252,6 @@ def _paginate_thread_comments(run_gh: RunGh, thread: Thread, after: str | None) 
 
 
 def _comment_from_node(node: dict[str, Any]) -> Comment:
-    """Convert one GitHub GraphQL comment node into the local model."""
     author = node.get("author") or {}
     return Comment(
         id=node["id"],
@@ -265,7 +264,6 @@ def _comment_from_node(node: dict[str, Any]) -> Comment:
 
 
 def _thread_from_node(node: dict[str, Any]) -> tuple[Thread, bool, str | None]:
-    """Return the parsed thread, whether its first comment page had more, and its cursor."""
     thread = Thread(
         id=node["id"],
         is_resolved=node["isResolved"],
@@ -315,7 +313,6 @@ def fetch_reviews(
     number: int,
     run_gh: RunGh,
 ) -> list[dict[str, Any]]:
-    """Fetch every pull-request review, following GraphQL cursors."""
     reviews: list[dict[str, Any]] = []
     after = None
     while True:
@@ -337,7 +334,6 @@ def fetch_issue_comments(
     number: int,
     run_gh: RunGh,
 ) -> list[dict[str, Any]]:
-    """Fetch every top-level pull-request comment, following cursors."""
     comments: list[dict[str, Any]] = []
     after = None
     while True:
@@ -359,7 +355,6 @@ def fetch_review_state(
     number: int,
     run_gh: RunGh,
 ) -> ReviewState:
-    """Fetch the complete review state used by inspection and mutation flows."""
     return ReviewState(
         threads=fetch_review_threads(owner, repo, number, run_gh),
         reviews=fetch_reviews(owner, repo, number, run_gh),
@@ -368,7 +363,6 @@ def fetch_review_state(
 
 
 def normalize_provider(provider: str) -> str:
-    """Normalize a friendly provider alias to its GitHub login."""
     return _PROVIDER_ALIASES.get(provider, provider)
 
 
@@ -378,7 +372,6 @@ def filter_threads(
     provider: str | None = None,
     unresolved_only: bool = False,
 ) -> list[Thread]:
-    """Filter threads by author and resolution state without mutating them."""
     result = threads
     if provider:
         login = normalize_provider(provider)
@@ -435,7 +428,6 @@ def plan_mutations(
 
 
 def resolve_thread(thread_id: str, run_gh: RunGh) -> dict[str, Any]:
-    """Resolve one explicitly selected GitHub review thread."""
     payload = _run_graphql(run_gh, _RESOLVE_MUTATION, {"threadId": thread_id})
     return payload["data"]["resolveReviewThread"]["thread"]
 
@@ -470,7 +462,6 @@ def resolve_current_pr(run_gh: RunGh) -> tuple[str, str, int]:
 
 
 def render_threads(threads: list[Thread], fmt: str) -> str:
-    """Render selected threads as human-readable text or structured JSON."""
     if fmt == "json":
         return json.dumps(
             [
@@ -505,7 +496,6 @@ def render_threads(threads: list[Thread], fmt: str) -> str:
 
 
 def _resolve_gh_token() -> str:
-    """Resolve the GitHub token from the environment or the gh credential store."""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
         return token
@@ -555,7 +545,6 @@ def make_run_gh(gh_token: str) -> RunGh:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the inspect/resolve command-line interface."""
     parser = argparse.ArgumentParser(
         prog="scripts/pr-review-threads.py",
         description=(
@@ -601,7 +590,6 @@ def _resolve_repo_and_pr(
     args: argparse.Namespace,
     run_gh: RunGh,
 ) -> tuple[str, str, int]:
-    """Use explicit PR coordinates or resolve the current branch's PR."""
     if args.repo and args.pr:
         owner, repo = args.repo.split("/", 1)
         return owner, repo, args.pr
@@ -669,7 +657,6 @@ def _cmd_resolve(args: argparse.Namespace, run_gh: RunGh) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Dispatch a read-only inspection or explicit thread-resolution command."""
     parser = _build_parser()
     args = parser.parse_args(argv)
 

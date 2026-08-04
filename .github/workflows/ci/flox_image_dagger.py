@@ -19,7 +19,7 @@ import dagger
 
 
 async def main() -> None:
-    """Build and publish an image carrying the exact toolchain lock digest."""
+    """Bind the published image to the committed lock for runtime provenance."""
     repo_root = Path(__file__).resolve().parents[3]
     tar_path = repo_root / "tmp" / "flox-toolchain.tar"
     tar_path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,8 @@ async def main() -> None:
             dagger.dag.set_secret("ghcr-token", token),
         )
         await image.publish(image_ref)
-        await image.publish(latest_ref)
+        if os.environ.get("FLOX_PUBLISH_LATEST") == "true":
+            await image.publish(latest_ref)
 
 
 if __name__ == "__main__":

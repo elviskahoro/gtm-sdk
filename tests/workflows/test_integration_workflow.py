@@ -26,6 +26,7 @@ out fails the guard instead of silently satisfying it.
 """
 
 import ast
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -222,6 +223,12 @@ def test_every_dagger_base_image_is_digest_pinned() -> None:
             if isinstance(argument, ast.Name):
                 argument = assignments.get(argument.id)
             rendered = ast.unparse(argument) if argument is not None else ""
-            assert "@sha256:" in rendered, (
-                f"{path}:{node.lineno} uses an unpinned Dagger base: {rendered}"
-            )
+            try:
+                image = ast.literal_eval(argument) if argument is not None else None
+            except (ValueError, SyntaxError):
+                image = None
+            assert isinstance(image, str)
+            assert re.search(
+                r"@sha256:[0-9a-fA-F]{64}$",
+                image,
+            ), f"{path}:{node.lineno} uses an unpinned Dagger base: {rendered}"

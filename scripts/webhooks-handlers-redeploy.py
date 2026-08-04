@@ -620,7 +620,7 @@ def _preflight_flox() -> None:
     - Tool resolution asks the *activated* shell. ``shutil.which`` in this
       process cannot see inside an activation.
 
-    ``--mode run``, matching :func:`scripts.lib.flox.flox_activate_prefix` — ``--mode dev``
+    ``--mode run``, matching :func:`scripts.lib.flox.preflight` — ``--mode dev``
     resolves a different store path, so probing it would verify the wrong
     environment.
     """
@@ -628,8 +628,9 @@ def _preflight_flox() -> None:
     try:
         flox_env = flox_preflight(REPO_ROOT, ("uv", "git"))
     except FloxEnvironmentNotActivatedError:
-        print("  activation returned no FLOX_ENV; toolchain pinning unverified")
-        return
+        _fail(
+            "Flox activation did not set FLOX_ENV; toolchain pinning cannot be verified",
+        )
     except RuntimeError as exc:
         _fail(f"Flox activation failed: {exc}")
     except (OSError, subprocess.CalledProcessError) as exc:

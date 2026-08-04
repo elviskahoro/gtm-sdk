@@ -161,7 +161,7 @@ def _required_env_path(name: str) -> Path:
 
 
 def _required_env(name: str) -> str:
-    """Read a required non-empty environment value."""
+    """Reject blank metadata before it can authorize a Trunk upload."""
     value = os.environ.get(name, "").strip()
     if not value:
         message = f"{name} must be set for a Trunk upload"
