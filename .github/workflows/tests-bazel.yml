@@ -20,12 +20,51 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Classify changed paths
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          if [ "${FORCE_FULL}" = "true" ] || [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            classification_args=(--force-full)
+          else
+            classification_args=()
+          fi
+          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              diff_range="${BASE_SHA}...${HEAD_SHA}"
+            else
+              diff_range="${BASE_SHA}..${HEAD_SHA}"
+            fi
+            git diff --name-status -z "${diff_range}" \
+              | python3 scripts/bazel-change-classification.py "${classification_args[@]}" \
+              | tee /tmp/bazel-classification.txt
+          else
+            python3 scripts/bazel-change-classification.py --force-full </dev/null \
+              | tee /tmp/bazel-classification.txt
+          fi
+          if grep -q '^full:' /tmp/bazel-classification.txt; then
+            echo "run_full=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "run_full=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Report skipped full suite
+        if: steps.classify.outputs.run_full == 'false'
+        run: |
+          echo "Bazel full suite skipped: $(cat /tmp/bazel-classification.txt)"
+
       - name: Set up uv
+        if: steps.classify.outputs.run_full == 'true'
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
 
       - name: Set up Bazel
+        if: steps.classify.outputs.run_full == 'true'
         uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
         with:
           bazelisk-cache: true
@@ -34,6 +73,7 @@ jobs:
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       - name: Verify toolchains
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           set -euo pipefail
           uv --version
@@ -54,12 +94,15 @@ jobs:
           fi
 
       - name: Check Bazel requirements lock
+        if: steps.classify.outputs.run_full == 'true'
         run: scripts/bazel-requirements-sync.py --check
 
       - name: Run full Bazel suite
+        if: steps.classify.outputs.run_full == 'true'
         run: bazel test //... --config=ci
 
       - name: Check generated Bazel BUILD files
+        if: steps.classify.outputs.run_full == 'true'
         run: |
           set -euo pipefail
           bazel run //:gazelle
