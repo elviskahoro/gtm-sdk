@@ -26,6 +26,7 @@ dependencies = [
   "orjson>=3.10.0",
   "parallel-web",
   "pyarrow>=18.0.0",
+  "pyarrow-hotfix>=0.4",
   "pydantic>=2.13.4",
   "requests>=2.33.1",
   "typer>=0.15",
@@ -50,9 +51,6 @@ dependencies = [
   "fathom-python>=0.0.30",
   "slack-sdk>=3.27",
 ]
-
-[project.optional-dependencies]
-marketplace = ["polars>=1.10.0"]
 
 [tool.setuptools.packages.find]
 include = ["libs*", "scripts*", "src*"]
