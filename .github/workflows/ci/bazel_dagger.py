@@ -20,6 +20,11 @@ set -euo pipefail
 action_dir=/opt/trunk-bazel-action
 git clone --quiet https://github.com/trunk-io/bazel-action.git "${action_dir}"
 git -C "${action_dir}" checkout --quiet "${TRUNK_BAZEL_ACTION_REV}"
+# The impacted-targets helper cleans the workspace after each revision switch.
+# Regenerate the untracked Bazel input after every such cleanup so each Bazel
+# query uses the uv.lock belonging to the revision currently checked out.
+compute_script="${action_dir}/src/scripts/compute_impacted_targets.sh"
+sed -i '/git clean -dfx -f/a rm -rf .venv && uv run scripts/bazel-requirements-sync.py' "${compute_script}"
 
 # Execute the same scripts and filters as trunk-io/bazel-action. Dagger owns
 # the ARM64 container and cache; the GitHub-hosted action remains responsible
@@ -31,6 +36,8 @@ export WORKSPACE_PATH=/src
 export BAZEL_PATH=bazel
 export BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root
 source "${action_dir}/src/scripts/prerequisites.sh"
+uv run scripts/bazel-requirements-sync.py
+test -s requirements_bazel.txt
 java="$(bazel ${BAZEL_STARTUP_OPTIONS} info java-home)/bin/java"
 export MERGE_INSTANCE_BRANCH_HEAD_SHA="${merge_base_sha}"
 export PR_BRANCH_HEAD_SHA="${pr_branch_testing_head_sha}"
