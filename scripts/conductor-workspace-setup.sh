@@ -294,15 +294,27 @@ git config --global alias.roborev '!roborev'
 # Standalone cloud sandboxes have no parent ai/ repo, so there is no shared
 # .beads to symlink to. Prefer it when it's a real Dolt DB (existence alone
 # isn't enough: bogus dirs like a stray $HOME/.beads from a global bd install
-# pass the -e check but aren't a real project), otherwise seed a fresh local
-# DB from the shared DoltHub remote so the sandbox sees real issue history.
+# pass the -e check but aren't a real project). Check the on-disk markers
+# instead of running `bd status`: the primary checkout deliberately disables
+# Dolt auto-start, so a stopped server must not make a healthy database look
+# invalid. If there is no valid primary DB, seed a fresh local DB from the
+# shared DoltHub remote so the sandbox sees real issue history.
+# shellcheck disable=SC2310  # Called in an if condition so a false predicate is expected.
+is_valid_beads_database() {
+  local beads_dir="$1"
+  [[ -d ${beads_dir} ]] || return 1
+  [[ -f ${beads_dir}/metadata.json ]] || return 1
+  [[ -f ${beads_dir}/dolt/.bd-dolt-ok ]] || return 1
+  grep -q '"backend"[[:space:]]*:[[:space:]]*"dolt"' "${beads_dir}/metadata.json"
+}
 if [[ ${REPO_ROOT} == "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ ! -e .beads ]]; then
   unlink .beads
 fi
 if [[ ${REPO_ROOT} != "${PRIMARY_REPO_ROOT}" ]] && [[ -L .beads ]] && [[ "$(readlink .beads)" != "${PRIMARY_REPO_ROOT}/.beads" ]]; then
   unlink .beads
 fi
-if [[ ! -e .beads ]] && [[ -e "${PRIMARY_REPO_ROOT}/.beads" ]] && bd -C "${PRIMARY_REPO_ROOT}" status >/dev/null 2>&1; then
+# shellcheck disable=SC2310  # Predicate intentionally returns false for invalid markers.
+if [[ ! -e .beads ]] && is_valid_beads_database "${PRIMARY_REPO_ROOT}/.beads"; then
   BEADS_REAL="$(cd "${PRIMARY_REPO_ROOT}/.beads" && pwd -P)"
   ln -s "${BEADS_REAL}" .beads
 fi
