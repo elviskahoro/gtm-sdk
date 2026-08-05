@@ -1,9 +1,9 @@
 ---
 title: "PR review-thread utility"
-description: "Inspect and selectively resolve GitHub PR review threads with scripts/pr-review-threads.py, run entirely through a pinned Dagger container."
+description: "Inspect and selectively resolve GitHub PR review threads with scripts/pr-review-threads.py, run in the repo's pinned Flox environment with an opt-in Dagger container."
 ---
 
-`scripts/pr-review-threads.py` replaces the improvised manual workflow of paginating `gh api graphql` for a pull request's review threads and hand-picking unresolved CodeRabbit comments to resolve. It always runs `gh` inside a pinned Dagger container — there is no host `gh` fallback, so it does not run in environments without a Dagger engine (for example, Conductor cloud sandboxes).
+`scripts/pr-review-threads.py` replaces the improvised manual workflow of paginating `gh api graphql` for a pull request's review threads and hand-picking unresolved CodeRabbit comments to resolve. By default it runs `gh` in the repo's activated Flox environment; set `RUN_WITH_DAGGER=1` to opt into the shared Dagger wrapper, which runs the same `gh` calls in the prebuilt Flox-toolchain container.
 
 ## Usage
 
