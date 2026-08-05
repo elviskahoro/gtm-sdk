@@ -138,7 +138,7 @@ def test_tach_ci_runs_against_main_for_affected_tests() -> None:
     workflow = TRUNK_WORKFLOW_PATH.read_text()
     assert "fetch-depth: 0" in workflow  # noqa: S101
     assert "uv run tach test --base origin/main -- -q" in workflow  # noqa: S101
-    assert 'github.event.before' in workflow  # noqa: S101
+    assert "github.event.before" in workflow  # noqa: S101
     assert "0000000000000000000000000000000000000000" in workflow  # noqa: S101
     assert "run: uv run pytest -q" in workflow  # noqa: S101
 
