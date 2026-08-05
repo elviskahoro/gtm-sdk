@@ -159,6 +159,15 @@ def test_workflow_prepares_history_and_cache_before_dagger() -> None:
     assert names.index("Prepare cached Dagger and Bazel paths") < names.index(
         "Install Dagger Python SDK",
     )
+    prepare_cache = next(
+        step
+        for step in steps
+        if step.get("name") == "Prepare cached Dagger and Bazel paths"
+    )
+    assert (
+        'sudo chown -R "$(id -u):$(id -g)" "$HOME/.bazel-dagger/cache"'
+        in prepare_cache["run"]
+    )
     source_step = next(
         step
         for step in steps

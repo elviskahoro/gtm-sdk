@@ -73,6 +73,9 @@ jobs:
             "$HOME/.dagger-sdk/bazel-uv-python" \
             "$HOME/.bazel-dagger/toolchain" \
             "$HOME/.bazel-dagger/cache"
+          # Bazel runs as root inside Dagger and its exported cache can retain
+          # root-owned directories across Actions cache restores.
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.bazel-dagger/cache"
 
       - name: Install Dagger Python SDK
         id: dagger_sdk
