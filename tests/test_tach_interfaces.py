@@ -9,6 +9,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TACH_PATH = REPO_ROOT / "tach.toml"
+TRUNK_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "trunk-check.yml"
 
 
 def _src_edge_adapter_roots() -> set[str]:
@@ -119,3 +120,40 @@ def test_flattened_tach_interfaces_match_package_all() -> None:
     assert not failures, "Tach/package public-interface drift:\n  " + "\n  ".join(  # noqa: S101
         failures,
     )
+
+
+def test_tach_cache_tracks_test_and_configuration_inputs() -> None:
+    """Changes outside source roots must invalidate affected-test results."""
+    config = tomllib.loads(TACH_PATH.read_text())
+    assert config["cache"]["file_dependencies"] == [  # noqa: S101
+        "tests/**",
+        "pyproject.toml",
+        "uv.lock",
+        "tach.toml",
+    ]
+
+
+def test_tach_ci_runs_against_main_for_affected_tests() -> None:
+    """CI must exercise the same base-aware command developers can reproduce."""
+    workflow = TRUNK_WORKFLOW_PATH.read_text()
+    assert "fetch-depth: 0" in workflow  # noqa: S101
+    assert "uv run tach test --base origin/main -- -q" in workflow  # noqa: S101
+    assert 'github.event.before' in workflow  # noqa: S101
+    assert "0000000000000000000000000000000000000000" in workflow  # noqa: S101
+    assert "run: uv run pytest -q" in workflow  # noqa: S101
+
+
+def test_removed_module_aliases_are_not_public_exports() -> None:
+    """Implementation modules are not part of the supported package surface."""
+    removed = {
+        "libs.caldotcom": {"client", "models"},
+        "libs.fathom": {"models"},
+        "libs.infisical": {"errors"},
+        "libs.rb2b": {"models"},
+    }
+    failures = []
+    for package, names in removed.items():
+        exported = _package_all(package)
+        failures.extend(f"{package}.{name}" for name in sorted(names & exported))
+
+    assert not failures, f"Removed aliases remain public: {failures}"  # noqa: S101

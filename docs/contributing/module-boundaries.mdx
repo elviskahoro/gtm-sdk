@@ -163,7 +163,7 @@ The `tach.toml` file at the repo root is configured as strictly as tach allows f
 - **`[[interfaces]]`** — frozen public import surface for `libs.*` and `src`
 - **`[rules]`** — unused / unjustified `tach-ignore` directives are errors
 - **`exclude`** — tests, docs, `api/` fixtures, and root `deploy.py` (Modal entrypoint must stay at repo root)
-- **external path exclusions** — `scripts/**` is operational tooling and `data-gen/marketplace/**` is an optional product; both are excluded from runtime external-dependency ownership checks with rationale in CI and `tach.toml`.
+- **external path exclusions** — `scripts/**` and the Dagger workflow tree are operational tooling excluded from runtime external-dependency ownership checks by the CI command, with rationale documented there.
 
 When you add a real import across modules, update `depends_on` for every enforced form (including `TYPE_CHECKING` and string imports; or run `uv run tach sync --add`). If the target is `libs.*` or `src`, also add the path to that module's `[[interfaces]].expose` list. Add adapter symbols to the package root's `__all__` and import them through `src.edge` when the caller is outside `libs/`.
 
@@ -172,7 +172,7 @@ then update its matching tach interface in the same change. Validate with:
 
 ```shell
 uv run tach check --exact
-uv run tach check-external --exclude 'scripts/**,data-gen/marketplace/**'
+uv run tach check-external --exclude 'scripts/**,.github/workflows/ci/**'
 ```
 
 ## Resources

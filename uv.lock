@@ -1057,8 +1057,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "attio" },
-    { name = "dagger-io" },
-    { name = "dlt", extra = ["duckdb", "motherduck"] },
     { name = "duckdb" },
     { name = "emoji" },
     { name = "exa-py" },
@@ -1081,7 +1079,6 @@ dependencies = [
     { name = "parallel-web" },
     { name = "phonenumbers" },
     { name = "pyarrow" },
-    { name = "pyarrow-hotfix" },
     { name = "pycountry" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -1095,6 +1092,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
+    { name = "dagger-io" },
+    { name = "dlt", extra = ["duckdb", "motherduck"] },
     { name = "gtm-cli" },
     { name = "hypothesis" },
     { name = "pytest" },
@@ -1145,8 +1144,6 @@ unit-ci = [
 [package.metadata]
 requires-dist = [
     { name = "attio", specifier = ">=0.22.8" },
-    { name = "dagger-io", specifier = ">=0.21.7" },
-    { name = "dlt", extras = ["duckdb", "motherduck"], specifier = ">=1.0" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "emoji", specifier = ">=2.15.0" },
     { name = "exa-py", specifier = ">=2.16.0" },
@@ -1169,7 +1166,6 @@ requires-dist = [
     { name = "parallel-web" },
     { name = "phonenumbers", specifier = ">=9.0.34" },
     { name = "pyarrow", specifier = ">=18.0.0" },
-    { name = "pyarrow-hotfix", specifier = ">=0.4" },
     { name = "pycountry", specifier = ">=24.0.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -1183,6 +1179,8 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.8.6" },
+    { name = "dagger-io", specifier = ">=0.21.7" },
+    { name = "dlt", extras = ["duckdb", "motherduck"], specifier = ">=1.0" },
     { name = "gtm-cli", editable = "cli" },
     { name = "hypothesis", specifier = ">=6.156.0" },
     { name = "pytest", specifier = ">=9.0.2" },
@@ -1965,15 +1963,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/eb/771f9ecb0c65e73fe9dccdd1717901b9594f08c4515d000c7c62df573811/pyarrow-24.0.0-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:641f795b361874ac9da5294f8f443dfdbee355cf2bd9e3b8d97aaac2306b9b37", size = 49451819, upload-time = "2026-04-21T10:49:21.474Z" },
     { url = "https://files.pythonhosted.org/packages/48/da/61ae89a88732f5a785646f3ec6125dbb640fa98a540eb2b9889caa561403/pyarrow-24.0.0-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:8adc8e6ce5fccf5dc707046ae4914fd537def529709cc0d285d37a7f9cd442ca", size = 51909252, upload-time = "2026-04-21T10:49:31.164Z" },
     { url = "https://files.pythonhosted.org/packages/cb/1a/8dd5cafab7b66573fa91c03d06d213356ad4edd71813aa75e08ce2b3a844/pyarrow-24.0.0-cp313-cp313t-win_amd64.whl", hash = "sha256:9b18371ad2f44044b81a8d23bc2d8a9b6a6226dca775e8e16cfee640473d6c5d", size = 27388127, upload-time = "2026-04-21T10:49:37.334Z" },
-]
-
-[[package]]
-name = "pyarrow-hotfix"
-version = "0.7"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d2/ed/c3e8677f7abf3981838c2af7b5ac03e3589b3ef94fcb31d575426abae904/pyarrow_hotfix-0.7.tar.gz", hash = "sha256:59399cd58bdd978b2e42816a4183a55c6472d4e33d183351b6069f11ed42661d", size = 9910, upload-time = "2025-04-25T10:17:06.247Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/c3/94ade4906a2f88bc935772f59c934013b4205e773bcb4239db114a6da136/pyarrow_hotfix-0.7-py3-none-any.whl", hash = "sha256:3236f3b5f1260f0e2ac070a55c1a7b339c4bb7267839bd2015e283234e758100", size = 7923, upload-time = "2025-04-25T10:17:05.224Z" },
 ]
 
 [[package]]

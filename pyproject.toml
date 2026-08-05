@@ -8,9 +8,6 @@ version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "attio>=0.22.8",
-  "dlt[duckdb,motherduck]>=1.0",
-  # Imported directly by libs/motherduck (md: connections). Already transitive
-  # via dlt[duckdb], but declared explicitly since we import the package.
   "duckdb>=1.0",
   "exa-py>=2.16.0",
   "fastapi[standard]",
@@ -25,7 +22,6 @@ dependencies = [
   "orjson>=3.10.0",
   "parallel-web",
   "pyarrow>=18.0.0",
-  "pyarrow-hotfix>=0.4",
   "pydantic>=2.13.4",
   "requests>=2.33.1",
   "typer>=0.15",
@@ -38,7 +34,6 @@ dependencies = [
   "phonenumbers>=9.0.34",
   "resend>=2.30.0",
   "uuid7>=0.1.0",
-  "dagger-io>=0.21.7",
   "pyyaml>=6.0.3",
   "pycountry>=24.0.0",
   "fathom-python>=0.0.30",
@@ -131,6 +126,8 @@ extend = ".trunk/configs/ruff.toml"
 [dependency-groups]
 dev = [
   "bandit>=1.8.6",
+  "dagger-io>=0.21.7",
+  "dlt[duckdb,motherduck]>=1.0",
   "hypothesis>=6.156.0",
   "gtm-cli",
   "pytest>=9.0.2",
