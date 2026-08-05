@@ -76,14 +76,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from cli.webhook._modal import modal_url_for_app  # noqa: E402
-from libs.caldotcom.client import CalcomClient  # noqa: E402
-from libs.caldotcom.models import BookingCreatedPayload, Webhook  # noqa: E402
 from scripts.lib.env import infisical_run_example  # noqa: E402
 
 # Intentionally reuse the webhook's exact status normalization rather than
 # duplicate the mapping — keeping the backfill's filter in lockstep with live.
 from src.caldotcom.webhook.booking import (  # noqa: E402
     caldotcom_status_to_attio,
+)
+from src.edge import (  # noqa: E402
+    BookingCreatedPayload,
+    CalcomClient,  # noqa: E402
+    Webhook,
 )
 
 if TYPE_CHECKING:

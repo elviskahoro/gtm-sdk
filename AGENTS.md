@@ -13,7 +13,7 @@ to mirror them.
 
 - `libs/<service>/` — wrap **one** external SDK/API. Idiomatic Python types/functions only.
 - `src/` — orchestration. Multi-step flows, side effects, Modal `@app.function` / `@modal.fastapi_endpoint` decorators.
-- `cli/` — All CLI command surfaces use Typer subapps. Parse → preflight → call `src/` → render. **No business logic.**
+- `cli/` — All CLI command surfaces use Typer subapps. Parse → preflight → call `src/` → render. **No business logic.** Edge code reaches adapters through `src/` only.
 - `data-gen/` — independent, composable data products.
 - `webhooks/` — standalone Modal apps. See `webhooks/AGENTS.md`.
 - `api/specs/`, `api/samples/` — external API specs and fixture payloads. Read-only reference.
@@ -22,6 +22,7 @@ to mirror them.
 ### Hard rules
 
 - **No cross-lib imports.** `libs/<x>` must not import from `libs/<y>`. If two adapters need to coordinate, do it in `src/`. Exceptions: utilities (`libs.telemetry`, `libs.logging`, `libs.filesystem`) are importable from anywhere.
+- **Closed orchestration boundary.** `cli/`, `webhooks/`, and `scripts/` use the `src` facade for adapter and utility access; only `src/` imports adapter implementations. The facade keeps edge imports stable while preserving isolated adapter APIs.
 - **No orchestration in `libs/`.** Adapter modules must be callable in isolation.
 - **Module boundaries are enforced by tach**, run via trunk like every other linter. Reproduce with `trunk check --filter=tach`; CI runs `--all` on every push and PR. Config is max-strict for this repo: `exact`, `root_module = "forbid"`, layered modules with `layers_explicit_depends_on`, frozen `[[interfaces]]`, `visibility`, and `TYPE_CHECKING`/string imports enforced. Bump the `dev`-group `tach` pin in `pyproject.toml` in lockstep with the `tach@` version in `.trunk/trunk.yaml` and the plugin `ref` in `oss-linter-trunk-tach`.
 - **New top-level package?** Update `[tool.setuptools.packages.find]` in `pyproject.toml`, and declare the module (plus `depends_on` / `[[interfaces]]` as needed) in `tach.toml` — or `uv run tach sync --add` for depends_on.

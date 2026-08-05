@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from libs.attio import people as attio_people
+from src.edge import update_person
 from src.enrichment import (
     HarvestProfile,
     build_enrichment_tasks,
@@ -200,7 +200,7 @@ def upsert(
                 profile = HarvestProfile(**item["harvested_fields"])
                 person_input = profile_to_person_input(profile, item["email"])
 
-                attio_people.update_person(
+                update_person(
                     record_id=item["record_id"],
                     email=item["email"],
                     input=person_input,

@@ -13,16 +13,9 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from libs.attio.companies import (
-    get_company_values,
-    upsert_company as libs_upsert_company,
-)
-from libs.attio.contracts import ErrorEntry, ReliabilityEnvelope, WarningEntry
-from libs.attio.errors import SchemaMismatchError
-from libs.attio.meetings import find_or_create_meeting
-from libs.attio.mentions import upsert_mention as libs_upsert_mention
-from libs.attio.models import (
+from libs.attio import (
     CompanyInput,
+    ErrorEntry,
     MeetingExternalRef as LibMeetingExternalRef,
     MeetingInput,
     MeetingLifecycleEventInput,
@@ -31,24 +24,25 @@ from libs.attio.models import (
     MentionInput,
     NoteInput,
     PersonInput,
+    ReliabilityEnvelope,
+    SchemaMismatchError,
     TrackingEventInput,
-)
-from libs.attio.notes import (
+    WarningEntry,
     add_note as libs_add_note,
-    find_note_by_title as libs_find_note_by_title,
-    resolve_record_id_for_ref as libs_resolve_record_id_for_ref,
-)
-from libs.attio.people import (
     error_envelope,
-    get_person_values,
-    upsert_person as libs_upsert_person,
-)
-from libs.attio.preflight import resolve_owner_member_id
-from libs.attio.tracking_events import (
+    find_note_by_title as libs_find_note_by_title,
+    find_or_create_meeting,
     find_or_create_meeting_lifecycle_event,
     find_or_create_tracking_event,
+    get_company_values,
+    get_person_values,
+    resolve_owner_member_id,
+    resolve_record_id_for_ref as libs_resolve_record_id_for_ref,
+    upsert_company as libs_upsert_company,
+    upsert_mention as libs_upsert_mention,
+    upsert_person as libs_upsert_person,
 )
-from libs.logging.structured import log
+from libs.logging import log
 from libs.telemetry import annotate_span, span
 from src.attio.meeting_match import resolve_meeting_id_by_participants
 from src.attio.ops import (

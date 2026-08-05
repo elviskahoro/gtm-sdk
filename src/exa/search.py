@@ -4,10 +4,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from libs.exa.client import ExaAPIKeyMissingError
-from libs.exa.errors import ExaError
-from libs.exa.models import SearchInput, SearchResponse
-from libs.exa.search import search
+from libs.exa import (
+    ExaAPIKeyMissingError,
+    ExaError,
+    SearchInput,
+    SearchResponse,
+    search as exa_search_fn,
+)
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets
@@ -73,7 +76,7 @@ def exa_search(
             # callers don't need to catch both ValidationError and ValueError.
             raise ValueError(f"Invalid Exa payload: {exc}") from exc
         try:
-            return search(query)
+            return exa_search_fn(query)
         except ExaError:
             # Typed Exa errors (auth, rate limit, bad request, server) carry
             # status + request_id context callers need for retry decisions —

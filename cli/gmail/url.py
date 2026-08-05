@@ -10,7 +10,7 @@ from typing import Any
 
 import typer
 
-from libs.gmail.url_decoder import decode_token, extract_id_from_url
+from src.edge import decode_token, extract_id_from_url
 
 app = typer.Typer(help="Gmail URL decoding.")
 

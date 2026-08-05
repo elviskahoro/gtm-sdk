@@ -41,24 +41,22 @@ from pydantic import BaseModel
 from uuid_extensions import uuid7
 
 from libs.caldotcom import (
+    BookingAttendee,
     BookingCancelledPayload,
     BookingCreatedPayload,
+    BookingHost,
     BookingNoShowPayload,
     BookingRequestedPayload,
     BookingRescheduledPayload,
+    CalcomClient,
     MeetingEndedPayload,
     MeetingStartedPayload,
+    MutationAttendee,
+    NoShowAttendee,
     PingPayload,
     Webhook as CalcomWebhook,
 )
-from libs.caldotcom.client import CalcomClient
-from libs.caldotcom.models import (
-    BookingAttendee,
-    BookingHost,
-    MutationAttendee,
-    NoShowAttendee,
-)
-from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
+from libs.dlt import etl_bucket_name, raw_bucket_name
 from libs.meetings import canonical_meeting_uid
 from src.attio.ops import (
     AttioOp,
@@ -547,7 +545,7 @@ class Webhook(CalcomWebhook):
 
     @staticmethod
     def raw_get_app_name() -> str:
-        from libs.dlt.filesystem_gcp import CloudGoogle
+        from libs.dlt import CloudGoogle
 
         return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
 

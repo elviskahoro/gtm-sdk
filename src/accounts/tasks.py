@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from libs.attio import (
-    companies as attio_companies,
-    people as attio_people,
+from libs import attio, parallel
+from libs.attio import CompanyInput, PersonInput
+from libs.parallel import (
+    ExtractExcerptsInput,
+    SearchInput,
+    SearchResponse,
 )
-from libs.attio.models import CompanyInput, PersonInput
-from libs.parallel import client as parallel_client
-from libs.parallel.models import ExtractExcerptsInput, SearchInput, SearchResponse
-from libs.parsers.normalization import normalize_mapping_payload
+from libs.parsers import normalize_mapping_payload
 from src.accounts.models import (
     BatchMutationResult,
     EnrichResult,
@@ -53,7 +53,7 @@ def _validate_company_records(records: list[dict[str, Any]]) -> None:
 
 
 def research(objective: str) -> ResearchResult:
-    raw = cast("object", parallel_client.search(SearchInput(objective=objective)))
+    raw = cast("object", parallel.search(SearchInput(objective=objective)))
     if isinstance(raw, SearchResponse):
         results = [item.model_dump(mode="json") for item in raw.results]
     else:
@@ -66,7 +66,7 @@ def research(objective: str) -> ResearchResult:
 
 
 def find_people(query: str) -> FindPeopleResult:
-    raw = cast("object", parallel_client.search(SearchInput(objective=query)))
+    raw = cast("object", parallel.search(SearchInput(objective=query)))
     if isinstance(raw, SearchResponse):
         people = [item.model_dump(mode="json") for item in raw.results]
     else:
@@ -79,7 +79,7 @@ def find_people(query: str) -> FindPeopleResult:
 
 
 def enrich(url: str, objective: str) -> EnrichResult:
-    raw = parallel_client.extract_excerpts(
+    raw = parallel.extract_excerpts(
         ExtractExcerptsInput(url=url, objective=objective),
     )
     payload = normalize_mapping_payload(raw)
@@ -89,7 +89,7 @@ def enrich(url: str, objective: str) -> EnrichResult:
 def map_account_hierarchy(account: str) -> MapAccountHierarchyResult:
     raw = cast(
         "object",
-        parallel_client.search(
+        parallel.search(
             SearchInput(objective=f"account hierarchy for {account}"),
         ),
     )
@@ -137,7 +137,7 @@ def batch_add_people(
         if dedup_key:
             seen_keys.add(dedup_key)
         try:
-            attio_people.add_person(PersonInput(**record))
+            attio.add_person(PersonInput(**record))
             created += 1
             results.append({"status": "created", "email": record.get("email")})
         except Exception as exc:
@@ -192,7 +192,7 @@ def batch_add_companies(
         if dedup_key:
             seen_keys.add(dedup_key)
         try:
-            attio_companies.add_company(CompanyInput(**record))
+            attio.add_company(CompanyInput(**record))
             created += 1
             results.append({"status": "created", "domain": record.get("domain")})
         except Exception as exc:

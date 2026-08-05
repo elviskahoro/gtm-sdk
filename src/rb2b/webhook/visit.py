@@ -5,14 +5,14 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from libs.attio.values import (
+from libs.attio import (
     format_location_from_parts,
     normalize_linkedin_company_url,
     normalize_linkedin_url,
 )
-from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
+from libs.dlt import etl_bucket_name, raw_bucket_name
 from libs.rb2b import Webhook as Rb2bWebhook
-from libs.webhook.filter import WebhookFilter, WebhookFilters
+from libs.webhook import WebhookFilter, WebhookFilters
 from src.rb2b.utils import (
     event_to_jsonl,
     generate_gcs_filename,
@@ -87,7 +87,7 @@ class Webhook(Rb2bWebhook):
 
     @staticmethod
     def raw_get_app_name() -> str:
-        from libs.dlt.filesystem_gcp import CloudGoogle
+        from libs.dlt import CloudGoogle
 
         return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
 

@@ -3,13 +3,15 @@ from typing import Any
 import modal
 from pydantic import BaseModel, ConfigDict
 
-from libs.attio.attributes import create_companies_attribute
-from libs.attio.companies import add_company, search_companies, update_company
-from libs.attio.models import (
+from libs.attio import (
     AttributeCreateResult,
     CompanyInput,
     CompanyResult,
     CompanySearchResult,
+    add_company,
+    create_companies_attribute,
+    search_companies,
+    update_company,
 )
 from src.api_keys import inject_api_keys
 from src.attio.http_responses import error_response_from_exception

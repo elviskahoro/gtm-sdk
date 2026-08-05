@@ -10,7 +10,7 @@ from typing import Any
 import orjson
 from pydantic import BaseModel
 
-from libs.dlt.bucket_naming import etl_bucket_name, raw_bucket_name
+from libs.dlt import etl_bucket_name, raw_bucket_name
 from libs.fathom import Webhook as FathomWebhook
 from src.fathom.utils import generate_gcs_filename, generate_row_id
 
@@ -32,7 +32,7 @@ class Webhook(FathomWebhook):
 
     @staticmethod
     def raw_get_app_name() -> str:
-        from libs.dlt.filesystem_gcp import CloudGoogle
+        from libs.dlt import CloudGoogle
 
         return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
 

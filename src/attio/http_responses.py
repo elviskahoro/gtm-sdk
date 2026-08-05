@@ -4,7 +4,7 @@ import json
 import re
 from typing import Any
 
-from libs.attio.people import error_envelope
+from libs.attio import error_envelope
 
 ERROR_CODE_TO_STATUS = {
     "validation_error": 400,

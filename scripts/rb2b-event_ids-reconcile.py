@@ -71,12 +71,12 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from libs.attio.client import get_client  # noqa: E402
-from libs.attio.sdk_boundary import (  # noqa: E402
+from src.edge import (  # noqa: E402
     build_patch_record_request,
+    compute_event_id,  # noqa: E402
+    get_client,  # noqa: E402
     is_unknown_filter_attribute,
 )
-from libs.rb2b import compute_event_id  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

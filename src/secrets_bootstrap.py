@@ -35,23 +35,23 @@ from typing import TypeVar
 import modal
 
 from libs import infisical
-from libs.apollo import client as apollo_client
-from libs.attio import client as attio_client
-from libs.caldotcom import client as caldotcom_client
-from libs.exa import client as exa_client
-from libs.linear import client as linear_client
-from libs.parallel import client as parallel_client
-from libs.slack import client as slack_client
+from libs.apollo import api_key_scope as apollo_api_key_scope
+from libs.attio import api_key_scope as attio_api_key_scope
+from libs.caldotcom import api_key_scope as caldotcom_api_key_scope
+from libs.exa import api_key_scope as exa_api_key_scope
+from libs.linear import api_key_scope as linear_api_key_scope
+from libs.parallel import api_key_scope as parallel_api_key_scope
+from libs.slack import api_key_scope as slack_api_key_scope
 from libs.telemetry import collector_target  # collector-mode resolution (src→libs)
 
 KEY_SCOPES: dict[str, Callable[[str], AbstractContextManager[None]]] = {
-    "APOLLO_API_KEY": apollo_client.api_key_scope,
-    "ATTIO_API_KEY": attio_client.api_key_scope,
-    "CALCOM_API_KEY": caldotcom_client.api_key_scope,
-    "EXA_API_KEY": exa_client.api_key_scope,
-    "LINEAR_API_KEY": linear_client.api_key_scope,
-    "PARALLEL_API_KEY": parallel_client.api_key_scope,
-    "SLACK_BOT_TOKEN": slack_client.api_key_scope,
+    "APOLLO_API_KEY": apollo_api_key_scope,
+    "ATTIO_API_KEY": attio_api_key_scope,
+    "CALCOM_API_KEY": caldotcom_api_key_scope,
+    "EXA_API_KEY": exa_api_key_scope,
+    "LINEAR_API_KEY": linear_api_key_scope,
+    "PARALLEL_API_KEY": parallel_api_key_scope,
+    "SLACK_BOT_TOKEN": slack_api_key_scope,
 }
 
 

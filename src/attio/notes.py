@@ -3,8 +3,7 @@ from typing import Any
 import modal
 from pydantic import BaseModel, ConfigDict
 
-from libs.attio.models import NoteInput, NoteResult
-from libs.attio.notes import add_note, update_note
+from libs.attio import NoteInput, NoteResult, add_note, update_note
 from src.api_keys import inject_api_keys
 from src.attio.http_responses import error_response_from_exception
 from src.modal_runtime import app, image

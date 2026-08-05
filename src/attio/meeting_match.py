@@ -23,8 +23,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from libs.attio.meetings import list_candidate_meetings
-from libs.attio.models import MeetingCandidate
+from libs.attio import MeetingCandidate, list_candidate_meetings
 
 logger = logging.getLogger(__name__)
 

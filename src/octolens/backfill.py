@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
-    from libs.octolens.models import ApiMention
+    from libs.octolens import ApiMention
 
 # Phrases that indicate a `dlt`-keyword mention is really about the dlthub
 # Python library (not "distributed ledger technology" or an incidental match).

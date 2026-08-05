@@ -51,14 +51,14 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from libs.attio.attributes import (  # noqa: E402
+from src.edge import (  # noqa: E402
     create_attribute,
+    create_object,  # noqa: E402
     ensure_select_options,
     list_attributes,
     list_select_options,
     list_status_options,
 )
-from libs.attio.objects import create_object  # noqa: E402
 
 # Open-vocabulary selects: every slug here is JIT-seeded at write time by
 # libs/attio/mentions.py::_SINGLE_SELECT_FIELDS / _MULTISELECT_FIELDS, so their

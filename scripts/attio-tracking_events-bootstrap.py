@@ -88,8 +88,7 @@ from typing import TYPE_CHECKING
 import click
 import typer
 
-from libs.attio.attributes import create_attribute, ensure_select_options
-from libs.attio.preflight import assert_attio_token_scopes
+from src.edge import assert_attio_token_scopes, create_attribute, ensure_select_options
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

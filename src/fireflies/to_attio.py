@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from libs.meetings import canonical_meeting_uid
-from libs.parsers.constants import EMAIL_DOMAINS_TO_KEEP
+from libs.parsers import EMAIL_DOMAINS_TO_KEEP
 from src.attio.ops import (
     CompanyRef,
     MeetingExternalRef,

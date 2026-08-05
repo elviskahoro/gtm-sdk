@@ -6,6 +6,7 @@ Models cover the recording webhook payload (the *push* path). The client +
 webhook → Attio transform can be reused for backfill.
 """
 
+from libs.fathom import models
 from libs.fathom.client import api_key_scope, get_client, iter_meetings
 from libs.fathom.errors import FathomAuthError, FathomError
 from libs.fathom.from_sdk import webhook_from_sdk_meeting
@@ -40,5 +41,6 @@ __all__ = [
     "api_key_scope",
     "get_client",
     "iter_meetings",
+    "models",
     "webhook_from_sdk_meeting",
 ]

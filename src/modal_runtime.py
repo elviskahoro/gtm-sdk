@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import modal
 
-from libs.logging.structured import set_source
+from libs.logging import set_source
 from libs.telemetry import init_log_exporter
 from src.modal_app import MODAL_APP
 

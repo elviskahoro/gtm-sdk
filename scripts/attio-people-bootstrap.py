@@ -53,7 +53,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from libs.attio.attributes import (  # noqa: E402
+from src.edge import (  # noqa: E402
     create_attribute,
     list_attributes,
 )

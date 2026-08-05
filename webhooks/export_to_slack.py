@@ -1,4 +1,4 @@
-# trunk-ignore-all(ruff/PGH003,trunk/ignore-does-nothing)
+# trunk-ignore-all(ruff/PGH003,ruff/TC004,trunk/ignore-does-nothing)
 from __future__ import annotations
 
 import time
@@ -10,19 +10,18 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from libs import infisical
-from libs.logging.structured import (
-    log,
-    set_source,
-    webhook_request_context,
-)
-from libs.slack import get_client
-from libs.telemetry import init_log_exporter
-
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
 from src.caldotcom.webhook.booking import (
     Webhook as CaldotcomBookingWebhook,
+)
+from src.edge import (
+    fetch as infisical_fetch,
+    init_log_exporter,
+    log,
+    set_source,
+    slack_get_client as get_client,
+    webhook_request_context,
 )
 from src.secrets_bootstrap import bootstrap_secret, hydrate
 from src.slack.export import execute
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
     # block in webhooks/export_to_attio.py for the full rationale. The
     # scripts/webhooks-handlers-redeploy.py substitution rewrites WebhookModelToReplace
     # to a concrete Webhook class before modal deploy.
-    from libs.webhook.protocol import (
+    from src.edge import (
         WebhookModelTypeCheckShim as WebhookModelToReplace,
     )
 
@@ -99,7 +98,7 @@ def _export(webhook: WebhookModel) -> str:
     # the Webhook declares (e.g. CALCOM_SLACK_CHANNEL_ID) so each automation
     # posts to its own channel.
     channel_key = WebhookModel.slack_get_channel_secret_name()
-    with hydrate("SLACK_BOT_TOKEN"), infisical.fetch(channel_key) as channel:
+    with hydrate("SLACK_BOT_TOKEN"), infisical_fetch(channel_key) as channel:
         messages = webhook.slack_get_messages()
         log("webhook.validated", message_count=len(messages))
         if not messages:

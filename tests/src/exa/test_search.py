@@ -46,7 +46,7 @@ def test_exa_search_rejects_invalid_num_results_at_boundary(monkeypatch) -> None
         called = True
         return _stub_response()
 
-    monkeypatch.setattr("src.exa.search.search", fake_search)
+    monkeypatch.setattr("src.exa.search.exa_search_fn", fake_search)
 
     fn = cast("modal.Function", exa_search)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="num_results"):
@@ -75,7 +75,7 @@ def test_exa_search_passes_payload_to_libs_search(monkeypatch) -> None:
         captured["input"] = input_
         return _stub_response()
 
-    monkeypatch.setattr("src.exa.search.search", fake_search)
+    monkeypatch.setattr("src.exa.search.exa_search_fn", fake_search)
 
     fn = cast("modal.Function", exa_search)  # type: ignore[arg-type]
     result = cast(
@@ -187,7 +187,7 @@ def test_exa_search_decorates_missing_key_error(monkeypatch) -> None:
     def boom(_input):
         raise ValueError("EXA_API_KEY not found in environment")
 
-    monkeypatch.setattr("src.exa.search.search", boom)
+    monkeypatch.setattr("src.exa.search.exa_search_fn", boom)
 
     fn = cast("modal.Function", exa_search)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Infisical"):
@@ -252,7 +252,7 @@ def test_api_key_missing_error_triggers_infisical_hint(monkeypatch) -> None:
     def _raise(_input: SearchInput) -> SearchResponse:
         raise err
 
-    monkeypatch.setattr("src.exa.search.search", _raise)
+    monkeypatch.setattr("src.exa.search.exa_search_fn", _raise)
 
     fn = cast("modal.Function", exa_search)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Infisical"):
@@ -292,7 +292,7 @@ def test_typed_exa_errors_propagate_through_modal_wrapper(monkeypatch) -> None:
     def raise_rate_limit(_input):
         raise ExaRateLimitError("rate limited", status=429, request_id="req_test")
 
-    monkeypatch.setattr("src.exa.search.search", raise_rate_limit)
+    monkeypatch.setattr("src.exa.search.exa_search_fn", raise_rate_limit)
 
     fn = cast("modal.Function", exa_search)  # type: ignore[arg-type]
     with pytest.raises(ExaRateLimitError) as excinfo:

@@ -12,8 +12,7 @@ from cli.granola import app as granola_app
 from cli.parallel import app as parallel_app
 from cli.sanity import app as sanity_app
 from cli.webhook import app as webhook_app
-from libs.logging.structured import set_source
-from libs.telemetry import emit_cli_event, init_log_exporter, init_tracer
+from src.edge import emit_cli_event, init_log_exporter, init_tracer, set_source
 
 _CLI_SERVICE_NAME = "elvis-cli"
 

@@ -236,7 +236,7 @@ def _discover_inverse_attrs(target_object: str) -> list[InverseAttr]:
     ``AttributeInfo`` resolves ``allowed_objects`` to api_slugs, so we can filter
     on the ``meetings`` slug directly.
     """
-    from libs.attio.attributes import list_attributes
+    from src.edge import list_attributes
 
     out: list[InverseAttr] = []
     for attr in list_attributes(target_object):
@@ -265,7 +265,7 @@ def _dump_meeting_relationship() -> list[dict[str, Any]]:
     """
     from attio.errors.sdkerror import SDKError
 
-    from libs.attio.client import get_client
+    from src.edge import get_client
 
     dumped: list[dict[str, Any]] = []
     with get_client() as client:
@@ -326,7 +326,7 @@ def _read_meeting_links(
     appears, so the bounded retries lapse and the real (incomplete) state is
     returned, keeping the verdict correct rather than masking a true negative.
     """
-    from libs.attio.client import get_client
+    from src.edge import get_client
 
     links: list[Any] = []
     for attempt in range(attempts):
@@ -344,7 +344,7 @@ def _read_meeting_links(
 
 def _existing_meeting_link_count(target_object: str, record_id: str) -> int:
     """Count meetings already linking ``record_id`` (via the meetings list filter)."""
-    from libs.attio.client import get_client
+    from src.edge import get_client
 
     with get_client() as client:
         response = client.meetings.get_v2_meetings(
@@ -403,7 +403,7 @@ def _assert_organizer_safe(organizer_email: str, probed_person_id: str) -> None:
     If the organizer email resolves to no Person, it is safe: Attio auto-creates
     a fresh throwaway record with no prior links.
     """
-    from libs.attio.notes import resolve_record_id_for_ref
+    from src.edge import resolve_record_id_for_ref
 
     organizer_id = resolve_record_id_for_ref(
         parent_object="people",
@@ -434,7 +434,7 @@ def _resolve_links(
     company_domain: str,
 ) -> tuple[str, str]:
     """Resolve a real prod person + company record_id to link in test meetings."""
-    from libs.attio.notes import resolve_record_id_for_ref
+    from src.edge import resolve_record_id_for_ref
 
     person_id = resolve_record_id_for_ref(parent_object="people", email=person_email)
     if not person_id:
@@ -464,12 +464,12 @@ def _post_test_meeting(
     start: datetime,
 ) -> str:
     """POST a throwaway test meeting; return its meeting_id."""
-    from libs.attio.meetings import find_or_create_meeting
-    from libs.attio.models import (
+    from src.edge import (
         MeetingExternalRef,
         MeetingInput,
         MeetingLinkedRecord,
         MeetingParticipantInput,
+        find_or_create_meeting,
     )
 
     links = [MeetingLinkedRecord(object="people", record_id=person_id)]

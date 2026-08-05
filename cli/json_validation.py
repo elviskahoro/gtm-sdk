@@ -6,7 +6,7 @@ import json
 
 from pydantic import BaseModel, ValidationError
 
-from libs.telemetry import emit_cli_event
+from src.edge import emit_cli_event
 
 
 def _top_level_keys_from_raw(raw: str) -> list[str]:

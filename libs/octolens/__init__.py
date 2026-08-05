@@ -9,10 +9,13 @@ from libs.octolens.models import (
     Webhook,
 )
 
+from .client import OctolensClient
+
 __all__ = [
     "ApiMention",
     "ApiMentionKeyword",
     "Mention",
+    "OctolensClient",
     "RelevanceScore",
     "Source",
     "Webhook",

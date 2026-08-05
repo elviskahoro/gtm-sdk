@@ -11,8 +11,7 @@ import typer
 from pydantic import ValidationError
 
 from cli.json_validation import emit_json_payload_validation_telemetry
-from libs.granola.errors import GranolaError
-from libs.granola.models import ExportCliJsonPayload, ExportRunOptions
+from src.edge import ExportCliJsonPayload, ExportRunOptions, GranolaError
 from src.granola.export import run_export
 
 

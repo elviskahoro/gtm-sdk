@@ -6,15 +6,16 @@ from typing import Any
 
 import modal
 
-from libs import infisical
-from libs.attio.contracts import WarningEntry
-from libs.attio.errors import (
+from src.attio.deployment_parity import ParityStatus, ensure_modal_parity
+from src.edge import (
     ConfigurationError,
     ConnectivityError,
     DeploymentMismatchError,
+    InfisicalAuthError,
+    InfisicalFetchError,
+    WarningEntry,
+    infisical,
 )
-from libs.infisical.errors import InfisicalAuthError, InfisicalFetchError
-from src.attio.deployment_parity import ParityStatus, ensure_modal_parity
 from src.modal_app import MODAL_APP
 
 # Post-ai-672: the deployed Modal app fetches keys from Infisical at function
