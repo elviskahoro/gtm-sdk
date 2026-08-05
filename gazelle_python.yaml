@@ -238,7 +238,6 @@ manifest:
     public: atpublic
     py: pytest
     pyarrow: pyarrow
-    pyarrow_hotfix: pyarrow_hotfix
     pyasn1: pyasn1
     pyasn1_modules: pyasn1_modules
     pycountry: pycountry
