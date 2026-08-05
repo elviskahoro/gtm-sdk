@@ -103,6 +103,7 @@ depends_on = [
   "libs.fathom",
   "libs.fireflies",
   "libs.granola",
+  "libs.gmail",
   "libs.harvest",
   "libs.infisical",
   "libs.linear",
@@ -464,10 +465,8 @@ expose = ["post_row"]
 [[interfaces]]
 from = ['libs\.dlt']
 expose = [
-  "CloudGoogle",
   "DestinationType",
   "etl_bucket_name",
-  "GCPCredentials",
   "raw_bucket_name",
   # GCP storage remains an intentional dedicated-module interface.
   "filesystem_gcp",
@@ -720,7 +719,6 @@ expose = [
   "WebhookFilter",
   "WebhookFilters",
   "WebhookModelProtocol",
-  "WebhookModelTypeCheckShim",
 ]
 
 [[interfaces]]

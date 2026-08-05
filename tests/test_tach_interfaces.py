@@ -35,6 +35,54 @@ INTENTIONAL_EXPORTS = {
 }
 
 
+def _src_edge_adapter_roots() -> set[str]:
+    """Read adapter roots used by the dynamic ``src.edge`` facade."""
+    edge_path = REPO_ROOT / "src" / "edge.py"
+    tree = ast.parse(edge_path.read_text())
+    assignments = {
+        target.id: node.value
+        for node in tree.body
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+        if isinstance(target, ast.Name) and target.id in {"_MODULES", "_EXTRA_ALIASES"}
+    }
+    modules_node = assignments.get("_MODULES")
+    aliases_node = assignments.get("_EXTRA_ALIASES")
+    assert modules_node is not None  # noqa: S101
+    assert aliases_node is not None  # noqa: S101
+    modules = ast.literal_eval(modules_node)
+    aliases = ast.literal_eval(aliases_node)
+    assert isinstance(modules, tuple)  # noqa: S101
+    assert isinstance(aliases, dict)  # noqa: S101
+    return {
+        ".".join(module.split(".")[:2])
+        for module in (*modules, *(target[0] for target in aliases.values()))
+        if module.startswith("libs.")
+    }
+
+
+def _tach_utility_modules() -> set[str]:
+    """Return Tach modules intentionally available without ``src`` edges."""
+    config = tomllib.loads(TACH_PATH.read_text())
+    return {
+        module["path"] for module in config["modules"] if module.get("utility") is True
+    }
+
+
+def test_src_edge_adapters_are_declared_in_tach() -> None:
+    """Dynamic facade adapter imports must remain visible to Tach."""
+    config = tomllib.loads(TACH_PATH.read_text())
+    src_module = next(module for module in config["modules"] if module["path"] == "src")
+    declared = set(src_module["depends_on"])
+    utility_roots = _tach_utility_modules()
+    missing = sorted(
+        root
+        for root in _src_edge_adapter_roots()
+        if root not in declared and root not in utility_roots
+    )
+    assert not missing, f"src.edge adapters missing from Tach src.depends_on: {missing}"  # noqa: S101
+
+
 def _package_all(package: str) -> set[str]:
     package_path = REPO_ROOT / Path(package.replace(".", "/")) / "__init__.py"
     tree = ast.parse(package_path.read_text())

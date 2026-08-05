@@ -7,12 +7,13 @@ from .protocol import (
 )
 
 if TYPE_CHECKING:
-    from .protocol import WebhookModelTypeCheckShim  # noqa: F401
+    from .protocol import (
+        WebhookModelTypeCheckShim,  # noqa: F401  # pyright: ignore[reportUnusedImport]
+    )
 
 __all__ = [
     "UNSUPPORTED_SLACK_CHANNEL_SECRET",
     "WebhookFilter",
     "WebhookFilters",
     "WebhookModelProtocol",
-    "WebhookModelTypeCheckShim",
 ]

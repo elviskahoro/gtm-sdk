@@ -62,7 +62,7 @@ def fetch_token_scopes(*args: Any, **kwargs: Any) -> Any:
     return attio.preflight.fetch_token_scopes(*args, **kwargs)
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     """Resolve adapter-owned symbols while preserving stable ``src.edge`` imports.
 
     The facade keeps callers independent of adapter module layout while the
