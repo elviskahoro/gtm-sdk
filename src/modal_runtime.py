@@ -54,7 +54,6 @@ image = (
         "infisicalsdk>=1.0.16",
         "orjson>=3.10.0",
         "parallel-web",
-        "polars>=1.10.0",
         "pydantic>=2.0",
         # Provides the `uuid_extensions` module imported by libs/logging/structured.py
         # (pulled in at src/app.py import time). Missing it crash-loops every
