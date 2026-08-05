@@ -12,6 +12,7 @@ py_library(
     deps = [
         "//cli:json_validation",
         "//libs/granola",
+        "//src:edge",
         "//src/granola",
         "@pypi//pydantic",
         "@pypi//typer",

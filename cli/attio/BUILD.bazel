@@ -17,6 +17,7 @@ py_library(
         "//cli:json_validation",
         "//libs/attio",
         "//libs/infisical",
+        "//src:edge",
         "//src:modal_app",
         "//src/attio",
         "@pypi//modal",

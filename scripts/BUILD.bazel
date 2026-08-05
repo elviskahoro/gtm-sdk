@@ -92,6 +92,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//attio",
         "@pypi//click",
         "@pypi//typer",
@@ -105,6 +106,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "//src/attio",
         "@pypi//click",
         "@pypi//typer",
@@ -118,6 +120,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//click",
         "@pypi//typer",
     ],
@@ -130,6 +133,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//click",
         "@pypi//typer",
     ],
@@ -142,6 +146,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//click",
         "@pypi//typer",
     ],
@@ -154,6 +159,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//click",
         "@pypi//typer",
     ],
@@ -166,6 +172,7 @@ py_binary(
     deps = [
         "//libs/attio",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//click",
         "@pypi//typer",
     ],
@@ -212,6 +219,7 @@ py_binary(
         "//cli/webhook",
         "//libs/caldotcom",
         "//scripts/lib",
+        "//src:edge",
         "//src/caldotcom",
         "@pypi//click",
         "@pypi//httpx",
@@ -275,6 +283,7 @@ py_binary(
     deps = [
         "//libs:telemetry",
         "//libs/logging",
+        "//src:edge",
         "//src:otel_collector",
     ],
 )
@@ -324,6 +333,7 @@ py_binary(
         "//libs/attio",
         "//libs/fathom",
         "//scripts/lib",
+        "//src:edge",
         "//src/attio",
         "//src/fathom",
         "@pypi//click",
@@ -340,6 +350,7 @@ py_binary(
         "//libs/fireflies",
         "//libs/motherduck",
         "//scripts/lib",
+        "//src:edge",
         "//src/attio",
         "//src/fireflies",
         "@pypi//click",
@@ -380,6 +391,7 @@ py_binary(
         "//cli/webhook",
         "//libs/octolens",
         "//scripts/lib",
+        "//src:edge",
         "//src/octolens",
         "@pypi//click",
         "@pypi//httpx",
@@ -407,6 +419,7 @@ py_binary(
         "//libs/attio",
         "//libs/rb2b",
         "//scripts/lib",
+        "//src:edge",
         "@pypi//click",
         "@pypi//typer",
     ],
