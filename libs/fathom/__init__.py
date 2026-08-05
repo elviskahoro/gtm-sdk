@@ -40,5 +40,6 @@ __all__ = [
     "api_key_scope",
     "get_client",
     "iter_meetings",
+    "models",
     "webhook_from_sdk_meeting",
 ]

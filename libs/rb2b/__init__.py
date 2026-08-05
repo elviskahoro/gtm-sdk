@@ -7,9 +7,12 @@ from libs.rb2b.models import (
     normalize_rb2b_timestamp,
 )
 
+from . import models
+
 __all__ = [
     "Payload",
     "Webhook",
     "compute_event_id",
+    "models",
     "normalize_rb2b_timestamp",
 ]

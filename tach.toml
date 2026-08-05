@@ -444,8 +444,6 @@ expose = [
   "MeetingStartedPayload",
   "PingPayload",
   "Webhook",
-  "client",
-  "models",
   "BookingAttendee",
   "CalcomClient",
   "BookingHost",
@@ -456,22 +454,22 @@ expose = [
   "Organizer",
   "Transcript",
   "api_key_scope",
+  "client",
+  "models",
 ]
 
 [[interfaces]]
 from = ['libs\.clay_http']
-expose = ["post_row"]
+expose = ["ClayDeliveryResult", "post_row"]
 
 [[interfaces]]
 from = ['libs\.dlt']
 expose = [
   "DestinationType",
+  "CloudGoogle",
+  "GCPCredentials",
   "etl_bucket_name",
   "raw_bucket_name",
-  # GCP storage remains an intentional dedicated-module interface.
-  "filesystem_gcp",
-  "filesystem_gcp\\.CloudGoogle",
-  "filesystem_gcp\\.GCPCredentials",
 ]
 
 [[interfaces]]
@@ -516,7 +514,12 @@ expose = [
 
 [[interfaces]]
 from = ['libs\.filesystem']
-expose = ["files", "FILE_SYSTEM_TRANSLATION"]
+expose = [
+  "DestinationFileData",
+  "FILE_SYSTEM_TRANSLATION",
+  "FileUtility",
+  "SourceFileData",
+]
 
 [[interfaces]]
 from = ['libs\.fireflies']
@@ -524,7 +527,7 @@ expose = ["FirefliesRecording", "from_motherduck_row"]
 
 [[interfaces]]
 from = ['libs\.gmail']
-expose = ["url_decoder", "decode_token", "extract_id_from_url"]
+expose = ["decode_token", "extract_id_from_url", "url_decoder"]
 
 [[interfaces]]
 from = ['libs\.granola']
@@ -548,7 +551,7 @@ expose = [
 
 [[interfaces]]
 from = ['libs\.harvest']
-expose = ["client"]
+expose = ["HarvestClient", "fetch_profile", "get_client"]
 
 [[interfaces]]
 from = ['libs\.infisical']
@@ -582,7 +585,6 @@ expose = []
 [[interfaces]]
 from = ['libs\.logging']
 expose = [
-  "structured",
   "extract_or_generate_request_id",
   "get_request_id",
   "get_source",
@@ -590,11 +592,12 @@ expose = [
   "set_request_id",
   "set_source",
   "webhook_request_context",
+  "structured",
 ]
 
 [[interfaces]]
 from = ['libs\.meetings']
-expose = ["canonical_meeting_uid"]
+expose = ["UID_PREFIX", "canonical_meeting_uid"]
 
 [[interfaces]]
 from = ['libs\.motherduck']
@@ -657,8 +660,8 @@ from = ['libs\.rb2b']
 expose = [
   "Webhook",
   "compute_event_id",
-  "models",
   "Payload",
+  "models",
   "normalize_rb2b_timestamp",
 ]
 

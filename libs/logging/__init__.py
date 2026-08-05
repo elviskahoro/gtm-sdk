@@ -5,6 +5,7 @@ always-on, machine-readable stdout logs that Modal can capture without any
 extra wiring.
 """
 
+from . import structured
 from .structured import (
     extract_or_generate_request_id,
     get_request_id,
@@ -22,5 +23,6 @@ __all__ = [
     "log",
     "set_request_id",
     "set_source",
+    "structured",
     "webhook_request_context",
 ]

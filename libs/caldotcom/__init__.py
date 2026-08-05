@@ -41,4 +41,6 @@ __all__ = [
     "Transcript",
     "Webhook",
     "api_key_scope",
+    "client",
+    "models",
 ]

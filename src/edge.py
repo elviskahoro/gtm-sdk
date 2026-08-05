@@ -19,7 +19,7 @@ _MODULES: tuple[str, ...] = (
     "libs.exa",
     "libs.fathom",
     "libs.fireflies",
-    "libs.filesystem.files",
+    "libs.filesystem",
     "libs.granola",
     "libs.gmail",
     "libs.harvest",
@@ -38,8 +38,8 @@ _MODULES: tuple[str, ...] = (
 )
 
 _EXTRA_ALIASES: dict[str, tuple[str, str]] = {
-    "CloudGoogle": ("libs.dlt.filesystem_gcp", "CloudGoogle"),
-    "GCPCredentials": ("libs.dlt.filesystem_gcp", "GCPCredentials"),
+    "CloudGoogle": ("libs.dlt", "CloudGoogle"),
+    "GCPCredentials": ("libs.dlt", "GCPCredentials"),
     "linear_client": ("libs.linear", "client"),
     "sanity_api_key_scope": ("libs.sanity", "api_key_scope"),
     # Both Exa and Parallel expose a `search` helper; the stub and existing
