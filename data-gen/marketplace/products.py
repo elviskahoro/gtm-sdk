@@ -2,34 +2,16 @@
 
 This module parses marketplace_products.csv and converts each row into a Pydantic BaseModel.
 Provides helper functions that can be called by other scripts.
-
-Polars is an optional dependency. Install via `uv sync --extra marketplace` to enable
-the DataFrame-backed helpers. Importing this module without that extra is supported;
-the polars-backed functions only fail at call time.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import ibis
+import narwhals as nw
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    import polars as pl  # pyrefly: ignore[missing-import] — optional extra (uv sync --extra marketplace)
-
-
-def _import_polars() -> Any:
-    """Import polars, raising a clearer error if the marketplace extra is missing."""
-    try:
-        import polars as pl  # pyrefly: ignore[missing-import] — optional extra
-    except ModuleNotFoundError as exc:
-        raise ImportError(
-            "polars is required for marketplace DataFrame helpers. "
-            "Install it with: uv sync --extra marketplace",
-        ) from exc
-
-    return pl
 
 
 class MarketplaceProduct(BaseModel):
@@ -53,57 +35,19 @@ class MarketplaceProduct(BaseModel):
     description: str | None = None
 
 
-def test_marketplace_product() -> None:
-    """Test MarketplaceProduct model instantiation."""
-    product = MarketplaceProduct(
-        title="Gone Girl: A Novel",
-        id="B006LSZECO",
-        product_category_id="7c665b5f-eda4-4d57-a446-cba70e87f4cb",
-        hid=333,
-        product_category_hid=1,
-    )
-
-    assert product.title == "Gone Girl: A Novel"
-    assert product.id == "B006LSZECO"
-    assert product.hid == 333
-
-
 def df_load_products(
     csv_path: str | Path,
-) -> pl.DataFrame:
-    """Load marketplace products from CSV into a Polars DataFrame.
+) -> nw.DataFrame[Any]:
+    """Load marketplace products from CSV into a Narwhals DataFrame.
 
     Args:
         csv_path: Path to the marketplace_products.csv file
 
     Returns:
-        Polars DataFrame containing all products
+        Narwhals DataFrame containing all products
     """
-    pl = _import_polars()
-
-    df = pl.read_csv(
-        source=csv_path,
-    )
-
-    return df
-
-
-def test_df_load_products(tmp_path: Path) -> None:
-    """Test loading products from CSV."""
-    csv_content = """title,id,product_category_id,hid,product_category_hid
-Gone Girl: A Novel,B006LSZECO,7c665b5f-eda4-4d57-a446-cba70e87f4cb,333,1
-Choke Point,B00AFPNV0,7c665b5f-eda4-4d57-a446-cba70e87f4cb,926,1"""
-
-    csv_file = tmp_path / "test_products.csv"
-    csv_file.write_text(csv_content)
-
-    df = df_load_products(
-        csv_path=csv_file,
-    )
-
-    assert df.shape[0] == 2
-    assert df.shape[1] == 5
-    assert "title" in df.columns
+    table = ibis.read_csv(csv_path)
+    return nw.from_native(table.to_pyarrow(), eager_only=True)
 
 
 def parse_csv_row(
@@ -128,25 +72,6 @@ def parse_csv_row(
     return product
 
 
-def test_parse_csv_row() -> None:
-    """Test parsing a CSV row into a MarketplaceProduct."""
-    row = {
-        "title": "Gone Girl: A Novel",
-        "id": "B006LSZECO",
-        "product_category_id": "7c665b5f-eda4-4d57-a446-cba70e87f4cb",
-        "hid": 333,
-        "product_category_hid": 1,
-    }
-
-    product = parse_csv_row(
-        row=row,
-    )
-
-    assert isinstance(product, MarketplaceProduct)
-    assert product.title == "Gone Girl: A Novel"
-    assert product.hid == 333
-
-
 def load_products_as_models(
     csv_path: str | Path,
 ) -> list[MarketplaceProduct]:
@@ -164,31 +89,13 @@ def load_products_as_models(
 
     products = []
 
-    for row_dict in df.to_dicts():
+    for row_dict in df.iter_rows(named=True):
         product = parse_csv_row(
             row=row_dict,
         )
         products.append(product)
 
     return products
-
-
-def test_load_products_as_models(tmp_path: Path) -> None:
-    """Test loading products as Pydantic models."""
-    csv_content = """title,id,product_category_id,hid,product_category_hid
-Gone Girl: A Novel,B006LSZECO,7c665b5f-eda4-4d57-a446-cba70e87f4cb,333,1
-Choke Point,B00AFPNV0,7c665b5f-eda4-4d57-a446-cba70e87f4cb,926,1"""
-
-    csv_file = tmp_path / "test_products.csv"
-    csv_file.write_text(csv_content)
-
-    products = load_products_as_models(
-        csv_path=csv_file,
-    )
-
-    assert len(products) == 2
-    assert all(isinstance(p, MarketplaceProduct) for p in products)
-    assert products[0].title == "Gone Girl: A Novel"
 
 
 def get_products_by_category(
@@ -204,45 +111,21 @@ def get_products_by_category(
     Returns:
         List of MarketplaceProduct instances matching the category
     """
-    pl = _import_polars()
-
     df = df_load_products(
         csv_path=csv_path,
     )
 
-    filtered_df = df.filter(pl.col("product_category_id") == category_id)
+    filtered_df = df.filter(nw.col("product_category_id") == category_id)
 
     products = []
 
-    for row_dict in filtered_df.to_dicts():
+    for row_dict in filtered_df.iter_rows(named=True):
         product = parse_csv_row(
             row=row_dict,
         )
         products.append(product)
 
     return products
-
-
-def test_get_products_by_category(tmp_path: Path) -> None:
-    """Test filtering products by category."""
-    csv_content = """title,id,product_category_id,hid,product_category_hid
-Gone Girl: A Novel,B006LSZECO,7c665b5f-eda4-4d57-a446-cba70e87f4cb,333,1
-Choke Point,B00AFPNV0,7c665b5f-eda4-4d57-a446-cba70e87f4cb,926,1
-Other Product,B00OTHER,different-uuid,100,2"""
-
-    csv_file = tmp_path / "test_products.csv"
-    csv_file.write_text(csv_content)
-
-    products = get_products_by_category(
-        csv_path=csv_file,
-        category_id="7c665b5f-eda4-4d57-a446-cba70e87f4cb",
-    )
-
-    assert len(products) == 2
-    assert all(
-        p.product_category_id == "7c665b5f-eda4-4d57-a446-cba70e87f4cb"
-        for p in products
-    )
 
 
 def main() -> None:

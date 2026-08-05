@@ -88,7 +88,7 @@ export TARGET_BRANCH=main
 export PR_BRANCH=HEAD
 export WORKSPACE_PATH=/src
 export BAZEL_PATH=bazel
-export BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root
+export BAZEL_STARTUP_OPTIONS=--output_user_root=/tmp/bazel-output-user-root
 if [ -n "${BAZEL_DIFF_BASE_SHA:-}" ]; then
   git update-ref refs/remotes/origin/main "${BAZEL_DIFF_BASE_SHA}"
 fi
@@ -107,7 +107,7 @@ export IMPACTED_TARGETS_FILE="${impacted_targets_out}"
 cp "${IMPACTED_TARGETS_FILE}" /src/impacted_targets.txt
 git diff --name-only "${merge_base_sha}" "${pr_branch_testing_head_sha}" \
   > /src/changed_paths.txt
-export BAZEL_TEST_COMMAND="test --config=ci --test_tag_filters=-manual --nobuild_event_json_file_path_conversion --build_event_json_file=/src/impacted_build_events.json"
+export BAZEL_TEST_COMMAND="test --config=ci --disk_cache=/var/cache/bazel/disk-cache --repository_cache=/var/cache/bazel/repository-cache --test_tag_filters=-manual --nobuild_event_json_file_path_conversion --build_event_json_file=/src/impacted_build_events.json"
 export BAZEL_KIND_FILTER='.+_library|.+_binary|.+_test'
 export BAZEL_SCOPE_FILTER=""
 export BAZEL_NEGATIVE_KIND_FILTER='generated file'
@@ -122,8 +122,10 @@ set -euo pipefail
 export HYPOTHESIS_PROFILE=ci
 uv run scripts/bazel-requirements-sync.py
 test -s requirements_bazel.txt
-bazel --output_user_root=/var/cache/bazel/output-user-root test //... \
+bazel --output_user_root=/tmp/bazel-output-user-root test //... \
   --config=ci \
+  --disk_cache=/var/cache/bazel/disk-cache \
+  --repository_cache=/var/cache/bazel/repository-cache \
   --test_tag_filters=-manual \
   --nobuild_event_json_file_path_conversion \
   --build_event_json_file=/src/full_build_events.json
@@ -413,7 +415,8 @@ async def main() -> None:
                     trunk_api_token,
                     payload,
                 )
-        await container.directory("/var/cache/bazel").export(str(cache_dir))
+        if os.environ.get("BAZEL_CACHE_WRITE", "false").strip().lower() == "true":
+            await container.directory("/var/cache/bazel").export(str(cache_dir))
     if rc:
         sys.stderr.write(f"Bazel validation exited {rc}\n")
     if analytics_rc:

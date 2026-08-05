@@ -66,7 +66,7 @@ The repository enforces a strict layered architecture:
 - `cli/` is Typer-only: parse arguments → preflight → call into `src/` → render output. **No business logic in `cli/`.**
 
 <Warning>
-If you add a new top-level package, update `[tool.setuptools.packages.find]` in `pyproject.toml` — otherwise the package is not importable after install.
+If you add a new top-level package, update `[tool.setuptools.packages.find]` in the matching `pyproject.toml` (root, or `cli/pyproject.toml` for CLI packages) — otherwise the package is not importable after install.
 </Warning>
 
 ### Where new code goes

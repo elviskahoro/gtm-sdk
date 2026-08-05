@@ -11,7 +11,7 @@ Every footgun this script exists to prevent is documented on the function
 that encodes it, as an explicit preflight or cleanup step -- this module is
 the catalogue, so add new rationale here rather than to a rules file that
 cannot be kept in sync. The CI smoke test at ``tests/scripts/test_deploy_webhook.py``
-exercises the substitute/restore loop, the EXIT-equivalent restore on deploy
+exercises the isolated substitute/deploy loop, host-tree cleanliness on deploy
 failure, the Modal-token pop at the preflight, and the environment scrub.
 
 Usage:
@@ -170,9 +170,6 @@ PLACEHOLDER = "WebhookModelToReplace"
 REQUIRED_MODAL_SECRETS: tuple[str, ...] = ("devx-gcp-202605260000",)
 VALID_INFISICAL_ENVS: tuple[str, ...] = ("dev", "staging", "prod")
 
-# Module-level state read by ``_cleanup`` (registered via ``atexit`` and via
-# SIGINT/SIGTERM handlers). Mirrors the bash trap that captured globals by
-# name — until ``_backup_freshly_written`` flips to True, the cleanup hook is
 # Module-level state used for deploy logging and lock cleanup.
 _handler: str | None = None
 _lock_acquired = False
@@ -1201,7 +1198,7 @@ def _infisical_run(
 # ---------------------------------------------------------------------------
 
 
-_CLI_HELP = """Substitute the WebhookModelToReplace placeholder, deploy via Dagger-wrapped `modal deploy`, then restore the handler.
+_CLI_HELP = """Substitute the WebhookModelToReplace placeholder and deploy via Dagger-wrapped `modal deploy` from an isolated checkout.
 
 Preconditions:
   - INFISICAL_PROJECT_ID and INFISICAL_TOKEN exported

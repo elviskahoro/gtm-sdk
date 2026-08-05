@@ -12,7 +12,7 @@ def _clean_name_pair(
 ) -> tuple[str | None, str | None]:
     """Strip credentials and rebalance first/last name parts.
 
-    Mirrors the prior polars expression: if the last-name column carries
+    If the last-name column carries
     multiple tokens, the final token becomes the last name and the leading
     tokens fold back into the first name. If the last-name column is empty
     and the first-name column carries multiple tokens, the final first-name

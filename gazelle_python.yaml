@@ -238,6 +238,7 @@ manifest:
     public: atpublic
     py: pytest
     pyarrow: pyarrow
+    pyarrow_hotfix: pyarrow_hotfix
     pyasn1: pyasn1
     pyasn1_modules: pyasn1_modules
     pycountry: pycountry
@@ -314,4 +315,4 @@ manifest:
     zipp: zipp
   pip_repository:
     name: pypi
-integrity: 3b63947738c619c9970c4c5950db7f545c430a37e15b8871bf2a00ff47098e9d
+integrity: 28e5965c9d91980611dfba30ddd3c17c13de8cc04438bb9a3bf238968233e35b

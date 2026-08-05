@@ -24,7 +24,9 @@ def pytest_args(test_paths: list[str]) -> list[str]:
     root = workspace_root()
     args = [
         "-c",
-        str(root / "pyproject.toml"),
+        str(root / "bazel" / "pytest.ini"),
+        "--rootdir",
+        str(root),
         "--import-mode=importlib",
         "-m",
         "not integration",

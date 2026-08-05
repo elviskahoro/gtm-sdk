@@ -73,6 +73,9 @@ jobs:
             "$HOME/.dagger-sdk/bazel-uv-python" \
             "$HOME/.bazel-dagger/toolchain" \
             "$HOME/.bazel-dagger/cache"
+          # Bazel runs as root inside Dagger and its exported cache can retain
+          # root-owned directories across Actions cache restores.
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.bazel-dagger/cache"
 
       - name: Install Dagger Python SDK
         id: dagger_sdk
@@ -106,17 +109,6 @@ jobs:
           set -euo pipefail
           toolchain_dir="$HOME/.bazel-dagger/toolchain"
           uv run scripts/bazel-dagger-toolchain.py --directory "${toolchain_dir}"
-          echo "refreshed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Save repaired Dagger controller and Bazel data
-        if: steps.bazel_cache.outputs.cache-matched-key == '' || steps.dagger_sdk.outputs.rebuilt == 'true' || steps.bazel_tools.outputs.refreshed == 'true'
-        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: |
-            ~/.dagger-sdk/bazel-controller-venv
-            ~/.dagger-sdk/bazel-uv-python
-            ~/.bazel-dagger
-          key: ${{ runner.os }}-${{ runner.arch }}-bazel-dagger-v1-${{ hashFiles('uv.lock', '.github/workflows/tests-bazel.yml', '.github/workflows/ci/bazel_dagger.py') }}-${{ github.run_id }}
 
       - name: Setup Dagger
         uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
@@ -129,6 +121,7 @@ jobs:
           BAZEL_DAGGER_CACHE_DIR: ${{ github.workspace }}/.bazel-dagger/cache
           BAZEL_DAGGER_DIFF_JAR: ${{ github.workspace }}/.bazel-dagger/toolchain/bazel-diff_deploy.jar
           BAZEL_DAGGER_SOURCE_DIR: ${{ runner.temp }}/bazel-dagger-source
+          BAZEL_CACHE_WRITE: ${{ github.event_name != 'pull_request' }}
           BAZEL_RUN_IMPACTED: ${{ inputs.run_impacted || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
           BAZEL_RUN_FULL: ${{ inputs.run_full || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
           BAZEL_DIFF_BASE_SHA: ${{ inputs.diff_base_sha || (github.event_name == 'push' && github.event.before) || '' }}
@@ -148,3 +141,13 @@ jobs:
           export BAZEL_DAGGER_DIFF_JAR="$HOME/.bazel-dagger/toolchain/bazel-diff_deploy.jar"
           export BAZEL_DAGGER_SOURCE_DIR="${RUNNER_TEMP}/bazel-dagger-source"
           DAGGER_NO_NAG=1 dagger run python .github/workflows/ci/bazel_dagger.py
+
+      - name: Save Dagger controller and Bazel data
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.dagger-sdk/bazel-controller-venv
+            ~/.dagger-sdk/bazel-uv-python
+            ~/.bazel-dagger
+          key: ${{ runner.os }}-${{ runner.arch }}-bazel-dagger-v1-${{ hashFiles('uv.lock', '.github/workflows/tests-bazel.yml', '.github/workflows/ci/bazel_dagger.py') }}-${{ github.run_id }}

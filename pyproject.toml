@@ -25,6 +25,7 @@ dependencies = [
   "orjson>=3.10.0",
   "parallel-web",
   "pyarrow>=18.0.0",
+  "pyarrow-hotfix>=0.4",
   "pydantic>=2.13.4",
   "requests>=2.33.1",
   "typer>=0.15",
@@ -44,9 +45,6 @@ dependencies = [
   "slack-sdk>=3.27",
 ]
 
-[project.optional-dependencies]
-marketplace = ["polars>=1.10.0"]
-
 [tool.setuptools.packages.find]
 include = ["libs*", "scripts*", "src*"]
 exclude = ["tests*"]
@@ -63,8 +61,9 @@ gtm-sdk = { workspace = true }
 
 [tool.pytest.ini_options]
 # The plugin selection lives HERE, not in a runner command, and that placement is
-# load-bearing. `addopts` is read from the source tree, so it applies to Bazel,
-# pull requests, main runs and local runs alike.
+# load-bearing for the uv-driven pytest paths. Bazel uses the deliberately
+# separate `bazel/pytest.ini` so packaging metadata changes do not invalidate
+# every Bazel test target.
 # tests/test_hypothesis_plugin.py fails loudly if the plugin stops loading.
 #
 # Use the ENTRY-POINT name `hypothesispytest`, never the module name

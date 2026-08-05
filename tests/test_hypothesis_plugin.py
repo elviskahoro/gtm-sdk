@@ -38,7 +38,7 @@ def test_hypothesis_pytest_plugin_is_loaded(pytestconfig: pytest.Config) -> None
     assert any(marker.startswith("hypothesis:") for marker in markers), (
         "The Hypothesis pytest plugin is not loaded, so @given tests are running "
         "without seeds, profiles, statistics or health checks. Check that "
-        "`-p hypothesispytest` is still in addopts in pyproject.toml — and note "
+        "`-p hypothesispytest` is still in the active pytest config — and note "
         "it must be the entry-point name, not `-p _hypothesis_pytestplugin`, "
         "which double-registers wherever plugin autoload is enabled."
     )

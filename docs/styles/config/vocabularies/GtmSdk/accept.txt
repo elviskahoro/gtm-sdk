@@ -11,7 +11,6 @@ Infisical
 idempotency
 Logfire
 Octolens
-Polars
 Pydantic
 pytest
 READMEs

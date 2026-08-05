@@ -97,7 +97,7 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
         'git rev-parse HEAD)" = "42994092b8b40711573f1111b9f34c742c9a371d"' in pipeline
     )
     assert (
-        "BAZEL_STARTUP_OPTIONS=--output_user_root=/var/cache/bazel/output-user-root"
+        "BAZEL_STARTUP_OPTIONS=--output_user_root=/tmp/bazel-output-user-root"
         in pipeline
     )
     assert 'source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")' in pipeline
@@ -108,6 +108,10 @@ def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     assert "--test_tag_filters=-manual" in pipeline
     assert "--nobuild_event_json_file_path_conversion" in pipeline
     assert "--build_event_json_file=/src/impacted_build_events.json" in pipeline
+    assert "--disk_cache=/var/cache/bazel/disk-cache" in pipeline
+    assert "--repository_cache=/var/cache/bazel/repository-cache" in pipeline
+    assert 'container.directory("/var/cache/bazel").export' in pipeline
+    assert "BAZEL_CACHE_WRITE" in pipeline
     assert '--bazel-bep-path="$bep"' in pipeline
     assert "--use-bazel-target-for-codeowners" in pipeline
     assert "--variant bazel" in pipeline
@@ -159,6 +163,15 @@ def test_workflow_prepares_history_and_cache_before_dagger() -> None:
     assert names.index("Prepare cached Dagger and Bazel paths") < names.index(
         "Install Dagger Python SDK",
     )
+    prepare_cache = next(
+        step
+        for step in steps
+        if step.get("name") == "Prepare cached Dagger and Bazel paths"
+    )
+    assert (
+        'sudo chown -R "$(id -u):$(id -g)" "$HOME/.bazel-dagger/cache"'
+        in prepare_cache["run"]
+    )
     source_step = next(
         step
         for step in steps
@@ -178,3 +191,13 @@ def test_workflow_prepares_history_and_cache_before_dagger() -> None:
         "~/.bazel-dagger",
     ):
         assert cache_path in cache["with"]["path"]
+
+    save = next(
+        step
+        for step in steps
+        if step.get("name") == "Save Dagger controller and Bazel data"
+    )
+    assert save["if"] == "${{ always() && github.event_name != 'pull_request' }}"
+    assert names.index("Run impacted Bazel unit tests in Dagger") < names.index(
+        "Save Dagger controller and Bazel data",
+    )
