@@ -11,6 +11,7 @@ py_library(
     visibility = ["//:__subpackages__"],
     deps = [
         "//libs/attio",
+        "//src:edge",
         "//src:enrichment",
         "@pypi//typer",
     ],

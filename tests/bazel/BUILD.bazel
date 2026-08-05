@@ -6,3 +6,13 @@ pytest_test(
     pyi_deps = ["@pypi//pytest"],
     deps = ["//tests:conftest"],
 )
+
+pytest_test(
+    name = "test_edge_facade",
+    srcs = ["test_edge_facade.py"],
+    deps = [
+        "//src:edge",
+        "//tests:conftest",
+        "@pypi//pytest",
+    ],
+)

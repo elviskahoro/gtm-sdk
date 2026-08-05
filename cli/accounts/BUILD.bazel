@@ -15,6 +15,7 @@ py_library(
     deps = [
         "//cli:json_validation",
         "//libs/parsers",
+        "//src:edge",
         "//src:modal_app",
         "//src/accounts",
         "@pypi//modal",

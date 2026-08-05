@@ -19,6 +19,7 @@ py_library(
     deps = [
         "//libs/dlt",
         "//libs/webhook",
+        "//src:edge",
         "//src/caldotcom",
         "//src/fathom",
         "//src/octolens",

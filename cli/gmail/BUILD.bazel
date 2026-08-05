@@ -11,6 +11,7 @@ py_library(
     visibility = ["//:__subpackages__"],
     deps = [
         "//libs/gmail",
+        "//src:edge",
         "@pypi//typer",
     ],
 )

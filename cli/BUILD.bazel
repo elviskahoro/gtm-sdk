@@ -23,6 +23,7 @@ py_library(
     visibility = ["//:__subpackages__"],
     deps = [
         "//libs:telemetry",
+        "//src:edge",
         "@pypi//pydantic",
     ],
 )
@@ -44,6 +45,7 @@ py_library(
         "//cli/webhook",
         "//libs:telemetry",
         "//libs/logging",
+        "//src:edge",
         "@pypi//typer",
     ],
 )
