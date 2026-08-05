@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from importlib import import_module
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # Keep Tach aware of the Gmail adapter used by the dynamic facade. The
+    # runtime lookup remains lazy through ``_MODULES``.
+    from libs.gmail import decode_token, extract_id_from_url
 
 _MODULES: tuple[str, ...] = (
     "libs.attio",
