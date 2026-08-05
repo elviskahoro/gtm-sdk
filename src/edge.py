@@ -7,71 +7,47 @@ orchestration graph and keeps callers independent of adapter module layout.
 
 from __future__ import annotations
 
-from types import ModuleType, SimpleNamespace
+from importlib import import_module
+from types import SimpleNamespace
 from typing import Any
 
-from libs import (
-    attio,
-    caldotcom,
-    clay_http,
-    dlt,
-    exa,
-    fathom,
-    fireflies,
-    gmail,
-    granola,
-    harvest,
-    infisical as _infisical,
-    linear,
-    logging,
-    motherduck,
-    octolens,
-    parallel,
-    parsers,
-    rb2b,
-    sanity,
-    slack,
-    telemetry,
-    webhook,
-)
-from libs.filesystem import files as filesystem_files
-from libs.sanity import api_key_scope as sanity_api_key_scope
-
-_MODULES: tuple[ModuleType, ...] = (
-    attio,
-    caldotcom,
-    clay_http,
-    dlt,
-    exa,
-    fathom,
-    fireflies,
-    filesystem_files,
-    granola,
-    gmail,
-    harvest,
-    _infisical,
-    linear,
-    logging.structured,
-    motherduck,
-    octolens,
-    parallel,
-    parsers,
-    rb2b,
-    sanity,
-    slack,
-    telemetry,
-    webhook,
+_MODULES: tuple[str, ...] = (
+    "libs.attio",
+    "libs.caldotcom",
+    "libs.clay_http",
+    "libs.dlt",
+    "libs.exa",
+    "libs.fathom",
+    "libs.fireflies",
+    "libs.filesystem.files",
+    "libs.granola",
+    "libs.gmail",
+    "libs.harvest",
+    "libs.infisical",
+    "libs.linear",
+    "libs.logging.structured",
+    "libs.motherduck",
+    "libs.octolens",
+    "libs.parallel",
+    "libs.parsers",
+    "libs.rb2b",
+    "libs.sanity",
+    "libs.slack",
+    "libs.telemetry",
+    "libs.webhook",
 )
 
-_EXTRA_ALIASES: dict[str, Any] = {
-    "linear_client": linear.client,
+_EXTRA_ALIASES: dict[str, tuple[str, str]] = {
+    "linear_client": ("libs.linear", "client"),
+    "sanity_api_key_scope": ("libs.sanity", "api_key_scope"),
     # Both Exa and Parallel expose a `search` helper; the stub and existing
     # facade contract identify this name as Parallel's search API.
-    "search": parallel.search,
-    "Rb2bWebhook": rb2b.Webhook,
-    "slack_get_client": slack.get_client,
+    "search": ("libs.parallel", "search"),
+    "Rb2bWebhook": ("libs.rb2b", "Webhook"),
+    "slack_get_client": ("libs.slack", "get_client"),
 }
 
+_infisical = import_module("libs.infisical")
 infisical = SimpleNamespace(
     fetch=_infisical.fetch,
     fetch_all=_infisical.fetch_all,
@@ -80,14 +56,17 @@ infisical = SimpleNamespace(
 
 def fetch_token_scopes(*args: Any, **kwargs: Any) -> Any:
     """Delegate lazily so existing preflight monkeypatches remain effective."""
+    attio = import_module("libs.attio")
     return attio.preflight.fetch_token_scopes(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:
     """Resolve a facade symbol from its owning adapter on first access."""
     if name in _EXTRA_ALIASES:
-        return _EXTRA_ALIASES[name]
-    for module in _MODULES:
+        module_name, attribute = _EXTRA_ALIASES[name]
+        return getattr(import_module(module_name), attribute)
+    for module_name in _MODULES:
+        module = import_module(module_name)
         try:
             return getattr(module, name)
         except AttributeError:

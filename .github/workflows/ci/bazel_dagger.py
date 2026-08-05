@@ -296,8 +296,17 @@ apt-get install --yes --no-install-recommends build-essential ca-certificates cu
             COMBINED_VALIDATE_CMD,
         ],
     )
+    # Bazel's external repositories can create read-only output directories
+    # (notably rules_go's generated stdlib tree). Dagger exports the cache as a
+    # normal host directory after the container exits, so normalize the copied
+    # cache permissions before that export or a green Bazel run can still fail
+    # while materializing the persistent host cache.
+    normalize_cache_permissions = (
+        "find /var/cache/bazel -type d -exec chmod u+rwx {} +; "
+        "find /var/cache/bazel -type f -exec chmod u+rw {} +"
+    )
     if not trunk_api_token:
-        return container
+        return container.with_exec(["bash", "-c", normalize_cache_permissions])
 
     upload_command = f"""
 set -uo pipefail
@@ -329,7 +338,9 @@ fi
 echo "${{rc}}" > {ANALYTICS_RESULT_PATH}
 exit 0
 """.strip()
-    return container.with_exec(["bash", "-c", upload_command])
+    return container.with_exec(
+        ["bash", "-c", upload_command],
+    ).with_exec(["bash", "-c", normalize_cache_permissions])
 
 
 async def main() -> None:
