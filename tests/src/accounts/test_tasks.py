@@ -10,7 +10,7 @@ def test_research_supports_search_response_model(
     from src.accounts.tasks import research
 
     monkeypatch.setattr(
-        "libs.parallel.client.search",
+        "libs.parallel.search",
         lambda input: SearchResponse(  # type: ignore[arg-type]  # pyright: ignore[reportUnknownLambdaType]
             search_id="s_model_1",
             results=[SearchResultItem(title="Acme", url="https://acme.com")],
@@ -29,7 +29,7 @@ def test_map_account_hierarchy_supports_search_response_model(
     from src.accounts.tasks import map_account_hierarchy
 
     monkeypatch.setattr(
-        "libs.parallel.client.search",
+        "libs.parallel.search",
         lambda input: SearchResponse(  # type: ignore[arg-type]  # pyright: ignore[reportUnknownLambdaType]
             search_id="s_model_2",
             results=[
@@ -49,7 +49,7 @@ def test_enrich_raises_type_error_for_unsupported_payload(
     from src.accounts.tasks import enrich
 
     monkeypatch.setattr(
-        "libs.parallel.client.extract_excerpts",
+        "libs.parallel.extract_excerpts",
         lambda input: [  # type: ignore[arg-type]  # pyright: ignore[reportUnknownLambdaType]
             "not",
             "a",
@@ -103,7 +103,7 @@ def test_research_returns_structured_result(monkeypatch: pytest.MonkeyPatch) -> 
     from src.accounts.tasks import research
 
     monkeypatch.setattr(
-        "libs.parallel.client.search",
+        "libs.parallel.search",
         lambda input: {  # type: ignore[arg-type]
             "search_id": "s_1",
             "results": [{"title": "Acme", "url": "https://acme.com"}],
@@ -120,7 +120,7 @@ def test_find_people_returns_structured_result(monkeypatch: pytest.MonkeyPatch) 
     from src.accounts.tasks import find_people
 
     monkeypatch.setattr(
-        "libs.parallel.client.search",
+        "libs.parallel.search",
         lambda input: {  # type: ignore[arg-type]
             "search_id": "s_2",
             "results": [{"name": "Ada", "email": "ada@example.com"}],
@@ -136,7 +136,7 @@ def test_enrich_returns_structured_result(monkeypatch: pytest.MonkeyPatch) -> No
     from src.accounts.tasks import enrich
 
     monkeypatch.setattr(
-        "libs.parallel.client.extract_excerpts",
+        "libs.parallel.extract_excerpts",
         lambda input: {  # type: ignore[arg-type]
             "extract_id": "e_1",
             "result": {"url": input.url, "excerpts": ["founded 2021"]},
@@ -155,7 +155,7 @@ def test_map_account_hierarchy_returns_structured_result(
     from src.accounts.tasks import map_account_hierarchy
 
     monkeypatch.setattr(
-        "libs.parallel.client.search",
+        "libs.parallel.search",
         lambda input: {  # type: ignore[arg-type]
             "search_id": "s_3",
             "results": [{"company": "Acme", "parent": "Acme Holdings"}],
@@ -178,7 +178,7 @@ def test_batch_add_people_preview_by_default_has_no_writes(
         writes["count"] += 1
         return {"record_id": "p_1"}
 
-    monkeypatch.setattr("libs.attio.people.add_person", _add_person)
+    monkeypatch.setattr("libs.attio.add_person", _add_person)
 
     result = batch_add_people([{"email": "ada@example.com"}])
     assert result.mode == "preview"
@@ -195,7 +195,7 @@ def test_batch_add_people_apply_writes(monkeypatch: pytest.MonkeyPatch) -> None:
         writes["count"] += 1
         return {"record_id": "p_1"}
 
-    monkeypatch.setattr("libs.attio.people.add_person", _add_person)
+    monkeypatch.setattr("libs.attio.add_person", _add_person)
 
     result = batch_add_people([{"email": "ada@example.com"}], apply=True)
     assert result.mode == "apply"
@@ -216,7 +216,7 @@ def test_batch_add_companies_preview_by_default_has_no_writes(
         writes["count"] += 1
         return {"record_id": "c_1"}
 
-    monkeypatch.setattr("libs.attio.companies.add_company", _add_company)
+    monkeypatch.setattr("libs.attio.add_company", _add_company)
 
     result = batch_add_companies([{"name": "Acme", "domain": "acme.com"}])
     assert result.mode == "preview"
@@ -233,7 +233,7 @@ def test_batch_add_companies_apply_writes(monkeypatch: pytest.MonkeyPatch) -> No
         writes["count"] += 1
         return {"record_id": "c_1"}
 
-    monkeypatch.setattr("libs.attio.companies.add_company", _add_company)
+    monkeypatch.setattr("libs.attio.add_company", _add_company)
 
     result = batch_add_companies([{"name": "Acme", "domain": "acme.com"}], apply=True)
     assert result.mode == "apply"
@@ -261,7 +261,7 @@ def test_batch_failure_all_success_statuses_are_stable(
     from src.accounts.tasks import batch_add_people
 
     monkeypatch.setattr(
-        "libs.attio.people.add_person",
+        "libs.attio.add_person",
         lambda _payload: {  # type: ignore[arg-type]
             "record_id": "p_1",
         },
@@ -288,7 +288,7 @@ def test_batch_failure_partial_success_summary_is_deterministic(
             return {"record_id": "p_1"}
         raise RuntimeError("duplicate")
 
-    monkeypatch.setattr("libs.attio.people.add_person", _add_person)
+    monkeypatch.setattr("libs.attio.add_person", _add_person)
 
     result = batch_add_people(
         [{"email": "ada@example.com"}, {"email": "ada@example.com"}],
@@ -308,7 +308,7 @@ def test_batch_failure_all_failed_summary_is_deterministic(
     from src.accounts.tasks import batch_add_people
 
     monkeypatch.setattr(
-        "libs.attio.people.add_person",
+        "libs.attio.add_person",
         lambda _payload: (_ for _ in ()).throw(  # type: ignore[arg-type]
             RuntimeError("boom"),
         ),
@@ -332,7 +332,7 @@ def test_idempotency_batch_people_marks_duplicate_keys_as_conflicts(
         writes["count"] += 1
         return {"record_id": f"p_{writes['count']}"}
 
-    monkeypatch.setattr("libs.attio.people.add_person", _add_person)
+    monkeypatch.setattr("libs.attio.add_person", _add_person)
 
     result = batch_add_people(
         [{"email": "ada@example.com"}, {"email": "ada@example.com"}],
@@ -356,7 +356,7 @@ def test_idempotency_batch_companies_marks_duplicate_keys_as_conflicts(
         writes["count"] += 1
         return {"record_id": f"c_{writes['count']}"}
 
-    monkeypatch.setattr("libs.attio.companies.add_company", _add_company)
+    monkeypatch.setattr("libs.attio.add_company", _add_company)
 
     result = batch_add_companies(
         [

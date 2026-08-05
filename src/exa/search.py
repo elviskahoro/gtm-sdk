@@ -9,7 +9,7 @@ from libs.exa import (
     ExaError,
     SearchInput,
     SearchResponse,
-    search,
+    search as exa_search_fn,
 )
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
@@ -76,7 +76,7 @@ def exa_search(
             # callers don't need to catch both ValidationError and ValueError.
             raise ValueError(f"Invalid Exa payload: {exc}") from exc
         try:
-            return search(query)
+            return exa_search_fn(query)
         except ExaError:
             # Typed Exa errors (auth, rate limit, bad request, server) carry
             # status + request_id context callers need for retry decisions —

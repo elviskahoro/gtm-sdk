@@ -66,13 +66,8 @@ from libs.caldotcom import (
     Webhook,
 )
 from libs.clay_http import post_row
-from libs.dlt import (
-    CloudGoogle,
-    DestinationType,
-    GCPCredentials,
-    etl_bucket_name,
-    raw_bucket_name,
-)
+from libs.dlt import DestinationType, etl_bucket_name, raw_bucket_name
+from libs.dlt.filesystem_gcp import CloudGoogle, GCPCredentials
 from libs.exa import find_companies, find_people
 from libs.fathom import iter_meetings, webhook_from_sdk_meeting
 from libs.filesystem.files import DestinationFileData, FileUtility, SourceFileData
@@ -123,8 +118,8 @@ from libs.webhook import (
     UNSUPPORTED_SLACK_CHANNEL_SECRET,
     WebhookFilter,
     WebhookFilters,
-    WebhookModelTypeCheckShim,
 )
+from libs.webhook.protocol import WebhookModelTypeCheckShim
 
 infisical: SimpleNamespace
 

@@ -38,6 +38,8 @@ _MODULES: tuple[str, ...] = (
 )
 
 _EXTRA_ALIASES: dict[str, tuple[str, str]] = {
+    "CloudGoogle": ("libs.dlt.filesystem_gcp", "CloudGoogle"),
+    "GCPCredentials": ("libs.dlt.filesystem_gcp", "GCPCredentials"),
     "linear_client": ("libs.linear", "client"),
     "sanity_api_key_scope": ("libs.sanity", "api_key_scope"),
     # Both Exa and Parallel expose a `search` helper; the stub and existing
@@ -61,7 +63,11 @@ def fetch_token_scopes(*args: Any, **kwargs: Any) -> Any:
 
 
 def __getattr__(name: str) -> Any:
-    """Resolve a facade symbol from its owning adapter on first access."""
+    """Resolve adapter-owned symbols while preserving stable ``src.edge`` imports.
+
+    The facade keeps callers independent of adapter module layout while the
+    adapter package roots remain the owners of their exported symbols.
+    """
     if name in _EXTRA_ALIASES:
         module_name, attribute = _EXTRA_ALIASES[name]
         return getattr(import_module(module_name), attribute)
@@ -136,7 +142,6 @@ __all__ = [
     "Webhook",
     "WebhookFilter",
     "WebhookFilters",
-    "WebhookModelTypeCheckShim",
     "assert_attio_token_scopes",
     "build_patch_record_request",
     "compute_event_id",

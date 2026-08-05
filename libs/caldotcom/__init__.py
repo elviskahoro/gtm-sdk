@@ -1,6 +1,6 @@
 """Cal.com domain models and adapters."""
 
-from libs.caldotcom.client import CalcomClient
+from libs.caldotcom.client import CalcomClient, api_key_scope
 from libs.caldotcom.models import (
     BookingAttendee,
     BookingCancelledPayload,
@@ -40,4 +40,5 @@ __all__ = [
     "PingPayload",
     "Transcript",
     "Webhook",
+    "api_key_scope",
 ]

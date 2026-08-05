@@ -102,7 +102,6 @@ depends_on = [
   "libs.exa",
   "libs.fathom",
   "libs.fireflies",
-  "libs.gmail",
   "libs.granola",
   "libs.harvest",
   "libs.infisical",
@@ -310,14 +309,11 @@ depends_on = []
 [[interfaces]]
 from = ['libs\.apollo']
 expose = [
-  "client",
-  "models",
-  "organizations",
-  "people",
   "OrgEnrichInput",
   "OrgSearchInput",
   "PersonEnrichInput",
   "PersonSearchInput",
+  "api_key_scope",
   "enrich_organization",
   "enrich_person",
   "search_organizations",
@@ -327,22 +323,6 @@ expose = [
 [[interfaces]]
 from = ['libs\.attio']
 expose = [
-  "attributes",
-  "client",
-  "companies",
-  "contracts",
-  "errors",
-  "ext_tam",
-  "meetings",
-  "mentions",
-  "models",
-  "notes",
-  "objects",
-  "people",
-  "preflight",
-  "sdk_boundary",
-  "tracking_events",
-  "values",
   "EXT_TAM_OBJECT",
   "GTM_CONTENT_OBJECT",
   "AttioErrorDescription",
@@ -474,6 +454,7 @@ expose = [
   "NoShowAttendee",
   "Organizer",
   "Transcript",
+  "api_key_scope",
 ]
 
 [[interfaces]]
@@ -483,27 +464,22 @@ expose = ["post_row"]
 [[interfaces]]
 from = ['libs\.dlt']
 expose = [
-  "bucket_naming",
-  "destination_type",
-  "filesystem_gcp",
   "CloudGoogle",
   "DestinationType",
-  "GCPCredentials",
   "etl_bucket_name",
+  "GCPCredentials",
   "raw_bucket_name",
+  # GCP storage remains an intentional dedicated-module interface.
+  "filesystem_gcp",
+  "filesystem_gcp\\.CloudGoogle",
+  "filesystem_gcp\\.GCPCredentials",
 ]
 
 [[interfaces]]
 from = ['libs\.exa']
 expose = [
-  "client",
-  "companies",
-  "errors",
-  "models",
-  "people",
-  "search",
-  "ExaAuthError",
   "ExaAPIKeyMissingError",
+  "ExaAuthError",
   "ExaBadRequestError",
   "ExaError",
   "ExaRateLimitError",
@@ -512,6 +488,8 @@ expose = [
   "SearchResponse",
   "find_companies",
   "find_people",
+  "api_key_scope",
+  "search",
 ]
 
 [[interfaces]]
@@ -552,12 +530,6 @@ expose = ["url_decoder", "decode_token", "extract_id_from_url"]
 [[interfaces]]
 from = ['libs\.granola']
 expose = [
-  "errors",
-  "local_cache",
-  "models",
-  "normalize",
-  "state",
-  "writer",
   "ConfigError",
   "ExportCliJsonPayload",
   "ExportRunOptions",
@@ -591,7 +563,18 @@ expose = [
 
 [[interfaces]]
 from = ['libs\.linear']
-expose = ["client"]
+expose = [
+  "api_key_scope",
+  "create_issue",
+  "get_issue",
+  "get_team",
+  "get_team_by_key",
+  "get_user",
+  "list_issues",
+  "list_open_team_issues",
+  "search_issues",
+  "update_issue",
+]
 
 [[interfaces]]
 from = ['libs\.linkedin']
@@ -621,15 +604,13 @@ expose = ["connect", "query"]
 [[interfaces]]
 from = ['libs\.octolens']
 expose = [
+  "ApiMention",
+  "ApiMentionKeyword",
+  "Mention",
+  "OctolensClient",
   "RelevanceScore",
   "Source",
   "Webhook",
-  "client",
-  "models",
-  "ApiMention",
-  "OctolensClient",
-  "ApiMentionKeyword",
-  "Mention",
 ]
 
 [[interfaces]]
@@ -639,9 +620,6 @@ expose = []
 [[interfaces]]
 from = ['libs\.parallel']
 expose = [
-  "client",
-  "models",
-  "types",
   "ExtractExcerptsInput",
   "ExtractFullContentInput",
   "ExtractResponse",
@@ -666,9 +644,6 @@ expose = [
 [[interfaces]]
 from = ['libs\.parsers']
 expose = [
-  "constants",
-  "countries",
-  "normalization",
   "EMAIL_DOMAINS_TO_KEEP",
   "country_name_to_iso2",
   "normalize_mapping_payload",
@@ -695,11 +670,6 @@ expose = []
 [[interfaces]]
 from = ['libs\.sanity']
 expose = [
-  "blog",
-  "client",
-  "errors",
-  "models",
-  "portable_text",
   "BLOG_POST_GROQ",
   "DEFAULT_API_VERSION",
   "DEFAULT_DATASET",
@@ -722,7 +692,14 @@ expose = [
 
 [[interfaces]]
 from = ['libs\.slack']
-expose = ["client", "get_client", "lookup_user_id_by_email", "post_message"]
+expose = [
+  "PostedMessage",
+  "SlackAuthError",
+  "api_key_scope",
+  "get_client",
+  "lookup_user_id_by_email",
+  "post_message",
+]
 
 [[interfaces]]
 from = ['libs\.telemetry']
@@ -739,8 +716,6 @@ expose = [
 [[interfaces]]
 from = ['libs\.webhook']
 expose = [
-  "filter",
-  "protocol",
   "UNSUPPORTED_SLACK_CHANNEL_SECRET",
   "WebhookFilter",
   "WebhookFilters",

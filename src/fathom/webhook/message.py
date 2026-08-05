@@ -32,7 +32,7 @@ class Webhook(FathomWebhook):
 
     @staticmethod
     def raw_get_app_name() -> str:
-        from libs.dlt import CloudGoogle
+        from libs.dlt.filesystem_gcp import CloudGoogle
 
         return CloudGoogle.clean_bucket_name(bucket_name=Webhook.raw_get_bucket_name())
 

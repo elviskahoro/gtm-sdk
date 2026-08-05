@@ -1,6 +1,6 @@
 """Exa API adapter — typed wrapper around Exa SDK."""
 
-from .client import ExaAPIKeyMissingError
+from .client import ExaAPIKeyMissingError, api_key_scope
 from .companies import find_companies
 from .errors import (
     ExaAuthError,
@@ -22,6 +22,7 @@ __all__ = [
     "ExaServerError",
     "SearchInput",
     "SearchResponse",
+    "api_key_scope",
     "find_companies",
     "find_people",
     "search",

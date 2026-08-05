@@ -3,8 +3,6 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 
-from libs.dlt.filesystem_gcp import CloudGoogle
-
 
 class DestinationType(str, Enum):
     LOCAL = "local"
@@ -50,6 +48,8 @@ class DestinationType(str, Enum):
                     bucket_name=bucket_name,
                 )
             case DestinationType.GCS:
+                from libs.dlt.filesystem_gcp import CloudGoogle
+
                 return CloudGoogle.bucket_url_from_bucket_name(
                     bucket_name=bucket_name,
                 )
