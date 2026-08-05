@@ -19,8 +19,10 @@ scripts/webhooks-handlers-redeploy.py export_to_attio CaldotcomBookingWebhook
 scripts/webhooks-handlers-redeploy.py export_to_gcp_etl --all
 ```
 
-- **Never commit the substituted form.** The script substitutes, deploys, and
-  restores in one step, with `atexit` cleanup if it raises or is interrupted.
+- **Never commit the substituted form.** The script substitutes inside an
+  isolated checkout copy and deploys from there, so the host file is never
+  modified; `atexit` cleanup only releases the deploy lock if it raises or is
+  interrupted.
 - **Deploying one source does not redeploy the others.** After a shared-code
   change (e.g. `libs/dlt/`), bump each source individually or stale containers
   keep importing removed symbols.

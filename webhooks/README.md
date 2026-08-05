@@ -58,8 +58,9 @@ Implementation: [`libs/logging/structured.py`](../libs/logging/structured.py).
 
 Use `scripts/webhooks-handlers-redeploy.py` — never `modal deploy webhooks/<file>.py`
 directly. Handler files live in source control with a `WebhookModelToReplace`
-placeholder so the working tree stays source-agnostic; the script substitutes
-the placeholder, runs the deploy, and restores the file in one safe step.
+placeholder so the working tree stays source-agnostic; the script copies the
+repo into a temporary checkout, substitutes the placeholder there, runs the
+deploy from that checkout, and never modifies the host file.
 
 ```shell
 set -a && source .env.local && set +a   # once per shell
@@ -82,13 +83,14 @@ modal deploy` — run by the repository's pinned Flox environment. Set
 Flox-toolchain container. The recipe is the only place to add a step or a
 credential.
 
-Two differences between the executors are real rather than papered over. The
-Flox path runs in your working tree, so it syncs into a throwaway
-`tmp/webhook-deploy-venv` and never touches your `.venv`. It also *scrubs*
-the inherited environment rather than merging into it — a stray
-`TELEMETRY_COLLECTOR_APP=""` exported in your shell would otherwise be baked
-into the deployed app and silently cost it Logfire. Preflights run on your
-bare host PATH, outside either isolation layer.
+Two differences between the executors are real rather than papered over. Both
+paths now run from an isolated checkout copy, so neither touches your
+`.venv` — the Flox path syncs into a throwaway `.deploy-venv` inside the
+temporary checkout. The Flox path also *scrubs* the inherited environment
+rather than merging into it — a stray `TELEMETRY_COLLECTOR_APP=""` exported
+in your shell would otherwise be baked into the deployed app and silently
+cost it Logfire. Preflights run on your bare host PATH, outside either
+isolation layer.
 
 Valid `<handler>` and `<source>` values are discovered at runtime from
 `webhooks/*.py` and that handler's `Webhook as <Alias>` imports — there is no
@@ -117,20 +119,20 @@ these are what bite:
   claimed the inverse for a while.) The deploy itself is unaffected: it sets
   both tokens explicitly from a single up-front fetch.
 - **`cp -i` alias.** A bash-only footgun the Python rewrite sidesteps by
-  using `shutil.copyfile` (which always overwrites) for restore — no
-  shell-alias resolution involved.
+  using `shutil.copytree` (which always overwrites) for the isolated
+  checkout — no shell-alias resolution involved.
 - **`infisical run` argument-string expansion.** Bash-only zsh issue where
   storing `infisical run --token … --` in a variable made the whole string
   `argv[0]`. The Python rewrite uses list-arg subprocess calls everywhere
   with `shell=False`, so the gotcha is structurally impossible.
 
-Additional mitigations (concurrent-invocation lock, atexit-scoped restore,
-Modal-token/secret/Infisical-key/GCS-bucket preflight, signal-routed cleanup)
-are documented on the functions that implement them in
+Additional mitigations (concurrent-invocation lock, isolated checkout,
+Modal-token/secret/Infisical-key/GCS-bucket preflight, signal-routed lock
+cleanup) are documented on the functions that implement them in
 `scripts/webhooks-handlers-redeploy.py` — that module is the catalogue. The CI smoke
 test at `tests/scripts/test_deploy_webhook.py` drives the Flox executor
-end-to-end: substitute/restore, cleanup on deploy failure, the
-`MODAL_TOKEN_ID` pop at the preflight, and the environment scrub.
+end-to-end: isolated substitute/deploy, host-tree cleanliness on deploy
+failure, the `MODAL_TOKEN_ID` pop at the preflight, and the environment scrub.
 `tests/scripts/test_deploy_webhook_dagger.py` pins the shared recipe, transport
 selector, container-runner delegation, and credential scrub surface. The lock
 and the full preflight paths are not yet exercised in CI.
