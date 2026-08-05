@@ -1,5 +1,6 @@
 """Cal.com domain models and adapters."""
 
+from libs.caldotcom import client, models
 from libs.caldotcom.client import CalcomClient, api_key_scope
 from libs.caldotcom.models import (
     BookingAttendee,
