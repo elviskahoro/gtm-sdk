@@ -55,7 +55,14 @@ jobs:
 
       - name: Tach affected tests after push
         if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-        run: uv run tach test --base "${{ github.event.before }}" -- -q
+        env:
+          TACH_BASE: ${{ github.event.before }}
+        run: |
+          if git cat-file -e "${TACH_BASE}^{commit}" 2>/dev/null; then
+            uv run tach test --base "$TACH_BASE" -- -q
+          else
+            uv run pytest -q
+          fi
 
       - name: Tach affected tests after initial push
         if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
