@@ -21,7 +21,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from libs.attio import PersonInput
-from libs.harvest import client as harvest_client
+from libs.harvest import fetch_profile
 from libs.logging import log
 from libs.parsers import country_name_to_iso2
 
@@ -153,7 +153,7 @@ def harvest_profile_from_task(task: EnrichmentTask) -> HarvestProfile | None:
     Calls Harvest API and returns a profile with only the target fields
     populated (others remain None for selective upsert).
     """
-    raw = harvest_client.fetch_profile(task.linkedin_url)
+    raw = fetch_profile(task.linkedin_url)
     if not raw:
         log(
             "enrichment.harvest_empty",
