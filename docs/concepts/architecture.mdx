@@ -55,8 +55,8 @@ Anti-patterns to reject in review: orchestration inside `libs/`, business logic 
 
 <Note>
   Adding a new top-level package also means updating
-  `[tool.setuptools.packages.find]` in `pyproject.toml` (currently `cli*`, `libs*`,
-  `scripts*`, `src*`).
+  `[tool.setuptools.packages.find]` in the matching `pyproject.toml` (root, or
+  `cli/pyproject.toml` for CLI packages).
 </Note>
 
 ## The adapter pattern
