@@ -56,15 +56,15 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.edge import get_client  # noqa: E402
-from src.edge import (  # noqa: E402
-    describe_attio_error,
-    model_dump_or_empty,
-)
 from scripts.lib.env import (  # noqa: E402
     clean_env,
     infisical_run_example,
     read_infisical_credentials,
+)
+from src.edge import (  # noqa: E402
+    describe_attio_error,
+    get_client,  # noqa: E402
+    model_dump_or_empty,
 )
 
 if TYPE_CHECKING:

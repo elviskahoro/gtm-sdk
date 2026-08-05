@@ -4,10 +4,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from libs.exa import ExaAPIKeyMissingError
-from libs.exa import ExaError
-from libs.exa import SearchInput, SearchResponse
-from libs.exa import search
+from libs.exa import (
+    ExaAPIKeyMissingError,
+    ExaError,
+    SearchInput,
+    SearchResponse,
+    search,
+)
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets

@@ -139,6 +139,7 @@ dev = [
   "pytest-xdist>=3.0.0",
   "setuptools>=83.0.0",
   "tach>=0.35.0",
+  "types-pyyaml>=6.0.12.20260510",
 ]
 unit-ci = [
   "attio>=0.22.8",

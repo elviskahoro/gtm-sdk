@@ -1,5 +1,6 @@
 """Cal.com domain models and adapters."""
 
+from libs.caldotcom.client import CalcomClient
 from libs.caldotcom.models import (
     BookingAttendee,
     BookingCancelledPayload,
@@ -19,17 +20,16 @@ from libs.caldotcom.models import (
     Transcript,
     Webhook,
 )
-from libs.caldotcom.client import CalcomClient
 
 __all__ = [
     "BookingAttendee",
-    "CalcomClient",
     "BookingCancelledPayload",
     "BookingCreatedPayload",
     "BookingHost",
     "BookingNoShowPayload",
     "BookingRequestedPayload",
     "BookingRescheduledPayload",
+    "CalcomClient",
     "CalcomPayload",
     "EventType",
     "MeetingEndedPayload",

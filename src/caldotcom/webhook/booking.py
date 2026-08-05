@@ -41,22 +41,20 @@ from pydantic import BaseModel
 from uuid_extensions import uuid7
 
 from libs.caldotcom import (
+    BookingAttendee,
     BookingCancelledPayload,
     BookingCreatedPayload,
+    BookingHost,
     BookingNoShowPayload,
     BookingRequestedPayload,
     BookingRescheduledPayload,
+    CalcomClient,
     MeetingEndedPayload,
     MeetingStartedPayload,
-    PingPayload,
-    Webhook as CalcomWebhook,
-)
-from libs.caldotcom import CalcomClient
-from libs.caldotcom import (
-    BookingAttendee,
-    BookingHost,
     MutationAttendee,
     NoShowAttendee,
+    PingPayload,
+    Webhook as CalcomWebhook,
 )
 from libs.dlt import etl_bucket_name, raw_bucket_name
 from libs.meetings import canonical_meeting_uid

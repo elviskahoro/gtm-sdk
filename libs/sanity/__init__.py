@@ -9,7 +9,12 @@ from .client import (
     api_key_scope,
     query,
 )
-from .errors import DuplicateSlugError, SanityError, SanityQueryError, UnsafeArchiveDirError
+from .errors import (
+    DuplicateSlugError,
+    SanityError,
+    SanityQueryError,
+    UnsafeArchiveDirError,
+)
 from .models import Author, BlogPost, Category
 from .portable_text import escape_text, escape_trailing_atx, to_markdown
 
@@ -27,9 +32,9 @@ __all__ = [
     "SanityQueryError",
     "UnsafeArchiveDirError",
     "api_key_scope",
-    "fetch_blog_posts_raw",
     "escape_text",
     "escape_trailing_atx",
+    "fetch_blog_posts_raw",
     "query",
     "to_markdown",
 ]

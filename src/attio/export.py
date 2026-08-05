@@ -14,15 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from libs.attio import (
-    get_company_values,
-    upsert_company as libs_upsert_company,
-)
-from libs.attio import ErrorEntry, ReliabilityEnvelope, WarningEntry
-from libs.attio import SchemaMismatchError
-from libs.attio import find_or_create_meeting
-from libs.attio import upsert_mention as libs_upsert_mention
-from libs.attio import (
     CompanyInput,
+    ErrorEntry,
     MeetingExternalRef as LibMeetingExternalRef,
     MeetingInput,
     MeetingLifecycleEventInput,
@@ -31,22 +24,23 @@ from libs.attio import (
     MentionInput,
     NoteInput,
     PersonInput,
+    ReliabilityEnvelope,
+    SchemaMismatchError,
     TrackingEventInput,
-)
-from libs.attio import (
+    WarningEntry,
     add_note as libs_add_note,
-    find_note_by_title as libs_find_note_by_title,
-    resolve_record_id_for_ref as libs_resolve_record_id_for_ref,
-)
-from libs.attio import (
     error_envelope,
-    get_person_values,
-    upsert_person as libs_upsert_person,
-)
-from libs.attio import resolve_owner_member_id
-from libs.attio import (
+    find_note_by_title as libs_find_note_by_title,
+    find_or_create_meeting,
     find_or_create_meeting_lifecycle_event,
     find_or_create_tracking_event,
+    get_company_values,
+    get_person_values,
+    resolve_owner_member_id,
+    resolve_record_id_for_ref as libs_resolve_record_id_for_ref,
+    upsert_company as libs_upsert_company,
+    upsert_mention as libs_upsert_mention,
+    upsert_person as libs_upsert_person,
 )
 from libs.logging import log
 from libs.telemetry import annotate_span, span

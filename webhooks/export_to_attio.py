@@ -1,4 +1,4 @@
-# trunk-ignore-all(ruff/PGH003,trunk/ignore-does-nothing)
+# trunk-ignore-all(ruff/PGH003,ruff/TC004,trunk/ignore-does-nothing)
 from __future__ import annotations
 
 import time
@@ -10,19 +10,21 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from src.edge import assert_attio_token_scopes
-from src.edge import (
-    log,
-    set_source,
-    webhook_request_context,
-)
-from src.edge import init_log_exporter, init_tracer, span
 from src.attio.export import execute
 
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
 from src.caldotcom.webhook.booking import (
     Webhook as CaldotcomBookingWebhook,
+)
+from src.edge import (
+    assert_attio_token_scopes,
+    init_log_exporter,
+    init_tracer,
+    log,
+    set_source,
+    span,
+    webhook_request_context,
 )
 from src.fathom.webhook.call import (
     Webhook as FathomCallWebhook,

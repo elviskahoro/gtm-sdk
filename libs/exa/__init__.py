@@ -14,8 +14,8 @@ from .people import find_people
 from .search import search
 
 __all__ = [
-    "ExaAuthError",
     "ExaAPIKeyMissingError",
+    "ExaAuthError",
     "ExaBadRequestError",
     "ExaError",
     "ExaRateLimitError",

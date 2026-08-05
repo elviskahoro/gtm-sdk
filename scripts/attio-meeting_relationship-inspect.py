@@ -464,12 +464,12 @@ def _post_test_meeting(
     start: datetime,
 ) -> str:
     """POST a throwaway test meeting; return its meeting_id."""
-    from src.edge import find_or_create_meeting
     from src.edge import (
         MeetingExternalRef,
         MeetingInput,
         MeetingLinkedRecord,
         MeetingParticipantInput,
+        find_or_create_meeting,
     )
 
     links = [MeetingLinkedRecord(object="people", record_id=person_id)]

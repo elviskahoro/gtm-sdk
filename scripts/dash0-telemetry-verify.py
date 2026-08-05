@@ -16,8 +16,7 @@ from pathlib import Path
 # Add gtm-sdk to path so we can import libs
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.edge import log, set_source
-from src.edge import emit_cli_event, init_log_exporter, init_tracer
+from src.edge import emit_cli_event, init_log_exporter, init_tracer, log, set_source
 
 
 def verify_environment() -> dict[str, str]:

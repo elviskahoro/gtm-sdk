@@ -11,7 +11,7 @@ from src.edge import (
     DEFAULT_DATASET,
     DEFAULT_PROJECT_ID,
     SanityConfig,
-    api_key_scope,
+    sanity_api_key_scope,
 )
 from src.sanity.blog_download import download_blog_posts
 
@@ -79,7 +79,7 @@ def download(
     )
 
     if token:
-        with api_key_scope(token):
+        with sanity_api_key_scope(token):
             result = download_blog_posts(
                 out_dir,
                 config=config,

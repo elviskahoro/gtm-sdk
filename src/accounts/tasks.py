@@ -4,12 +4,17 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from libs.attio import (
+    CompanyInput,
+    PersonInput,
     companies as attio_companies,
     people as attio_people,
 )
-from libs.attio import CompanyInput, PersonInput
-from libs.parallel import client as parallel_client
-from libs.parallel import ExtractExcerptsInput, SearchInput, SearchResponse
+from libs.parallel import (
+    ExtractExcerptsInput,
+    SearchInput,
+    SearchResponse,
+    client as parallel_client,
+)
 from libs.parsers import normalize_mapping_payload
 from src.accounts.models import (
     BatchMutationResult,

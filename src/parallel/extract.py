@@ -2,11 +2,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from libs.parallel import extract_excerpts, extract_full_content
 from libs.parallel import (
     ExtractExcerptsInput,
     ExtractFullContentInput,
     ExtractResponse,
+    extract_excerpts,
+    extract_full_content,
 )
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image

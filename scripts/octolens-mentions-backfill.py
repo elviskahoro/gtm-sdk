@@ -93,9 +93,11 @@ import httpx  # noqa: E402
 import orjson  # noqa: E402
 
 from cli.webhook._modal import modal_url_for_app  # noqa: E402
-from src.edge import Source  # noqa: E402
-from src.edge import OctolensClient  # noqa: E402
 from scripts.lib.env import infisical_run_example  # noqa: E402
+from src.edge import (  # noqa: E402
+    OctolensClient,  # noqa: E402
+    Source,  # noqa: E402
+)
 from src.octolens.backfill import (  # noqa: E402
     api_mention_to_row,
     build_webhook_payload,

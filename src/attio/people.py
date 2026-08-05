@@ -4,9 +4,9 @@ from typing import Any, Literal, cast
 import modal
 from pydantic import BaseModel, ConfigDict, Field
 
-from libs.attio import ReliabilityEnvelope
-from libs.attio import PersonInput
 from libs.attio import (
+    PersonInput,
+    ReliabilityEnvelope,
     add_person,
     error_envelope,
     search_people,

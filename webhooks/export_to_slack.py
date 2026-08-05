@@ -1,4 +1,4 @@
-# trunk-ignore-all(ruff/PGH003,trunk/ignore-does-nothing)
+# trunk-ignore-all(ruff/PGH003,ruff/TC004,trunk/ignore-does-nothing)
 from __future__ import annotations
 
 import time
@@ -10,18 +10,18 @@ import orjson
 from fastapi import Request
 from modal import Image
 
-from src.edge import (
-    log,
-    set_source,
-    webhook_request_context,
-)
-from src.edge import fetch as infisical_fetch, slack_get_client as get_client
-from src.edge import init_log_exporter
-
 # trunk-ignore-begin(ruff/F401,ruff/I001,pyright/reportUnusedImport)
 # fmt: off
 from src.caldotcom.webhook.booking import (
     Webhook as CaldotcomBookingWebhook,
+)
+from src.edge import (
+    fetch as infisical_fetch,
+    init_log_exporter,
+    log,
+    set_source,
+    slack_get_client as get_client,
+    webhook_request_context,
 )
 from src.secrets_bootstrap import bootstrap_secret, hydrate
 from src.slack.export import execute
@@ -106,7 +106,7 @@ def _export(webhook: WebhookModel) -> str:
         result = execute(
             messages,
             channel=channel,
-            client=slack_get_client(),
+            client=get_client(),
             thread_store=modal_dict_thread_store(_THREAD_STORE_NAME),
         )
         body = result.body()

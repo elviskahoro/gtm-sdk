@@ -81,16 +81,16 @@ from dlt.destinations import duckdb as duckdb_destination  # noqa: E402
 
 from cli.webhook._hookdeck import HOOKDECK_API_BASE, PAGE_LIMIT  # noqa: E402
 from cli.webhook._modal import modal_url_for_app  # noqa: E402
-from src.edge import raw_bucket_name  # noqa: E402
-from src.edge import GCPCredentials  # noqa: E402
-from src.edge import (  # noqa: E402
-    Rb2bWebhook,
-    compute_event_id,
-)
 
 # Reuse the model's timestamp normalizer so the synthesized envelope timestamp
 # parses even when rb2b emits its documented `12:34:56:00.00+00.00` shape.
-from src.edge import normalize_rb2b_timestamp  # noqa: E402
+from src.edge import (  # noqa: E402
+    GCPCredentials,  # noqa: E402
+    Rb2bWebhook,
+    compute_event_id,
+    normalize_rb2b_timestamp,  # noqa: E402
+    raw_bucket_name,  # noqa: E402
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

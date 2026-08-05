@@ -111,6 +111,7 @@ from libs.sanity import (
     DuplicateSlugError,
     SanityConfig,
     UnsafeArchiveDirError,
+    api_key_scope as sanity_api_key_scope,
 )
 from libs.slack import (
     get_client as slack_get_client,
@@ -239,6 +240,7 @@ __all__ = [
     "raw_bucket_name",
     "resolve_owner_member_id",
     "resolve_record_id_for_ref",
+    "sanity_api_key_scope",
     "search",
     "search_companies",
     "search_people",

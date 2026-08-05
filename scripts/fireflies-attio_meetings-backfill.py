@@ -55,8 +55,8 @@ from typing import TYPE_CHECKING, Any
 import click
 import typer
 
-from src.edge import from_motherduck_row
 from scripts.lib.env import clean_env, parse_dotenv
+from src.edge import from_motherduck_row
 from src.fireflies import DATABASE, iter_assembled_rows, to_attio_operations
 
 if TYPE_CHECKING:
@@ -126,8 +126,8 @@ def _run(
     mode = "EXECUTE" if execute else "DRY RUN"
     emit(f"# Fireflies → Attio meeting backfill ({mode})")
 
-    from src.edge import connect
     from src.attio.export import execute as execute_ops
+    from src.edge import connect
 
     if execute:
         from src.edge import assert_attio_token_scopes

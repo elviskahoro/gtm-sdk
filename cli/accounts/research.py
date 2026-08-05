@@ -8,8 +8,8 @@ import typer
 from pydantic import ValidationError
 
 from cli.json_validation import emit_json_payload_validation_telemetry
-from src.edge import normalize_mapping_payload
 from src.accounts.research import EnrichQuery, ResearchQuery
+from src.edge import normalize_mapping_payload
 from src.modal_app import MODAL_APP
 
 

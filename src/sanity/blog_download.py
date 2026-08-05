@@ -21,10 +21,15 @@ from urllib.parse import quote
 
 import yaml
 
-from libs.sanity import fetch_blog_posts_raw
-from libs.sanity import DuplicateSlugError, UnsafeArchiveDirError
-from libs.sanity import BlogPost
-from libs.sanity import escape_text, escape_trailing_atx, to_markdown
+from libs.sanity import (
+    BlogPost,
+    DuplicateSlugError,
+    UnsafeArchiveDirError,
+    escape_text,
+    escape_trailing_atx,
+    fetch_blog_posts_raw,
+    to_markdown,
+)
 
 if TYPE_CHECKING:
     from libs.sanity import SanityConfig

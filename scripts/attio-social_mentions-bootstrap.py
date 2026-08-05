@@ -53,12 +53,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.edge import (  # noqa: E402
     create_attribute,
+    create_object,  # noqa: E402
     ensure_select_options,
     list_attributes,
     list_select_options,
     list_status_options,
 )
-from src.edge import create_object  # noqa: E402
 
 # Open-vocabulary selects: every slug here is JIT-seeded at write time by
 # libs/attio/mentions.py::_SINGLE_SELECT_FIELDS / _MULTISELECT_FIELDS, so their

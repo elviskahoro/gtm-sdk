@@ -2,8 +2,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from libs.apollo import OrgEnrichInput, OrgSearchInput
-from libs.apollo import enrich_organization, search_organizations
+from libs.apollo import (
+    OrgEnrichInput,
+    OrgSearchInput,
+    enrich_organization,
+    search_organizations,
+)
 from src.api_keys import inject_api_keys
 from src.modal_runtime import app, image
 from src.secrets_bootstrap import bootstrap_secret, with_secrets

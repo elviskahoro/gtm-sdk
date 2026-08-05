@@ -1,4 +1,4 @@
-# trunk-ignore-all(ruff/PGH003,trunk/ignore-does-nothing)
+# trunk-ignore-all(ruff/PGH003,ruff/TC004,trunk/ignore-does-nothing)
 # ruff: noqa: ANN201, I001, INP001, TC002, TC004
 from __future__ import annotations
 

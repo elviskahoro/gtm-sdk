@@ -58,12 +58,12 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.edge import iter_meetings_in_range  # noqa: E402
 from src.attio.orphan_meetings import (  # noqa: E402
     classify,
     detect_orphans,
     write_orphan_csvs,
 )
+from src.edge import iter_meetings_in_range  # noqa: E402
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "out" / "orphan-cleanup"
 
