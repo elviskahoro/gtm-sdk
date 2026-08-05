@@ -52,7 +52,7 @@ require_ignore_directive_reasons = "error"
 # dev dependency, not a runtime dep of the gtm package.
 # dlt and dagger-io are used by excluded operational scripts (including the
 # container runner), not by the runtime adapter/orchestration package.
-exclude = ["pytest", "dlt", "dagger_io"]
+exclude = ["pytest", "dlt", "dagger_io", "pyarrow_hotfix"]
 
 # ============================================================================
 # UTILITIES: Accessible from anywhere (no dependencies)
