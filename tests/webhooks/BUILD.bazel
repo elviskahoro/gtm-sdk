@@ -17,6 +17,7 @@ pytest_test(
         "//libs/logging",
         "//libs/slack",  # keep
         "//scripts:webhooks-handlers-redeploy",  # keep
+        "//src:edge",
         "//src:secrets_bootstrap",  # keep
         "//src/attio",  # keep
         "//src/caldotcom",  # keep

@@ -34,6 +34,7 @@ pytest_test(
     srcs = ["test_modal_runtime.py"],
     deps = [
         "//libs/logging",  # keep
+        "//src:app",
         "//tests:conftest",
         "@pypi//pytest",
     ],

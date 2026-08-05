@@ -39,17 +39,14 @@ manifest:
     deprecated: deprecated
     distro: distro
     dlt: dlt
-    dlthub: dlthub
     dns: dnspython
     dotenv: python_dotenv
     duckdb: duckdb
-    ecdsa: ecdsa
     email_validator: email_validator
     emoji: emoji
     exa_py: exa_py
     exceptiongroup: exceptiongroup
     execnet: execnet
-    executing: executing
     fastapi: fastapi
     fastapi_cli: fastapi_cli
     fastapi_cloud_cli: fastapi_cloud_cli
@@ -162,18 +159,14 @@ manifest:
     humanize: humanize
     hyperframe: hyperframe
     hypothesis: hypothesis
-    ibis: ibis_framework
     idna: idna
-    importlib_metadata: importlib_metadata
     infisical_sdk: infisicalsdk
     iniconfig: iniconfig
     jinja2: jinja2
     jiter: jiter
     jmespath: jmespath
-    jose: python_jose
     jsonpath: jsonpath_python
     jsonpath_ng: jsonpath_ng
-    logfire: logfire
     markdown_it: markdown_it_py
     markupsafe: markupsafe
     mdurl: mdurl
@@ -196,10 +189,12 @@ manifest:
     opentelemetry.instrumentation.auto_instrumentation: opentelemetry_instrumentation
     opentelemetry.instrumentation.bootstrap: opentelemetry_instrumentation
     opentelemetry.instrumentation.bootstrap_gen: opentelemetry_instrumentation
+    opentelemetry.instrumentation.cidict: opentelemetry_instrumentation
     opentelemetry.instrumentation.dependencies: opentelemetry_instrumentation
     opentelemetry.instrumentation.distro: opentelemetry_instrumentation
     opentelemetry.instrumentation.environment_variables: opentelemetry_instrumentation
     opentelemetry.instrumentation.instrumentor: opentelemetry_instrumentation
+    opentelemetry.instrumentation.log_utils: opentelemetry_instrumentation
     opentelemetry.instrumentation.logging: opentelemetry_instrumentation_logging
     opentelemetry.instrumentation.propagators: opentelemetry_instrumentation
     opentelemetry.instrumentation.sqlcommenter_utils: opentelemetry_instrumentation
@@ -225,7 +220,6 @@ manifest:
     orjson: orjson
     packaging: packaging
     parallel: parallel_web
-    parsy: parsy
     pathvalidate: pathvalidate
     pendulum: pendulum
     phonenumbers: phonenumbers
@@ -235,7 +229,6 @@ manifest:
     prompt_toolkit: prompt_toolkit
     propcache: propcache
     proto: proto_plus
-    public: atpublic
     py: pytest
     pyarrow: pyarrow
     pyasn1: pyasn1
@@ -261,8 +254,6 @@ manifest:
     rich_argparse: rich_argparse
     rich_toolkit: rich_toolkit
     rignore: rignore
-    rsa: rsa
-    ruamel.yaml: ruamel_yaml
     s3transfer: s3transfer
     semver: semver
     sentry_sdk: sentry_sdk
@@ -283,12 +274,10 @@ manifest:
     synchronicity: synchronicity
     tach: tach
     tenacity: tenacity
-    tlz: toolz
     toml: toml
     tomli: tomli
     tomli_w: tomli_w
     tomlkit: tomlkit
-    toolz: toolz
     tqdm: tqdm
     typer: typer
     types_certifi: types_certifi
@@ -311,7 +300,6 @@ manifest:
     xdist: pytest_xdist
     yaml: pyyaml
     yarl: yarl
-    zipp: zipp
   pip_repository:
     name: pypi
-integrity: 28e5965c9d91980611dfba30ddd3c17c13de8cc04438bb9a3bf238968233e35b
+integrity: 3bd3138ee957c7c09f2db2ea3bf09a0f3dc913b48ae7e6c2cd40b84b8d19775c
