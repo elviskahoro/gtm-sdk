@@ -1,0 +1,26 @@
+---
+title: "Breaking change: DLT GCP imports use the dedicated filesystem adapter"
+description: "CloudGoogle and GCPCredentials are no longer re-exported from libs.dlt; import them from libs.dlt.filesystem_gcp instead."
+---
+
+## Breaking changes
+
+`CloudGoogle` and `GCPCredentials` are no longer exported from the `libs.dlt`
+package root. This keeps the optional GCP filesystem dependency behind its
+dedicated adapter boundary.
+
+Update downstream imports from:
+
+```python
+from libs.dlt import CloudGoogle, GCPCredentials
+```
+
+to:
+
+```python
+from libs.dlt.filesystem_gcp import CloudGoogle, GCPCredentials
+```
+
+The bucket naming helpers and `DestinationType` remain available from
+`libs.dlt`. `src.edge` continues to expose the GCP helpers for orchestration
+callers.

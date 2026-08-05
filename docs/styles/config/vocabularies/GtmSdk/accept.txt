@@ -5,6 +5,7 @@ CI|CI's
 Exa
 Flox
 Grafana
+GCPCredentials
 Hookdeck
 Infisical
 idempotency
