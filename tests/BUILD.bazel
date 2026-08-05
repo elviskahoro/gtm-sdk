@@ -15,13 +15,9 @@ py_library(
         "//libs:telemetry",
         "//libs/attio",
         "@pypi//attio",
-        # src.edge resolves adapter packages dynamically, so Bazel tests need
-        # the external modules used by adapters reached through that facade.
-        "@pypi//duckdb",
         "@pypi//hypothesis",
         "@pypi//opentelemetry_exporter_otlp_proto_http",
         "@pypi//opentelemetry_sdk",
-        "@pypi//orjson",
         "@pypi//pytest",
     ],
 )
