@@ -81,18 +81,13 @@ utility = true
 path = "scripts"
 layer = "tooling"
 visibility = []
-depends_on = [
-  "cli",
-  "src",
-]
+depends_on = ["cli", "src"]
 
 [[modules]]
 path = "cli"
 layer = "edge"
 visibility = ["scripts"]
-depends_on = [
-  "src",
-]
+depends_on = ["src"]
 
 [[modules]]
 path = "src"
@@ -127,9 +122,7 @@ depends_on = [
 path = "webhooks"
 layer = "edge"
 visibility = ["scripts"]
-depends_on = [
-  "src",
-]
+depends_on = ["src"]
 
 # ============================================================================
 # ADAPTER MODULES: Each wraps one external SDK/API
@@ -546,10 +539,7 @@ expose = [
 
 [[interfaces]]
 from = ['libs\.filesystem']
-expose = [
-  "files",
-  "FILE_SYSTEM_TRANSLATION",
-]
+expose = ["files", "FILE_SYSTEM_TRANSLATION"]
 
 [[interfaces]]
 from = ['libs\.fireflies']
@@ -557,11 +547,7 @@ expose = ["FirefliesRecording", "from_motherduck_row"]
 
 [[interfaces]]
 from = ['libs\.gmail']
-expose = [
-  "url_decoder",
-  "decode_token",
-  "extract_id_from_url",
-]
+expose = ["url_decoder", "decode_token", "extract_id_from_url"]
 
 [[interfaces]]
 from = ['libs\.granola']
