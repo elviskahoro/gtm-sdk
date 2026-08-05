@@ -770,6 +770,7 @@ expose = [
   "edge\\.DEFAULT_API_VERSION",
   "edge\\.DEFAULT_DATASET",
   "edge\\.DEFAULT_PROJECT_ID",
+  "edge\\.sanity_api_key_scope",
   "edge\\.DeploymentMismatchError",
   "edge\\.DestinationFileData",
   "edge\\.DestinationType",
