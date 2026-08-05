@@ -46,13 +46,15 @@ layers = [
 [rules]
 unused_ignore_directives = "error"
 require_ignore_directive_reasons = "error"
+unused_external_dependencies = "error"
+
+[cache]
+file_dependencies = ["tests/**", "pyproject.toml", "uv.lock", "tach.toml"]
 
 [external]
 # pytest is imported inside adapter helpers for optional local checks; it is a
 # dev dependency, not a runtime dep of the gtm package.
-# dlt and dagger-io are used by excluded operational scripts (including the
-# container runner), not by the runtime adapter/orchestration package.
-exclude = ["pytest", "dlt", "dagger_io", "pyarrow_hotfix"]
+exclude = ["pytest"]
 
 # ============================================================================
 # UTILITIES: Accessible from anywhere (no dependencies)
@@ -454,8 +456,6 @@ expose = [
   "Organizer",
   "Transcript",
   "api_key_scope",
-  "client",
-  "models",
 ]
 
 [[interfaces]]
@@ -494,7 +494,6 @@ from = ['libs\.fathom']
 expose = [
   "Webhook",
   "iter_meetings",
-  "models",
   "webhook_from_sdk_meeting",
   "ActionItem",
   "Assignee",
@@ -555,13 +554,7 @@ expose = ["HarvestClient", "fetch_profile", "get_client"]
 
 [[interfaces]]
 from = ['libs\.infisical']
-expose = [
-  "errors",
-  "InfisicalAuthError",
-  "InfisicalFetchError",
-  "fetch",
-  "fetch_all",
-]
+expose = ["InfisicalAuthError", "InfisicalFetchError", "fetch", "fetch_all"]
 
 [[interfaces]]
 from = ['libs\.linear']
@@ -657,13 +650,7 @@ expose = []
 
 [[interfaces]]
 from = ['libs\.rb2b']
-expose = [
-  "Webhook",
-  "compute_event_id",
-  "Payload",
-  "models",
-  "normalize_rb2b_timestamp",
-]
+expose = ["Webhook", "compute_event_id", "Payload", "normalize_rb2b_timestamp"]
 
 [[interfaces]]
 from = ['libs\.resend']

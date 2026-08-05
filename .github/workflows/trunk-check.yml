@@ -18,6 +18,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -42,11 +45,21 @@ jobs:
           arguments: --filter=tach
 
       # External dependency ownership is enforced for runtime adapters. The
-      # scripts tree is operational tooling with intentionally separate tool
-      # requirements, and marketplace is an optional data product whose
-      # polars extra is not part of the core gtm distribution.
+      # scripts and Dagger workflow trees are separate operational toolchains.
       - name: Tach external dependencies
-        run: uv run tach check-external --exclude 'scripts/**,data-gen/marketplace/**'
+        run: uv run tach check-external --exclude 'scripts/**,.github/workflows/ci/**'
+
+      - name: Tach affected tests
+        if: github.event_name == 'pull_request'
+        run: uv run tach test --base origin/main -- -q
+
+      - name: Tach affected tests after push
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: uv run tach test --base "${{ github.event.before }}" -- -q
+
+      - name: Tach affected tests after initial push
+        if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
+        run: uv run pytest -q
 
       # requirements_bazel.txt is gitignored and generated from uv.lock, so it
       # cannot drift -- but `uv export` can still start failing (a lock that no
