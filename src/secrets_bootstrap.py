@@ -14,8 +14,10 @@ webhook handler and ``src/`` orchestrators import from here.
 Adding a new lib to the pattern:
 
 1. Define ``_api_key_var`` + ``api_key_scope`` in ``libs/<x>/client.py``
-   (mirror ``libs/attio/client.py``).
-2. Add a ``"<X>_API_KEY": <x>_client.api_key_scope`` entry to ``KEY_SCOPES``.
+   (mirror ``libs/attio/client.py``) and re-export ``api_key_scope`` from
+   the package root.
+2. Import it as ``from libs.<x> import api_key_scope as <x>_api_key_scope``
+   and add a ``"<X>_API_KEY": <x>_api_key_scope`` entry to ``KEY_SCOPES``.
 3. Decorate the Modal function with ``@with_secrets("<X>_API_KEY")``.
 
 Keys declared by a caller but missing from ``KEY_SCOPES`` are silently
