@@ -252,9 +252,15 @@ def build_container(
         ],
     )
     uv_cache_dir = cache_dir.parent / "uv-cache"
+    container = dag.container(platform=dagger.Platform("linux/arm64"))
+    if ghcr_token:
+        container = container.with_registry_auth(
+            "ghcr.io",
+            "github-actions",
+            dag.set_secret("ghcr-token", ghcr_token),
+        )
     container = (
-        dag.container(platform=dagger.Platform("linux/arm64"))
-        .from_(BASE_IMAGE)
+        container.from_(BASE_IMAGE)
         .with_file("/usr/local/bin/bazel", dag.host().file(str(bazel_binary)))
         .with_exec(["chmod", "+x", "/usr/local/bin/bazel"])
         .with_directory("/src", source)
@@ -263,12 +269,6 @@ def build_container(
         .with_directory("/var/cache/uv", dag.host().directory(str(uv_cache_dir)))
         .with_env_variable("UV_CACHE_DIR", "/var/cache/uv")
     )
-    if ghcr_token:
-        container = container.with_registry_auth(
-            "ghcr.io",
-            "github-actions",
-            dag.set_secret("ghcr-token", ghcr_token),
-        )
     if run_impacted:
         container = container.with_file(
             "/opt/bazel-diff.jar",
