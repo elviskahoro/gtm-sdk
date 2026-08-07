@@ -51,7 +51,7 @@ private, so the contract travels as committed data instead.
 
 - `deploy.py` stays at the repo root. Moving it under `src/` causes `src/attio/` to shadow the `attio` pip package.
 - New endpoint = add the module import to `_ENDPOINT_MODULES` in `src/app.py`, otherwise its decorators don't register.
-- New secret = add `"<X>_API_KEY": <x>_client.api_key_scope` to `KEY_SCOPES` in `src/secrets_bootstrap.py` (after wiring an `api_key_scope` contextvar in `libs/<x>/client.py`), then decorate with `@with_secrets("<X>_API_KEY")` and bind `secrets=[bootstrap_secret()]`. Do NOT use `modal.Secret.from_name(...)` — see ai-672.
+- New secret = add `"<X>_API_KEY": <x>_api_key_scope` to `KEY_SCOPES` in `src/secrets_bootstrap.py` (after wiring an `api_key_scope` contextvar in `libs/<x>/client.py` and re-exporting it from the package root), then decorate with `@with_secrets("<X>_API_KEY")` and bind `secrets=[bootstrap_secret()]`. Do NOT use `modal.Secret.from_name(...)` — see ai-672.
 - Free tier caps the app at **8 web endpoints**. Don't silently exceed it.
 - App name resolves from the `MODAL_APP` env var (`src/modal_app.py`).
 - **Troubleshoot a deployed app via the CLI** — `infisical run … -- uv run modal app logs <app-name>`. A crash-looping container prints its import traceback there.
