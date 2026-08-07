@@ -63,7 +63,10 @@ def test_public_origin_url_normalizes_github_remotes(
     class Completed:
         stdout = f"{origin}\n"
 
-    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs: Completed())
+    def fake_run(*_args: object, **_kwargs: object) -> Completed:
+        return Completed()
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
 
     assert module._public_origin_url() == expected
 
