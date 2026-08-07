@@ -224,3 +224,14 @@ def test_workflow_prepulls_dagger_engine_and_uses_uv_cache() -> None:
     assert '"/var/cache/uv"' in pipeline
     assert '"UV_CACHE_DIR", "/var/cache/uv"' in pipeline
     assert 'container.directory("/var/cache/uv").export' in pipeline
+
+
+def test_workflow_authenticates_to_the_private_bazel_image() -> None:
+    workflow = _workflow(WORKFLOW)
+    assert workflow["permissions"]["packages"] == "read"
+    run_step = _run_step(workflow)
+    assert run_step["env"]["GHCR_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
+
+    pipeline = PIPELINE.read_text()
+    assert 'os.environ.get("GHCR_TOKEN", "").strip()' in pipeline
+    assert "container.with_registry_auth(" in pipeline

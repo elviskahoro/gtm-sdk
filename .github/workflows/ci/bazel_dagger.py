@@ -236,6 +236,7 @@ def build_container(
     *,
     diff_jar: Path,
     trunk_api_token: str,
+    ghcr_token: str,
     run_impacted: bool,
 ) -> dagger.Container:
     """Build the isolated ARM64 Bazel environment from persistent caches."""
@@ -262,6 +263,12 @@ def build_container(
         .with_directory("/var/cache/uv", dag.host().directory(str(uv_cache_dir)))
         .with_env_variable("UV_CACHE_DIR", "/var/cache/uv")
     )
+    if ghcr_token:
+        container = container.with_registry_auth(
+            "ghcr.io",
+            "github-actions",
+            dag.set_secret("ghcr-token", ghcr_token),
+        )
     if run_impacted:
         container = container.with_file(
             "/opt/bazel-diff.jar",
@@ -350,6 +357,7 @@ async def main() -> None:
         uv_cache_dir = cache_dir.parent / "uv-cache"
         source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")
         trunk_api_token = os.environ.get("TRUNK_API_TOKEN", "").strip()
+        ghcr_token = os.environ.get("GHCR_TOKEN", "").strip()
         run_impacted = os.environ.get("BAZEL_RUN_IMPACTED", "false").strip()
         if run_impacted not in {"true", "false"}:
             message = "BAZEL_RUN_IMPACTED must be 'true' or 'false'"
@@ -370,6 +378,7 @@ async def main() -> None:
             source_dir,
             diff_jar=diff_jar,
             trunk_api_token=trunk_api_token,
+            ghcr_token=ghcr_token,
             run_impacted=run_impacted_bool,
         )
         await container.sync()
