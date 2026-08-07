@@ -34,6 +34,33 @@ def _resolve_commit(ref: str) -> str:
     return completed.stdout.strip()
 
 
+def _public_origin_url() -> str:
+    """Return an HTTPS GitHub origin usable from inside the Dagger container."""
+    completed = subprocess.run(  # noqa: S603,S607 -- fixed Git argv.
+        ["git", "remote", "get-url", "origin"],  # noqa: S607 -- Git is resolved via PATH.
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    origin = completed.stdout.strip()
+    # The Dagger container only needs read access to this public repository.
+    # Normalize SSH remotes to HTTPS instead of forwarding a developer's SSH
+    # agent or private key into the container; that keeps local validation
+    # independent of the host's SSH setup at the cost of not supporting
+    # private-repository-only remotes.
+    if origin.startswith("git@github.com:"):
+        repository = origin.removeprefix("git@github.com:")
+    elif origin.startswith("ssh://git@github.com/"):
+        repository = origin.removeprefix("ssh://git@github.com/")
+    elif origin.startswith("https://github.com/"):
+        repository = origin.removeprefix("https://github.com/")
+    else:
+        message = f"origin is not a GitHub remote: {origin}"
+        raise ValueError(message)
+    return f"https://github.com/{repository.removesuffix('.git')}.git"
+
+
 def _controller_env(
     *,
     source_dir: Path,
@@ -56,6 +83,7 @@ def _controller_env(
             "BAZEL_DAGGER_DIFF_JAR": str(toolchain_dir / "bazel-diff_deploy.jar"),
             "BAZEL_DAGGER_SOURCE_DIR": str(source_dir),
             "BAZEL_RUN_IMPACTED": str(run_impacted).lower(),
+            "BAZEL_RUN_FULL": str(not run_impacted).lower(),
             "DAGGER_NO_NAG": "1",
         },
     )
@@ -69,6 +97,7 @@ def run(base: str, *, run_impacted: bool = True) -> int:
     toolchain_dir = Path.home() / ".bazel-dagger" / "toolchain"
     cache_dir = toolchain_dir.parent / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
+    (toolchain_dir.parent / "uv-cache").mkdir(parents=True, exist_ok=True)
     _run(["uv", "run", str(TOOLCHAIN_SCRIPT), "--directory", str(toolchain_dir)])
 
     scratch_root = REPO_ROOT / "tmp"
@@ -87,6 +116,10 @@ def run(base: str, *, run_impacted: bool = True) -> int:
             ],
         )
         _run(["git", "checkout", "--detach", head_commit], cwd=source_dir)
+        _run(
+            ["git", "remote", "set-url", "origin", _public_origin_url()],
+            cwd=source_dir,
+        )
         _run(
             ["git", "update-ref", "refs/remotes/origin/main", base_commit],
             cwd=source_dir,

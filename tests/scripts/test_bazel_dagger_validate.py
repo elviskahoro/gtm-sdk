@@ -36,6 +36,38 @@ def test_default_base_is_origin_main() -> None:
     assert module.DEFAULT_BASE == "origin/main"
 
 
+@pytest.mark.parametrize(
+    ("origin", "expected"),
+    [
+        (
+            "git@github.com:owner/repo.git",
+            "https://github.com/owner/repo.git",
+        ),
+        (
+            "ssh://git@github.com/owner/repo.git",
+            "https://github.com/owner/repo.git",
+        ),
+        (
+            "https://github.com/owner/repo.git",
+            "https://github.com/owner/repo.git",
+        ),
+    ],
+)
+def test_public_origin_url_normalizes_github_remotes(
+    monkeypatch: pytest.MonkeyPatch,
+    origin: str,
+    expected: str,
+) -> None:
+    module = _load()
+
+    class Completed:
+        stdout = f"{origin}\n"
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs: Completed())
+
+    assert module._public_origin_url() == expected
+
+
 def test_main_preserves_unresolved_base_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

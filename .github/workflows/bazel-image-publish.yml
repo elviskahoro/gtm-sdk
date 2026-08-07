@@ -1,0 +1,49 @@
+name: Publish Bazel CI image
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ci/bazel_image_dagger.py
+      - .github/workflows/ci/bazel_dagger.py
+      - .github/workflows/bazel-image-publish.yml
+      - .github/workflows/tests-bazel.yml
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: bazel-ci-image-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ARM64 Bazel image
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Setup Dagger
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: 0.21.7
+
+      - name: Publish ARM64 Bazel image
+        env:
+          BAZEL_CI_IMAGE: ghcr.io/${{ github.repository }}/bazel-ci:${{ github.sha }}-arm64
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run dagger run python .github/workflows/ci/bazel_image_dagger.py
+
+      - name: Publish current Bazel image pointer
+        env:
+          BAZEL_CI_IMAGE: ghcr.io/${{ github.repository }}/bazel-ci:main
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run dagger run python .github/workflows/ci/bazel_image_dagger.py

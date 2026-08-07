@@ -81,13 +81,12 @@ def test_impacted_targets_use_the_same_job_and_trunk_upload() -> None:
 def test_pipeline_computes_and_tests_impacted_targets_in_arm64() -> None:
     pipeline = PIPELINE.read_text()
     assert (
-        'BASE_IMAGE = (\n    "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"\n'
-        '    "@sha256:0b973c14a35cb0dc8fe63a2e8c9919fd797ac566de13090fcf0df4a6b3994b78"\n'
-        ")"
+        'BASE_IMAGE = "ghcr.io/elviskahoro/gtm-sdk/bazel-ci@sha256:'
+        '6e45b2a27d374aa0c3ba8908788008816cb881f9194ab27f7f0aab4f5cf636ec"'
     ) in pipeline
     assert 'dagger.Platform("linux/arm64")' in pipeline
     assert "TRUNK_BAZEL_ACTION_REV" in pipeline
-    assert "build-essential" in pipeline
+    assert "apt-get" not in pipeline
     assert (
         'BAZEL_DIFF_COMMAND_OPTIONS="--config=ci --incompatible_disallow_empty_glob=false"'
         in pipeline
@@ -189,6 +188,7 @@ def test_workflow_prepares_history_and_cache_before_dagger() -> None:
         "~/.dagger-sdk/bazel-controller-venv",
         "~/.dagger-sdk/bazel-uv-python",
         "~/.bazel-dagger",
+        "~/.bazel-dagger/uv-cache",
     ):
         assert cache_path in cache["with"]["path"]
 
@@ -201,3 +201,26 @@ def test_workflow_prepares_history_and_cache_before_dagger() -> None:
     assert names.index("Run impacted Bazel unit tests in Dagger") < names.index(
         "Save Dagger controller and Bazel data",
     )
+
+
+def test_workflow_prepulls_dagger_engine_and_uses_uv_cache() -> None:
+    workflow = _workflow(WORKFLOW)
+    steps = workflow["jobs"]["unit_tests"]["steps"]
+    names = [step.get("name") for step in steps]
+    assert names.index("Setup Dagger") < names.index("Resolve Dagger engine version")
+    assert names.index("Resolve Dagger engine version") < names.index(
+        "Ensure Dagger engine image",
+    )
+    pull = next(
+        step for step in steps if step.get("name") == "Ensure Dagger engine image"
+    )
+    assert "docker pull" in pull["run"]
+    assert "seq 1 6" in pull["run"]
+
+    pipeline = PIPELINE.read_text()
+    assert "ghcr.io/elviskahoro/gtm-sdk/bazel-ci@sha256:" in pipeline
+    assert "apt-get update" not in pipeline
+    assert 'uv_cache_dir = cache_dir.parent / "uv-cache"' in pipeline
+    assert '"/var/cache/uv"' in pipeline
+    assert '"UV_CACHE_DIR", "/var/cache/uv"' in pipeline
+    assert 'container.directory("/var/cache/uv").export' in pipeline

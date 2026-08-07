@@ -62,6 +62,7 @@ jobs:
             ~/.dagger-sdk/bazel-controller-venv
             ~/.dagger-sdk/bazel-uv-python
             ~/.bazel-dagger
+            ~/.bazel-dagger/uv-cache
           key: ${{ runner.os }}-${{ runner.arch }}-bazel-dagger-v1-restore
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-bazel-dagger-v1-
@@ -72,7 +73,8 @@ jobs:
           mkdir -p "$HOME/.dagger-sdk/bazel-controller-venv" \
             "$HOME/.dagger-sdk/bazel-uv-python" \
             "$HOME/.bazel-dagger/toolchain" \
-            "$HOME/.bazel-dagger/cache"
+            "$HOME/.bazel-dagger/cache" \
+            "$HOME/.bazel-dagger/uv-cache"
           # Bazel runs as root inside Dagger and its exported cache can retain
           # root-owned directories across Actions cache restores.
           sudo chown -R "$(id -u):$(id -g)" "$HOME/.bazel-dagger/cache"
@@ -115,6 +117,38 @@ jobs:
         with:
           version: 0.21.7
 
+      - name: Resolve Dagger engine version
+        id: dagger_engine
+        run: |
+          set -uo pipefail
+          version="$(dagger version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+          if [ -z "${version}" ]; then
+            echo "::warning::could not determine Dagger engine version; skipping pre-pull"
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+
+      - name: Ensure Dagger engine image
+        if: steps.dagger_engine.outputs.version != ''
+        env:
+          ENGINE_VERSION: ${{ steps.dagger_engine.outputs.version }}
+        run: |
+          set -uo pipefail
+          image="registry.dagger.io/engine:${ENGINE_VERSION}"
+          if docker image inspect "${image}" >/dev/null 2>&1; then
+            echo "Dagger engine image cache: local hit (${image})"
+            exit 0
+          fi
+          for attempt in $(seq 1 6); do
+            if timeout 150 docker pull "${image}"; then
+              echo "Dagger engine image pull succeeded on attempt ${attempt} (${image})"
+              exit 0
+            fi
+            echo "::warning::engine pull attempt ${attempt}/6 failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::error::failed to pull ${image} after 6 attempts"
+          exit 1
+
       - name: Run impacted Bazel unit tests in Dagger
         env:
           BAZEL_DAGGER_BINARY: ${{ github.workspace }}/.bazel-dagger/toolchain/bazel
@@ -150,4 +184,5 @@ jobs:
             ~/.dagger-sdk/bazel-controller-venv
             ~/.dagger-sdk/bazel-uv-python
             ~/.bazel-dagger
+            ~/.bazel-dagger/uv-cache
           key: ${{ runner.os }}-${{ runner.arch }}-bazel-dagger-v1-${{ hashFiles('uv.lock', '.github/workflows/tests-bazel.yml', '.github/workflows/ci/bazel_dagger.py') }}-${{ github.run_id }}
