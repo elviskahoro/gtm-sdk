@@ -141,4 +141,4 @@ def test_controller_environment_forwards_explicit_ghcr_credentials(
     )
 
     assert environment["GHCR_USERNAME"] == "octocat"
-    assert environment["GHCR_TOKEN"] == "secret"
+    assert environment["GHCR_TOKEN"] == "secret"  # noqa: S105 -- test credential
