@@ -230,6 +230,7 @@ def test_workflow_authenticates_to_the_private_bazel_image() -> None:
     workflow = _workflow(WORKFLOW)
     assert workflow["permissions"]["packages"] == "read"
     run_step = _run_step(workflow)
+    assert run_step["env"]["GHCR_USERNAME"] == "${{ github.actor }}"
     assert run_step["env"]["GHCR_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
 
     pipeline = PIPELINE.read_text()

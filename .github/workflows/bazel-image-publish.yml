@@ -39,11 +39,13 @@ jobs:
       - name: Publish ARM64 Bazel image
         env:
           BAZEL_CI_IMAGE: ghcr.io/${{ github.repository }}/bazel-ci:${{ github.sha }}-arm64
+          GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run dagger run python .github/workflows/ci/bazel_image_dagger.py
 
       - name: Publish current Bazel image pointer
         env:
           BAZEL_CI_IMAGE: ghcr.io/${{ github.repository }}/bazel-ci:main
+          GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run dagger run python .github/workflows/ci/bazel_image_dagger.py

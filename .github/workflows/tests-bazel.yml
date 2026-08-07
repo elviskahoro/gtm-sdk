@@ -161,6 +161,7 @@ jobs:
           BAZEL_RUN_FULL: ${{ inputs.run_full || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
           BAZEL_DIFF_BASE_SHA: ${{ inputs.diff_base_sha || (github.event_name == 'push' && github.event.before) || '' }}
           TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TRUNK_REPOSITORY: ${{ github.repository }}
           TRUNK_PR_NUMBER: ${{ github.event.pull_request.number }}
