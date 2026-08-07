@@ -14,10 +14,9 @@ import anyio
 import dagger
 from dagger import dag
 
-BASE_IMAGE = (
-    "ghcr.io/astral-sh/uv:0.11.29-python3.13-trixie-slim"
-    "@sha256:0b973c14a35cb0dc8fe63a2e8c9919fd797ac566de13090fcf0df4a6b3994b78"
-)
+BASE_IMAGE = "ghcr.io/elviskahoro/gtm-sdk/bazel-ci@sha256:6e45b2a27d374aa0c3ba8908788008816cb881f9194ab27f7f0aab4f5cf636ec"
+
+
 FULL_RESULT_PATH = "/src/full_bazel_result"
 IMPACTED_RESULT_PATH = "/src/impacted_bazel_result"
 ANALYTICS_RESULT_PATH = "/src/trunk_analytics_result"
@@ -251,19 +250,17 @@ def build_container(
             "worktrees",
         ],
     )
-    install_system_tools = """
-apt-get update
-apt-get install --yes --no-install-recommends build-essential ca-certificates curl git unzip
-""".strip()
+    uv_cache_dir = cache_dir.parent / "uv-cache"
     container = (
         dag.container(platform=dagger.Platform("linux/arm64"))
         .from_(BASE_IMAGE)
-        .with_exec(["bash", "-c", install_system_tools])
         .with_file("/usr/local/bin/bazel", dag.host().file(str(bazel_binary)))
         .with_exec(["chmod", "+x", "/usr/local/bin/bazel"])
         .with_directory("/src", source)
         .with_workdir("/src")
         .with_directory("/var/cache/bazel", dag.host().directory(str(cache_dir)))
+        .with_directory("/var/cache/uv", dag.host().directory(str(uv_cache_dir)))
+        .with_env_variable("UV_CACHE_DIR", "/var/cache/uv")
     )
     if run_impacted:
         container = container.with_file(
@@ -350,6 +347,7 @@ async def main() -> None:
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
         bazel_binary = _required_env_path("BAZEL_DAGGER_BINARY")
         cache_dir = _required_env_path("BAZEL_DAGGER_CACHE_DIR")
+        uv_cache_dir = cache_dir.parent / "uv-cache"
         source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")
         trunk_api_token = os.environ.get("TRUNK_API_TOKEN", "").strip()
         run_impacted = os.environ.get("BAZEL_RUN_IMPACTED", "false").strip()
@@ -417,6 +415,7 @@ async def main() -> None:
                 )
         if os.environ.get("BAZEL_CACHE_WRITE", "false").strip().lower() == "true":
             await container.directory("/var/cache/bazel").export(str(cache_dir))
+            await container.directory("/var/cache/uv").export(str(uv_cache_dir))
     if rc:
         sys.stderr.write(f"Bazel validation exited {rc}\n")
     if analytics_rc:
