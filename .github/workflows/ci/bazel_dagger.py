@@ -235,6 +235,7 @@ def build_container(
     source_dir: Path,
     *,
     diff_jar: Path,
+    ghcr_username: str,
     trunk_api_token: str,
     ghcr_token: str,
     run_impacted: bool,
@@ -256,7 +257,7 @@ def build_container(
     if ghcr_token:
         container = container.with_registry_auth(
             "ghcr.io",
-            "github-actions",
+            ghcr_username,
             dag.set_secret("ghcr-token", ghcr_token),
         )
     container = (
@@ -356,8 +357,12 @@ async def main() -> None:
         cache_dir = _required_env_path("BAZEL_DAGGER_CACHE_DIR")
         uv_cache_dir = cache_dir.parent / "uv-cache"
         source_dir = _required_env_path("BAZEL_DAGGER_SOURCE_DIR")
+        ghcr_username = os.environ.get("GHCR_USERNAME", "").strip()
         trunk_api_token = os.environ.get("TRUNK_API_TOKEN", "").strip()
         ghcr_token = os.environ.get("GHCR_TOKEN", "").strip()
+        if ghcr_token and not ghcr_username:
+            message = "GHCR_USERNAME must be set when GHCR_TOKEN is set"
+            raise ValueError(message)
         run_impacted = os.environ.get("BAZEL_RUN_IMPACTED", "false").strip()
         if run_impacted not in {"true", "false"}:
             message = "BAZEL_RUN_IMPACTED must be 'true' or 'false'"
@@ -377,6 +382,7 @@ async def main() -> None:
             cache_dir,
             source_dir,
             diff_jar=diff_jar,
+            ghcr_username=ghcr_username,
             trunk_api_token=trunk_api_token,
             ghcr_token=ghcr_token,
             run_impacted=run_impacted_bool,

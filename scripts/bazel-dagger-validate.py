@@ -87,6 +87,9 @@ def _controller_env(
             "DAGGER_NO_NAG": "1",
         },
     )
+    for name in ("GHCR_USERNAME", "GHCR_TOKEN"):
+        if os.environ.get(name):
+            env[name] = os.environ[name]
     return env
 
 

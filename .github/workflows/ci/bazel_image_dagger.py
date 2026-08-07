@@ -19,6 +19,7 @@ BASE_IMAGE = (
 async def main() -> None:
     """Build and publish the immutable ARM64 Bazel runtime image."""
     image_ref = os.environ["BAZEL_CI_IMAGE"]
+    username = os.environ.get("GHCR_USERNAME", "github-actions")
     token = os.environ["GHCR_TOKEN"]
     registry = image_ref.split("/", maxsplit=1)[0]
     async with dagger.connection(config=dagger.Config(log_output=sys.stderr)):
@@ -38,7 +39,7 @@ async def main() -> None:
             )
             .with_registry_auth(
                 registry,
-                "github-actions",
+                username,
                 dag.set_secret("ghcr-token", token),
             )
         )

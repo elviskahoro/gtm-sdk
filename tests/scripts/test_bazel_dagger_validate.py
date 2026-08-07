@@ -126,3 +126,19 @@ def test_controller_environment_does_not_forward_unrelated_secrets(
     )
 
     assert "UNRELATED_SECRET" not in environment
+
+
+def test_controller_environment_forwards_explicit_ghcr_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load()
+    monkeypatch.setenv("GHCR_USERNAME", "octocat")
+    monkeypatch.setenv("GHCR_TOKEN", "secret")  # noqa: S105 -- test credential
+
+    environment = module._controller_env(
+        source_dir=Path("/tmp/source"),  # nosec B108
+        toolchain_dir=Path("/tmp/toolchain"),  # nosec B108
+    )
+
+    assert environment["GHCR_USERNAME"] == "octocat"
+    assert environment["GHCR_TOKEN"] == "secret"
