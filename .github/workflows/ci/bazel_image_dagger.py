@@ -1,4 +1,4 @@
-"""Publish the small ARM64 image used by the Bazel Dagger runner."""
+"""Provide a stable ARM64 runtime so Bazel CI avoids repeated provisioning."""
 
 # ruff: noqa: INP001, ASYNC240 -- workflow script executed directly by Dagger.
 
@@ -17,7 +17,7 @@ BASE_IMAGE = (
 
 
 async def main() -> None:
-    """Build and publish the immutable ARM64 Bazel runtime image."""
+    """Publish the runtime image that removes per-run Bazel CI setup work."""
     image_ref = os.environ["BAZEL_CI_IMAGE"]
     username = os.environ.get("GHCR_USERNAME", "github-actions")
     token = os.environ["GHCR_TOKEN"]
