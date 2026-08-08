@@ -35,7 +35,7 @@ def _resolve_commit(ref: str) -> str:
 
 
 def _public_origin_url() -> str:
-    """Return an HTTPS GitHub origin usable from inside the Dagger container."""
+    """Avoid requiring host SSH credentials in the Dagger container."""
     completed = subprocess.run(  # noqa: S603,S607 -- fixed Git argv.  # nosec B607
         ["git", "remote", "get-url", "origin"],  # noqa: S607 -- Git is resolved via PATH.
         cwd=REPO_ROOT,
