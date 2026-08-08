@@ -44,6 +44,7 @@ jobs:
         run: uv run dagger run python .github/workflows/ci/bazel_image_dagger.py
 
       - name: Publish current Bazel image pointer
+        if: github.ref == 'refs/heads/main'
         env:
           BAZEL_CI_IMAGE: ghcr.io/${{ github.repository }}/bazel-ci:main
           GHCR_USERNAME: ${{ github.actor }}
